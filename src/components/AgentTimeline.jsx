@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
-import { Bot, User, Briefcase, Code, Megaphone, CheckCircle, XCircle } from 'lucide-react';
+import { useProjectStore } from '../store/useProjectStore';
+import { Bot, User, Briefcase, Code, Megaphone } from 'lucide-react';
 
 const iconMap = {
   'mediator': <Bot size={16} />,
@@ -11,7 +11,7 @@ const iconMap = {
 };
 
 export default function AgentTimeline() {
-  const events = useProjectStore(state => state.workflowEvents) || [];
+  const events = useProjectStore(state => state.workflowEvents);
   const scrollRef = useRef(null);
 
   useEffect(() => {

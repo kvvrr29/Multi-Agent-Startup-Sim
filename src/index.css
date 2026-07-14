@@ -239,3 +239,115 @@ a:hover {
   font-size: 0.85em;
   color: var(--accent-cyan);
 }
+
+.markdown-content {
+  line-height: 1.65;
+}
+
+.markdown-content h3 {
+  font-size: 1.05rem;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.88rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.markdown-content tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--primary-electric);
+  margin: 1rem 0;
+  padding: 0.25rem 1rem;
+  color: var(--text-muted);
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1.5rem 0;
+}
+
+.diagram-zoom-content svg {
+  min-width: 60vw;
+  height: auto;
+}
+
+button:disabled {
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+@media (max-width: 899px) {
+  .dashboard-nav {
+    width: 64px !important;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .dashboard-context-panel {
+    position: fixed !important;
+    left: 64px;
+    right: 0;
+    bottom: 0;
+    width: auto !important;
+    max-height: 56vh;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.5);
+  }
+
+  .dashboard-main {
+    min-width: 0;
+  }
+
+  #blueprint-export-container {
+    padding: 1rem !important;
+  }
+
+  #blueprint-export-container > div:last-child {
+    display: block !important;
+  }
+
+  #blueprint-export-container nav {
+    position: static !important;
+    width: 100% !important;
+    max-height: 160px !important;
+    margin-bottom: 1rem;
+  }
+
+  .section-actions {
+    flex-wrap: wrap;
+  }
+
+  form .flex.gap-4 {
+    flex-wrap: wrap;
+  }
+
+  form .flex.gap-4 > * {
+    min-width: 180px;
+  }
+}

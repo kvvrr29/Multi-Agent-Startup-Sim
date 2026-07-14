@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { X, Key, Settings, Brain, AlertTriangle } from 'lucide-react';
+import { X, Key, Settings, Brain, AlertTriangle, Terminal } from 'lucide-react';
 
 export default function AISettingsModal({ onClose }) {
-  const { apiKey, aiProvider, aiModeEnabled, setApiKey, setAiProvider, setAiModeEnabled } = useSettingsStore();
+  const { apiKey, aiProvider, aiModeEnabled, developerMode, setApiKey, setAiProvider, setAiModeEnabled, setDeveloperMode } = useSettingsStore();
   const [localKey, setLocalKey] = useState(apiKey);
   const [localProvider, setLocalProvider] = useState(aiProvider);
   const [localEnabled, setLocalEnabled] = useState(aiModeEnabled);
+  const [localDevMode, setLocalDevMode] = useState(developerMode);
 
   const handleSave = () => {
     setApiKey(localKey);
     setAiProvider(localProvider);
     setAiModeEnabled(localEnabled);
+    setDeveloperMode(localDevMode);
     onClose();
   };
 
@@ -23,7 +25,7 @@ export default function AISettingsModal({ onClose }) {
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem' }}>
             <Settings size={20} color="var(--primary-electric)" /> AI Settings
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <button aria-label="Close AI Settings" onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
             <X size={20} />
           </button>
         </div>
@@ -40,7 +42,7 @@ export default function AISettingsModal({ onClose }) {
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={localEnabled} onChange={(e) => setLocalEnabled(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+              <input aria-label="Enable AI Mode" type="checkbox" checked={localEnabled} onChange={(e) => setLocalEnabled(e.target.checked)} style={{ width: '18px', height: '18px' }} />
             </label>
           </div>
 
@@ -79,11 +81,25 @@ export default function AISettingsModal({ onClose }) {
                   </p>
                 )}
                 <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Your key is stored securely in your browser's local storage and is never sent to our servers.
+                  Your key is kept only in memory for this tab and is never persisted or logged.
                 </p>
               </div>
             </>
           )}
+
+          {/* Developer Tools (doc §11) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px', border: `1px solid ${localDevMode ? 'var(--accent-purple)' : 'var(--border-color)'}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Terminal size={18} color={localDevMode ? 'var(--accent-purple)' : 'var(--text-muted)'} />
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.9rem' }}>Developer Mode</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Show AI Debug Panel, Prompt Inspector, raw logs & API metrics</span>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input aria-label="Developer Mode" type="checkbox" checked={localDevMode} onChange={(e) => setLocalDevMode(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+            </label>
+          </div>
 
           {/* Fallback Notice */}
           {!localEnabled && (

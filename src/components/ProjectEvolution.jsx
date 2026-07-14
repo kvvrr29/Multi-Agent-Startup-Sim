@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { runRevisionSimulation, previewRevision, applyRevisionSimulation } from '../services/simulationEngine';
-import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
-import { Send, Sparkles, ChevronRight, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
+import { previewRevision, applyRevisionSimulation } from '../services/simulationEngine';
+import { useProjectStore, isAgentBusy } from '../store/useProjectStore';
+import { Send, Sparkles, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const SUGGESTIONS = [
   "Reduce Budget",
@@ -12,7 +12,7 @@ const SUGGESTIONS = [
   "Make MVP Smaller"
 ];
 
-const CATEGORIES = ["Business", "Product", "Architecture", "Marketing"];
+const CATEGORIES = ["Business", "Product", "Technical", "Marketing", "Scope"];
 
 export default function ProjectEvolution() {
   const [customRequest, setCustomRequest] = useState('');
@@ -22,12 +22,13 @@ export default function ProjectEvolution() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   
   const agents = useProjectStore(state => state.agents);
+  const workflowActive = useProjectStore(state => state.workflow.active);
   const activeRevision = useProjectStore(state => state.activeRevision);
   const recentRevisionResult = useProjectStore(state => state.recentRevisionResult);
   const clearRevisionState = useProjectStore(state => state.clearRevisionState);
   
-  // Global Lock: True if ANY agent is not IDLE
-  const isBusy = Object.values(agents).some(a => a.status !== AGENT_STATUS.IDLE) || isPreviewing;
+  // Global Lock: True if ANY agent is actively occupied (Completed/Failed don't block)
+  const isBusy = workflowActive || Object.values(agents).some(isAgentBusy) || isPreviewing;
 
   const handleSuggestionClick = async (suggestion) => {
     if (isBusy) return;
@@ -43,7 +44,7 @@ export default function ProjectEvolution() {
     if (!customRequest.trim() || isBusy) return;
     clearRevisionState();
     setIsPreviewing(true);
-    const result = await previewRevision(customRequest);
+    const result = await previewRevision(customRequest, null, category);
     setPreview(result);
     setIsPreviewing(false);
     setCustomRequest('');
@@ -106,18 +107,21 @@ export default function ProjectEvolution() {
             <div><strong>Instruction:</strong> {preview.instruction}</div>
             <div><strong>Confidence:</strong> <span style={{ color: preview.confidence === 'High' ? 'var(--success)' : 'var(--warning)' }}>{preview.confidence}</span></div>
             <div>
-              <strong>Assigned Agents:</strong> 
-              <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-                {preview.assignedAgents.map(a => (
-                  <span key={a} style={{ padding: '2px 6px', background: 'var(--accent-purple)', color: '#fff', borderRadius: '4px', textTransform: 'uppercase', fontSize: '0.7rem' }}>{a}</span>
+              <strong>Detected Tasks ({preview.tasks?.length || 0}):</strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                {(preview.tasks || []).map((task, i) => (
+                  <div key={i} style={{ padding: '8px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', borderLeft: '2px solid var(--accent-purple)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                      <span style={{ padding: '2px 6px', background: 'var(--accent-purple)', color: '#fff', borderRadius: '4px', textTransform: 'uppercase', fontSize: '0.7rem' }}>{task.agent}</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{task.taskDescription}</span>
+                    </div>
+                    {task.reason && (
+                      <div style={{ fontSize: '0.72rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>Why: {task.reason}</div>
+                    )}
+                    <div style={{ fontSize: '0.72rem', marginTop: '2px' }}>Sections: {task.sections.join(', ')}</div>
+                  </div>
                 ))}
               </div>
-            </div>
-            <div>
-              <strong>Affected Sections:</strong>
-              <ul style={{ margin: '4px 0 0 0', paddingLeft: '1.2rem' }}>
-                {preview.affectedSections.map(s => <li key={s}>{s}</li>)}
-              </ul>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>

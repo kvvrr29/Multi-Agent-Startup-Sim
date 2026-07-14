@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAIDebugStore } from '../store/useAIDebugStore';
-import { Activity, Terminal, X, ChevronDown, ChevronUp, Trash2, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 const TAB = { METRICS: 'metrics', SOURCES: 'sources', LOGS: 'logs' };
 
@@ -178,6 +178,11 @@ export default function AIDebugPanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
                     <span style={{ fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{log.agent}</span>
                     <LOG_VALIDATION_BADGE result={log.validationResult} />
+                    {log.scores && (
+                      <span style={{ fontSize: '0.68rem', color: log.scores.overall >= 70 ? '#10b981' : '#f59e0b' }}>
+                        {log.scores.overall}%
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(log.timestamp).toLocaleTimeString()}</span>
@@ -187,6 +192,21 @@ export default function AIDebugPanel() {
 
                 {expandedLog === log.id && (
                   <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {log.scores && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px' }}>
+                        {[
+                          { label: 'Structure', value: log.scores.structural },
+                          { label: 'Agent Relevance', value: log.scores.agentRelevance },
+                          { label: 'Domain Relevance', value: log.scores.domainRelevance },
+                          { label: 'Overall', value: log.scores.overall },
+                        ].map(({ label, value }) => (
+                          <div key={label} style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '4px', padding: '6px 4px', textAlign: 'center', border: `1px solid ${value >= 70 ? '#10b98130' : '#f59e0b30'}` }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.85rem', color: value >= 70 ? '#10b981' : '#f59e0b' }}>{value}%</div>
+                            <div style={{ fontSize: '0.6rem', marginTop: '1px' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {log.fallbackReason && (
                       <div style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid #ef444440', borderRadius: '4px', color: '#ef4444' }}>
                         <strong>⚠️ Fallback Reason:</strong> {log.fallbackReason}

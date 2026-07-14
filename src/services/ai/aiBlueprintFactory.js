@@ -1,26 +1,20 @@
 import { generateAIContent } from './aiProvider';
 import { AGENT_SYSTEM_PROMPTS } from './agentPrompts';
 import { buildContextString } from './contextBuilder';
-import { validateAIResponse, createResponseSchema } from './validationLayer';
+import { validateAIResponse, createResponseSchema, buildRetryFeedback } from './validationLayer';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
+import { AGENT_ROLES } from '../../config/sectionOwnership';
 
-/**
- * Maps agents to the blueprint sections they are responsible for.
- */
-const AGENT_RESPONSIBILITIES = {
-  ceo: ['executiveSummary', 'businessModel'],
-  pm: ['problemStatement', 'productRoadmap'],
-  developer: ['architecture', 'umlDiagram', 'erDiagram'],
-  marketing: ['marketingStrategy']
-};
+// Sections each agent is responsible for generating (single source of truth).
+const AGENT_RESPONSIBILITIES = AGENT_ROLES;
 
 export const generateAgentContent = async (agentRole, instruction = '') => {
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRole];
   if (!systemPrompt) throw new Error(`Unknown agent role: ${agentRole}`);
 
-  const context = buildContextString(instruction);
+  const context = buildContextString(instruction, agentRole);
   const sectionsToGenerate = AGENT_RESPONSIBILITIES[agentRole] || [];
   
   const schema = createResponseSchema(sectionsToGenerate);
@@ -29,31 +23,54 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
 
   const memoryStore = useProjectMemoryStore.getState();
   const domain = memoryStore.memory?.scope?.domain || useProjectStore.getState().project?.domain || '';
+  const industry = memoryStore.memory?.scope?.industry || '';
   const keywordsStr = memoryStore.memory?.scope?.mandatory_entities || '';
   const mandatoryKeywords = keywordsStr.split(',').map(k => k.trim()).filter(k => k);
 
   const { setSource, pushLog } = useAIDebugStore.getState();
-  let attempts = 0;
   const maxAttempts = 2;
+  let retryFeedback = null;
+  let previousRawResponse = null;
 
-  while (attempts < maxAttempts) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let rawResponse = null;
+    let fallbackReason = null;
     try {
-      attempts++;
-      rawResponse = await generateAIContent(systemPrompt, userPrompt, schema);
-      // Will throw if validation fails
-      const validated = validateAIResponse(rawResponse, sectionsToGenerate, domain, mandatoryKeywords);
-      pushLog({ agent: agentRole, prompt: userPrompt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validated, validationResult: 'PASSED', fallbackReason: null });
-      setSource(agentRole, 'Gemini');
-      return validated;
-    } catch (err) {
-      const fallbackReason = err.message || 'Unknown error';
-      console.warn(`[AI Factory] Attempt ${attempts} failed for ${agentRole}: ${fallbackReason}`);
-      pushLog({ agent: agentRole, prompt: userPrompt.slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || null, parsedJson: null, validationResult: 'FAILED', fallbackReason });
-      if (attempts >= maxAttempts) {
-        setSource(agentRole, 'Fallback');
-        throw err;
+      const promptForAttempt = retryFeedback
+        ? `${userPrompt}\n\n--- PREVIOUS RAW RESPONSE ---\n${previousRawResponse}\n\n--- EXACT VALIDATION FEEDBACK ---\n${retryFeedback}`
+        : userPrompt;
+
+      rawResponse = await generateAIContent(systemPrompt, promptForAttempt, schema);
+      const validation = validateAIResponse(rawResponse, sectionsToGenerate, { agentRole, domain, industry, mandatoryKeywords });
+
+      if (validation.passed) {
+        pushLog({ agent: agentRole, prompt: promptForAttempt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validation.content, scores: validation.scores, validationResult: 'PASSED', fallbackReason: null });
+        setSource(agentRole, 'Gemini');
+        return {
+          content: validation.content,
+          decisions: validation.decisions,
+          scores: validation.scores,
+          stages: validation.stages,
+          generationSource: 'Gemini',
+          generatedBy: agentRole,
+          generatedAt: new Date().toISOString()
+        };
       }
+
+      fallbackReason = `Validation failed (overall ${validation.scores.overall}%): ${validation.issues.join(' ')}`;
+      pushLog({ agent: agentRole, prompt: promptForAttempt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validation.content, scores: validation.scores, validationResult: 'FAILED', fallbackReason });
+      retryFeedback = buildRetryFeedback(validation);
+      previousRawResponse = rawResponse;
+    } catch (err) {
+      // API/network error — retry without feedback (nothing to correct)
+      fallbackReason = err.message || 'Unknown error';
+      pushLog({ agent: agentRole, prompt: userPrompt.slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || null, parsedJson: null, scores: null, validationResult: 'FAILED', fallbackReason });
+    }
+
+    console.warn(`[AI Factory] Attempt ${attempt} failed for ${agentRole}: ${fallbackReason}`);
+    if (attempt >= maxAttempts) {
+      setSource(agentRole, 'Fallback');
+      throw new Error(fallbackReason);
     }
   }
 };
