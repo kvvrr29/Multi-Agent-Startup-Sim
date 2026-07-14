@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { useVersionStore, diffBlueprints } from '../store/versionStore';
+import { useVersionStore, diffVersionState } from '../store/versionStore';
 import { useProjectStore } from '../store/useProjectStore';
+import { useProjectMemoryStore } from '../store/projectMemoryStore';
+import { restoreVersionWorkflow } from '../services/simulationEngine';
 import { SECTION_TITLES } from '../config/blueprintSections';
 import { History, RotateCcw, Eye, ChevronRight, ChevronDown, X, GitCompare } from 'lucide-react';
 
@@ -18,8 +20,11 @@ const DiffList = ({ label, keys, color }) => {
 
 const CompareModal = ({ version, onClose }) => {
   const currentBlueprint = useProjectStore(state => state.blueprint);
-  const diff = diffBlueprints(version.blueprintSnapshot, currentBlueprint);
-  const isIdentical = diff.changed.length === 0 && diff.added.length === 0 && diff.removed.length === 0;
+  const currentMemory = useProjectMemoryStore(state => state.memory);
+  const decisionHistory = useProjectMemoryStore(state => state.decisionHistory);
+  const stateDiff = diffVersionState(version, currentBlueprint, { memory: currentMemory, decisionHistory });
+  const diff = stateDiff.blueprint;
+  const isIdentical = diff.changed.length === 0 && diff.added.length === 0 && diff.removed.length === 0 && !stateDiff.memoryChanged && !stateDiff.provenanceChanged;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -46,6 +51,8 @@ const CompareModal = ({ version, onClose }) => {
             <DiffList label="Changed since this version" keys={diff.changed} color="var(--warning)" />
             <DiffList label="Added since this version" keys={diff.added} color="var(--success)" />
             <DiffList label="Removed since this version" keys={diff.removed} color="var(--danger)" />
+            {stateDiff.memoryChanged && <div style={{ color: 'var(--warning)', fontSize: '0.8rem', marginBottom: '8px' }}>Project memory or decision history changed since this version.</div>}
+            {stateDiff.provenanceChanged && <div style={{ color: 'var(--warning)', fontSize: '0.8rem' }}>Section provenance changed since this version.</div>}
           </>
         )}
       </div>
@@ -56,22 +63,16 @@ const CompareModal = ({ version, onClose }) => {
 export default function VersionHistory() {
   const versions = useVersionStore(state => state.versions);
   const currentVersionId = useVersionStore(state => state.currentVersionId);
-  const restoreVersion = useVersionStore(state => state.restoreVersion);
-  const setBlueprint = useProjectStore(state => state.setBlueprint);
+  const workflowActive = useProjectStore(state => state.workflow.active);
 
   const [expandedId, setExpandedId] = useState(null);
   const [compareVersion, setCompareVersion] = useState(null);
 
-  const handleRestore = (versionId) => {
+  const handleRestore = async (versionId) => {
     const confirm = window.confirm(`Restore ${versionId}? All unsaved changes will be lost.`);
     if (!confirm) return;
 
-    const snapshot = restoreVersion(versionId);
-    if (snapshot) {
-      // Whole-blueprint replacement: restores content AND approval state,
-      // and clears sections that did not exist in this version.
-      setBlueprint(snapshot);
-    }
+    await restoreVersionWorkflow(versionId);
   };
 
   return (
@@ -128,7 +129,7 @@ export default function VersionHistory() {
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={(e) => { e.stopPropagation(); handleRestore(v.id); }} className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem', flex: 1, display: 'flex', justifyContent: 'center', gap: '4px' }}>
+                    <button disabled={workflowActive} onClick={(e) => { e.stopPropagation(); handleRestore(v.id); }} className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem', flex: 1, display: 'flex', justifyContent: 'center', gap: '4px', opacity: workflowActive ? 0.5 : 1 }}>
                       <RotateCcw size={12} /> Restore
                     </button>
                     <button onClick={(e) => { e.stopPropagation(); setCompareVersion(v); }} className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.7rem', flex: 1, display: 'flex', justifyContent: 'center', gap: '4px' }}>
