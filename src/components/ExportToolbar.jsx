@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, FileText, Code2 } from 'lucide-react';
 import { useProjectStore } from '../store/useProjectStore';
+import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
 
 export default function ExportToolbar() {
   const blueprint = useProjectStore(state => state.blueprint);
@@ -8,11 +9,9 @@ export default function ExportToolbar() {
 
   const handleExportMarkdown = () => {
     let md = `# ${project?.name || 'Startup Blueprint'}\n\n`;
-    Object.keys(blueprint).forEach(key => {
-      const section = blueprint[key];
-      if (section && section.content) {
-        md += `${section.content}\n\n`;
-      }
+    BLUEPRINT_SECTIONS.forEach(({ id, title }) => {
+      const section = blueprint[id];
+      md += `## ${title}\n\n${section?.content || '_No content generated._'}\n\n`;
     });
 
     const blob = new Blob([md], { type: 'text/markdown' });
@@ -47,25 +46,13 @@ export default function ExportToolbar() {
     html2pdf().set(opt).from(clone).save();
   };
 
-  const handleExportDocx = () => {
-    // Simple naive DOCX export by saving as a doc file (HTML format)
-    // For a real app, docx.js or a backend is preferred.
-    const element = document.getElementById('blueprint-export-container');
-    if (!element) return;
-    
-    const clone = element.cloneNode(true);
-    const actions = clone.querySelectorAll('.section-actions');
-    actions.forEach(el => el.remove());
-
-    const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export</title></head><body>";
-    const footer = "</body></html>";
-    const html = header + clone.innerHTML + footer;
-    
-    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+  const handleExportDocx = async () => {
+    const { createBlueprintDocx } = await import('../services/docxExport');
+    const blob = await createBlueprintDocx(project, blueprint);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${project?.name || 'project'}_blueprint.doc`;
+    a.download = `${project?.name || 'project'}_blueprint.docx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -74,7 +61,7 @@ export default function ExportToolbar() {
 
   const options = [
     { label: 'PDF Document', hint: 'Print-ready blueprint with diagrams', icon: FileText, action: handleExportPDF },
-    { label: 'Word Document', hint: 'Editable .doc for further work', icon: Download, action: handleExportDocx },
+    { label: 'Word Document', hint: 'Editable .docx with rendered diagrams', icon: Download, action: handleExportDocx },
     { label: 'Markdown', hint: 'Plain-text source of every section', icon: Code2, action: handleExportMarkdown },
   ];
 
