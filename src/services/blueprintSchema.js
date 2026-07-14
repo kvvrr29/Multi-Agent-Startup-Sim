@@ -10,7 +10,12 @@ export const createBlueprintSchema = () => {
       status: 'pending',
       confidence: null,
       content: '',
-      lastModifiedVersion: 'v1'
+      lastModifiedVersion: 'v1',
+      generationSource: null,
+      generatedBy: null,
+      validationScores: null,
+      generatedAt: null,
+      failureReason: null
     };
   });
   return schema;
