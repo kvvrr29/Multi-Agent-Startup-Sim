@@ -13,7 +13,22 @@ export default function ProjectCreation() {
     targetAudience: '',
     budget: '',
     timeline: '',
+    platform: 'web',
+    teamSize: '',
+    priorities: '',
   });
+
+  const inputStyle = {
+    width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
+    background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+    color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
+    fontFamily: 'inherit'
+  };
+  const focusHandlers = {
+    onFocus: (e) => e.target.style.borderColor = 'var(--primary-electric)',
+    onBlur: (e) => e.target.style.borderColor = 'var(--border-color)'
+  };
+  const labelStyle = { fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 };
   
   const [error, setError] = useState('');
 
@@ -131,24 +146,79 @@ export default function ProjectCreation() {
             </div>
             
             <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="budget" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Budget</label>
-              <input 
-                type="text" 
+              <label htmlFor="budget" style={labelStyle}>Budget</label>
+              <input
+                type="text"
                 id="budget"
                 name="budget"
                 value={formData.budget}
                 onChange={handleChange}
                 placeholder="e.g., $10k"
-                style={{
-                  width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                  background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
-                  fontFamily: 'inherit'
-                }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary-electric)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
+                style={inputStyle}
+                {...focusHandlers}
               />
             </div>
+          </div>
+
+          <div className="flex gap-4">
+            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
+              <label htmlFor="timeline" style={labelStyle}>Timeline</label>
+              <input
+                type="text"
+                id="timeline"
+                name="timeline"
+                value={formData.timeline}
+                onChange={handleChange}
+                placeholder="e.g., 6 months"
+                style={inputStyle}
+                {...focusHandlers}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
+              <label htmlFor="platform" style={labelStyle}>Platform Preference</label>
+              <select
+                id="platform"
+                name="platform"
+                value={formData.platform}
+                onChange={handleChange}
+                style={inputStyle}
+                {...focusHandlers}
+              >
+                <option value="web">Web</option>
+                <option value="mobile">Mobile</option>
+                <option value="web + mobile">Web + Mobile</option>
+                <option value="desktop">Desktop</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
+              <label htmlFor="teamSize" style={labelStyle}>Team Size</label>
+              <input
+                type="text"
+                id="teamSize"
+                name="teamSize"
+                value={formData.teamSize}
+                onChange={handleChange}
+                placeholder="e.g., 4"
+                style={inputStyle}
+                {...focusHandlers}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="priorities" style={labelStyle}>Project Priorities</label>
+            <input
+              type="text"
+              id="priorities"
+              name="priorities"
+              value={formData.priorities}
+              onChange={handleChange}
+              placeholder="e.g., Fast launch over feature completeness, low running costs"
+              style={inputStyle}
+              {...focusHandlers}
+            />
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}>

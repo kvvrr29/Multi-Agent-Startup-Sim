@@ -14,7 +14,7 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRole];
   if (!systemPrompt) throw new Error(`Unknown agent role: ${agentRole}`);
 
-  const context = buildContextString(instruction);
+  const context = buildContextString(instruction, agentRole);
   const sectionsToGenerate = AGENT_RESPONSIBILITIES[agentRole] || [];
   
   const schema = createResponseSchema(sectionsToGenerate);

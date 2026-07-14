@@ -14,6 +14,15 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
 
+// Memory categories per doc §13: Business, Product, Technical, Marketing, Scope
+const AGENT_MEMORY_CATEGORY = {
+  ceo: 'business',
+  pm: 'product',
+  developer: 'technical',
+  marketing: 'marketing',
+  mediator: 'scope'
+};
+
 // The order and messaging of the initial generation pipeline.
 const AGENT_PIPELINE = [
   {
@@ -68,6 +77,10 @@ export const runInitialSimulation = async (projectData) => {
   // Initialize memory
   memoryStore.clearMemory();
   memoryStore.updateMemory('scope', 'budget', projectData?.budget || 'N/A');
+  memoryStore.updateMemory('scope', 'timeline', projectData?.timeline || 'N/A');
+  memoryStore.updateMemory('scope', 'platforms', projectData?.platform || 'web');
+  memoryStore.updateMemory('scope', 'teamSize', projectData?.teamSize || 'N/A');
+  memoryStore.updateMemory('scope', 'priorities', projectData?.priorities || 'N/A');
   memoryStore.updateMemory('business', 'targetAudience', projectData?.targetAudience || 'General');
 
   // 1. Mediator analyzes request
@@ -112,7 +125,8 @@ export const runInitialSimulation = async (projectData) => {
       const result = await generateAgentContent(agentId);
       // Update memory with decisions
       if (result.decisions && result.decisions.length > 0) {
-         result.decisions.forEach((d, i) => memoryStore.updateMemory(agentId, `decision_${Date.now()}_${i}`, d));
+         const category = AGENT_MEMORY_CATEGORY[agentId] || 'scope';
+         result.decisions.forEach((d, i) => memoryStore.updateMemory(category, `decision_${Date.now()}_${i}`, d));
       }
       store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via Gemini.`, agent: agentId });
       return result.content;
@@ -277,7 +291,8 @@ export const applyRevisionSimulation = async (previewData) => {
            const result = await generateAgentContent(targetAgent, instruction);
            
            if (result.decisions && result.decisions.length > 0) {
-             result.decisions.forEach((d, i) => memoryStore.updateMemory(targetAgent, `revision_${Date.now()}_${i}`, d));
+             const category = AGENT_MEMORY_CATEGORY[targetAgent] || 'scope';
+             result.decisions.forEach((d, i) => memoryStore.updateMemory(category, `revision_${Date.now()}_${i}`, d));
            }
 
            Object.entries(result.content).forEach(([sectionKey, content]) => {
