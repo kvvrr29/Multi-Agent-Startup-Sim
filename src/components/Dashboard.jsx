@@ -14,8 +14,9 @@ import PromptInspector from './PromptInspector';
 import AIDebugPanel from './AIDebugPanel';
 import ExportToolbar from './ExportToolbar';
 import { AIModeBadge, AIStatusBanner } from './AIStatusUtils';
+import { resetAllProjectData } from '../services/simulationEngine';
 
-import { Bot, Database, History, BarChart2, Download, Settings } from 'lucide-react';
+import { Bot, Database, History, BarChart2, Download, Settings, BriefcaseBusiness, BookOpen, Plus } from 'lucide-react';
 
 import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
 import BlueprintHealthInspector from './BlueprintHealthInspector';
@@ -106,6 +107,8 @@ const ApprovalDashboard = () => {
 
 // One contextual panel at a time (doc §8)
 const PANELS = [
+  { id: 'project', label: 'Project', icon: BriefcaseBusiness },
+  { id: 'blueprint', label: 'Blueprint', icon: BookOpen },
   { id: 'agents', label: 'Agent Team', icon: Bot },
   { id: 'memory', label: 'Project Memory', icon: Database },
   { id: 'versions', label: 'Versions', icon: History },
@@ -137,6 +140,7 @@ export default function Dashboard() {
 
   const developerMode = useSettingsStore(state => state.developerMode);
   const agents = useProjectStore(state => state.agents);
+  const project = useProjectStore(state => state.project);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
   // Auto-switch to Agent Activity when a simulation starts so the user
@@ -148,7 +152,7 @@ export default function Dashboard() {
   }, [anyBusy]);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div className="dashboard-shell" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
 
       {showSettings && <AISettingsModal onClose={() => setShowSettings(false)} />}
 
@@ -162,7 +166,7 @@ export default function Dashboard() {
       )}
 
       {/* 1. Left Navigation Rail */}
-      <div style={{
+      <div className="dashboard-nav" style={{
         width: '76px',
         borderRight: '1px solid var(--border-color)',
         background: 'var(--bg-secondary)',
@@ -183,7 +187,7 @@ export default function Dashboard() {
       </div>
 
       {/* 2. Context Panel — only one at a time */}
-      <div style={{
+      <div className="dashboard-context-panel" style={{
         width: '400px',
         borderRight: '1px solid var(--border-color)',
         display: 'flex',
@@ -217,6 +221,25 @@ export default function Dashboard() {
           </>
         )}
 
+        {activePanel === 'project' && (
+          <div className="glass-panel" style={{ padding: '1rem', display: 'grid', gap: '10px', fontSize: '0.8rem' }}>
+            {Object.entries(project || {}).map(([key, value]) => (
+              <div key={key}><strong style={{ textTransform: 'capitalize' }}>{key.replace(/([A-Z])/g, ' $1')}:</strong> <span style={{ color: 'var(--text-secondary)' }}>{value || 'Not specified'}</span></div>
+            ))}
+            <button className="btn-secondary" onClick={() => {
+              if (window.confirm('Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data.')) resetAllProjectData();
+            }} style={{ marginTop: '8px', padding: '8px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
+              <Plus size={14} /> New Project
+            </button>
+          </div>
+        )}
+
+        {activePanel === 'blueprint' && (
+          <div className="glass-panel" style={{ padding: '1rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            The complete 18-section blueprint is open in the workspace. Use Reading Mode for a focused view, or Export to download it.
+          </div>
+        )}
+
         {activePanel === 'memory' && (
           <ErrorBoundary componentName="Memory Inspector">
             <MemoryInspector />
@@ -248,7 +271,7 @@ export default function Dashboard() {
       </div>
 
       {/* 3. Main Content: Blueprint gets most of the screen */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
+      <div className="dashboard-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)' }}>
         <div style={{ padding: '1rem 1.5rem 0' }}>
           <AIStatusBanner />
         </div>
