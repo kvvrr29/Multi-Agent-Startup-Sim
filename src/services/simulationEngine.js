@@ -14,6 +14,17 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
 
+// Hard cap on any single AI generation so no agent can hang in "Working" (doc §5).
+const AGENT_GENERATION_TIMEOUT_MS = 90000;
+
+const withTimeout = (promiseFn, ms) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('Timeout')), ms);
+  });
+  return Promise.race([promiseFn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
+};
+
 // Memory categories per doc §13: Business, Product, Technical, Marketing, Scope
 const AGENT_MEMORY_CATEGORY = {
   ceo: 'business',
@@ -93,7 +104,10 @@ export const runInitialSimulation = async (projectData) => {
   if (useAI) {
     try {
       store.updateAgentStatus('mediator', AGENT_STATUS.THINKING, 'Classifying Industry Domain');
-      const classification = await classifyDomain(projectData?.name || '', projectData?.idea || '');
+      const classification = await withTimeout(
+        () => classifyDomain(projectData?.name || '', projectData?.idea || ''),
+        AGENT_GENERATION_TIMEOUT_MS
+      );
       
       memoryStore.updateMemory('scope', 'domain', classification.domain);
       memoryStore.updateMemory('scope', 'industry', classification.industry);
@@ -122,7 +136,7 @@ export const runInitialSimulation = async (projectData) => {
   const handleAgentGeneration = async (agentId, fallbackSections) => {
     if (!useAI) return fallbackSections;
     try {
-      const result = await generateAgentContent(agentId);
+      const result = await withTimeout(() => generateAgentContent(agentId), AGENT_GENERATION_TIMEOUT_MS);
       // Update memory with decisions
       if (result.decisions && result.decisions.length > 0) {
          const category = AGENT_MEMORY_CATEGORY[agentId] || 'scope';
@@ -131,87 +145,86 @@ export const runInitialSimulation = async (projectData) => {
       store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via Gemini.`, agent: agentId });
       return result.content;
     } catch (err) {
-      const reason = err.message || 'Unknown error';
+      const reason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
       // ⚠️ Surface the failure visibly — do NOT silently swap with fallback without warning
+      store.updateAgentStatus(agentId, AGENT_STATUS.FAILED, reason);
       store.addWorkflowEvent({ type: 'error', message: `⚠️ Gemini FAILED for ${agentId.toUpperCase()}: ${reason}. Using Fallback Factory.`, agent: 'mediator' });
       console.error(`[Simulation] AI generation failed for ${agentId}:`, err);
+      await sleep(800);
       return fallbackSections;
     }
   };
 
-  const blueprintContent = generateDynamicBlueprint(projectData);
+  try {
+    const blueprintContent = generateDynamicBlueprint(projectData);
 
-  // 2. Specialist agents generate their sections in pipeline order
-  store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
-  for (const step of AGENT_PIPELINE) {
-    const { id, thinking, working, doneMsg, contribution } = step;
-    const sections = AGENT_ROLES[id];
+    // 2. Specialist agents generate their sections in pipeline order
+    store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
+    for (const step of AGENT_PIPELINE) {
+      const { id, thinking, working, doneMsg, contribution } = step;
+      const sections = AGENT_ROLES[id];
 
-    store.updateAgentStatus(id, AGENT_STATUS.THINKING, thinking);
-    store.addWorkflowEvent({ message: `Mediator assigned task to ${useProjectStore.getState().agents[id].role}.`, agent: 'mediator' });
-    await sleep(1000);
+      store.updateAgentStatus(id, AGENT_STATUS.THINKING, thinking);
+      store.addWorkflowEvent({ message: `Mediator assigned task to ${useProjectStore.getState().agents[id].role}.`, agent: 'mediator' });
+      await sleep(1000);
 
-    store.updateAgentStatus(id, AGENT_STATUS.WORKING, working);
-    const content = await handleAgentGeneration(id, pick(blueprintContent, sections));
+      store.updateAgentStatus(id, AGENT_STATUS.WORKING, working);
+      const content = await handleAgentGeneration(id, pick(blueprintContent, sections));
 
-    sections.forEach(sectionKey => {
-      if (content[sectionKey]) {
-        store.updateBlueprintSection(sectionKey, content[sectionKey], 'pending', 'High', 'v1');
-      }
-    });
+      sections.forEach(sectionKey => {
+        if (content[sectionKey]) {
+          store.updateBlueprintSection(sectionKey, content[sectionKey], 'pending', 'High', 'v1');
+        }
+      });
 
-    store.updateAgentStatus(id, AGENT_STATUS.COMPLETED);
-    store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
+      store.updateAgentStatus(id, AGENT_STATUS.COMPLETED);
+      store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
+      await sleep(500);
+    }
+
+    // 3. Mediator wraps up: contributions (always local) + final recommendations
     await sleep(500);
-  }
+    store.updateAgentStatus('mediator', AGENT_STATUS.REVIEWING, 'Reviewing agent outputs');
 
-  // 3. Mediator wraps up: contributions (always local) + final recommendations
-  await sleep(500);
-  store.updateAgentStatus('mediator', AGENT_STATUS.WORKING, 'Finalizing Blueprint');
+    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'High', 'v1');
 
-  store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'High', 'v1');
-
-  const mediatorContent = await handleAgentGeneration('mediator', {
-    finalRecommendations: blueprintContent.finalRecommendations
-  });
-  if (mediatorContent.finalRecommendations) {
-    store.updateBlueprintSection('finalRecommendations', mediatorContent.finalRecommendations, 'pending', 'High', 'v1');
-  }
-  await sleep(1000);
-  store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
-  
-  // Reset all statuses for next interaction
-  ['ceo', 'pm', 'developer', 'marketing'].forEach(agentId => {
-     store.updateAgentStatus(agentId, AGENT_STATUS.IDLE, null);
-  });
-  
-  store.addWorkflowEvent({ message: 'Blueprint generation complete. Saving Version 1.', agent: 'mediator' });
-  
-  // Save Version
-  const currentBlueprint = useProjectStore.getState().blueprint;
-  versionStore.saveVersion(
-    currentBlueprint, 
-    useAI ? '[AI Generated] Initial Project Creation' : '[Fallback Factory] Initial Project Creation', 
-    ['ceo', 'pm', 'developer', 'marketing']
-  );
-  
-  store.addWorkflowEvent({ 
-    type: 'system', 
-    message: useAI ? `Generation Source: Gemini 2.5 Flash` : `Generation Source: Fallback Factory`, 
-    agent: 'mediator' 
-  });
-  
-  store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Generation Finished');
-};
-
-const withTimeout = (promiseFn, ms) => {
-  return () => {
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Timeout')), ms);
+    const mediatorContent = await handleAgentGeneration('mediator', {
+      finalRecommendations: blueprintContent.finalRecommendations
     });
-    return Promise.race([promiseFn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
-  };
+    if (mediatorContent.finalRecommendations) {
+      store.updateBlueprintSection('finalRecommendations', mediatorContent.finalRecommendations, 'pending', 'High', 'v1');
+    }
+    await sleep(1000);
+    store.updateAgentStatus('mediator', AGENT_STATUS.UPDATING, 'Finalizing Blueprint');
+
+    store.addWorkflowEvent({ message: 'Blueprint generation complete. Saving Version 1.', agent: 'mediator' });
+
+    // Save Version
+    const currentBlueprint = useProjectStore.getState().blueprint;
+    versionStore.saveVersion(
+      currentBlueprint,
+      useAI ? '[AI Generated] Initial Project Creation' : '[Fallback Factory] Initial Project Creation',
+      ['ceo', 'pm', 'developer', 'marketing']
+    );
+
+    store.addWorkflowEvent({
+      type: 'system',
+      message: useAI ? `Generation Source: Gemini 2.5 Flash` : `Generation Source: Fallback Factory`,
+      agent: 'mediator'
+    });
+
+    store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Generation Finished');
+  } catch (err) {
+    // Guaranteed failure state: never leave the workflow hanging (doc §5)
+    console.error('[Simulation] Initial generation failed:', err);
+    store.updateAgentStatus('mediator', AGENT_STATUS.FAILED, err.message || 'Generation failed');
+    store.addWorkflowEvent({ type: 'error', message: `⚠️ Blueprint generation failed: ${err.message || 'Unknown error'}`, agent: 'mediator' });
+  } finally {
+    // Specialists always return to Idle so the next interaction can start
+    ['ceo', 'pm', 'developer', 'marketing'].forEach(agentId => {
+      store.updateAgentStatus(agentId, AGENT_STATUS.IDLE, null);
+    });
+  }
 };
 
 export const previewRevision = async (revisionInstruction, targetSectionId = null) => {
@@ -224,6 +237,7 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
 
   store.updateAgentStatus('mediator', AGENT_STATUS.ANALYZING, 'Analyzing revision intent');
 
+  try {
   if (targetSectionId) {
     // Local Section Modification
     affectedSections = [targetSectionId];
@@ -247,8 +261,16 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
     else { affectedSections = ['productRoadmap']; assignedAgents = ['pm']; }
     confidence = 'Low (Fallback)';
   }
-
-  store.updateAgentStatus('mediator', AGENT_STATUS.IDLE, null);
+  } catch (err) {
+    console.error('[Simulation] Revision preview routing failed:', err);
+    store.addWorkflowEvent({ type: 'error', message: `⚠️ Routing failed: ${err.message}. Defaulting to Product Manager.`, agent: 'mediator' });
+    affectedSections = ['productRoadmap'];
+    assignedAgents = ['pm'];
+    confidence = 'Low (Routing Failed)';
+  } finally {
+    // Mediator must never stay stuck in Analyzing (doc §5)
+    store.updateAgentStatus('mediator', AGENT_STATUS.IDLE, null);
+  }
 
   return {
     affectedSections,
@@ -288,7 +310,7 @@ export const applyRevisionSimulation = async (previewData) => {
       
       if (aiModeEnabled) {
          try {
-           const result = await generateAgentContent(targetAgent, instruction);
+           const result = await withTimeout(() => generateAgentContent(targetAgent, instruction), AGENT_GENERATION_TIMEOUT_MS);
            
            if (result.decisions && result.decisions.length > 0) {
              const category = AGENT_MEMORY_CATEGORY[targetAgent] || 'scope';
@@ -304,7 +326,10 @@ export const applyRevisionSimulation = async (previewData) => {
            });
          } catch (err) {
            console.warn(`AI Revision failed for ${targetAgent}.`, err);
-           store.addWorkflowEvent({ type: 'system', message: `AI failed for ${targetAgent.toUpperCase()}. Skipping.`, agent: 'mediator' });
+           const reason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
+           store.updateAgentStatus(targetAgent, AGENT_STATUS.FAILED, reason);
+           store.addWorkflowEvent({ type: 'error', message: `⚠️ AI failed for ${targetAgent.toUpperCase()}: ${reason}. Section left unchanged.`, agent: 'mediator' });
+           await sleep(800);
          }
       } else {
         // Fallback mock logic

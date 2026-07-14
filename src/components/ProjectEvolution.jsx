@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { runRevisionSimulation, previewRevision, applyRevisionSimulation } from '../services/simulationEngine';
-import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
+import { useProjectStore, isAgentBusy } from '../store/useProjectStore';
 import { Send, Sparkles, ChevronRight, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const SUGGESTIONS = [
@@ -26,8 +26,8 @@ export default function ProjectEvolution() {
   const recentRevisionResult = useProjectStore(state => state.recentRevisionResult);
   const clearRevisionState = useProjectStore(state => state.clearRevisionState);
   
-  // Global Lock: True if ANY agent is not IDLE
-  const isBusy = Object.values(agents).some(a => a.status !== AGENT_STATUS.IDLE) || isPreviewing;
+  // Global Lock: True if ANY agent is actively occupied (Completed/Failed don't block)
+  const isBusy = Object.values(agents).some(isAgentBusy) || isPreviewing;
 
   const handleSuggestionClick = async (suggestion) => {
     if (isBusy) return;

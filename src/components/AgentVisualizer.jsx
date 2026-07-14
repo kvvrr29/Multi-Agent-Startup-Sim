@@ -2,7 +2,7 @@ import React, { useMemo, useEffect } from 'react';
 import ReactFlow, { Background, MarkerType, useNodesState, useEdgesState, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
-import { Bot, User, Briefcase, Code, Megaphone, CheckCircle, Loader, Brain } from 'lucide-react';
+import { Bot, User, Briefcase, Code, Megaphone, CheckCircle, Loader, Brain, XCircle, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -19,7 +19,9 @@ const statusColors = {
   [AGENT_STATUS.ASSIGNED]: 'var(--accent-purple)',
   [AGENT_STATUS.THINKING]: 'var(--accent-cyan)',
   [AGENT_STATUS.WORKING]: 'var(--primary-electric)',
-  [AGENT_STATUS.COMPLETED]: 'var(--success)'
+  [AGENT_STATUS.REVIEWING]: 'var(--accent-cyan)',
+  [AGENT_STATUS.COMPLETED]: 'var(--success)',
+  [AGENT_STATUS.FAILED]: 'var(--danger)'
 };
 
 // Custom Node for Agent
@@ -60,6 +62,8 @@ const AgentNode = ({ data }) => {
         {data.status === AGENT_STATUS.THINKING && <><Brain size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Thinking...</span></>}
         {data.status === AGENT_STATUS.WORKING && <><Loader size={12} color="var(--primary-electric)" style={{ animation: 'spin 2s linear infinite' }} /> <span style={{ color: 'var(--primary-electric)'}}>Working...</span></>}
         {data.status === AGENT_STATUS.ASSIGNED && <span style={{ color: 'var(--accent-purple)' }}>Assigned</span>}
+        {data.status === AGENT_STATUS.REVIEWING && <><Eye size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Reviewing...</span></>}
+        {data.status === AGENT_STATUS.FAILED && <><XCircle size={12} color="var(--danger)" /> <span style={{ color: 'var(--danger)'}}>Failed</span></>}
       </div>
 
       <AnimatePresence>

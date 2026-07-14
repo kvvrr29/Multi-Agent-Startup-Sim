@@ -17,9 +17,26 @@ export const AGENT_STATUS = {
   ASSIGNED: 'Assigned',
   THINKING: 'Thinking',
   WORKING: 'Working',
+  REVIEWING: 'Reviewing',
   UPDATING: 'Updating Blueprint',
   COMPLETED: 'Completed',
+  FAILED: 'Failed',
 };
+
+// Statuses in which an agent is actively occupied. Completed/Failed/Idle are
+// terminal states — they must never block new work (doc §5: no stuck agents).
+export const BUSY_STATUSES = [
+  AGENT_STATUS.ANALYZING,
+  AGENT_STATUS.ROUTING,
+  AGENT_STATUS.WAITING,
+  AGENT_STATUS.ASSIGNED,
+  AGENT_STATUS.THINKING,
+  AGENT_STATUS.WORKING,
+  AGENT_STATUS.REVIEWING,
+  AGENT_STATUS.UPDATING,
+];
+
+export const isAgentBusy = (agent) => BUSY_STATUSES.includes(agent?.status);
 
 const initialAgents = {
   mediator: { id: 'mediator', name: 'Alex', role: AGENT_ROLES.MEDIATOR, status: AGENT_STATUS.IDLE, currentTask: null },
