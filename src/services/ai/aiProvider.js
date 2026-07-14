@@ -16,13 +16,13 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
 
   if (aiProvider === 'gemini') {
     const ai = new GoogleGenAI({ apiKey });
-    const { incrementSent, incrementSuccess, incrementFailed } = useAIDebugStore.getState();
-    
+    const { incrementSent, incrementSuccess, incrementFailed, beginGeneration, endGeneration, setLastError, clearLastError } = useAIDebugStore.getState();
+
     const config = {
       systemInstruction: systemPrompt,
       temperature: 0.7,
     };
-    
+
     if (jsonSchema) {
       config.responseMimeType = 'application/json';
       config.responseSchema = jsonSchema;
@@ -30,26 +30,34 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
 
     try {
       incrementSent();
+      beginGeneration();
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: userPrompt,
         config: config
       });
-      
+
       const responseText = response.text;
-      
+
       // Track costs
       const inputTokens = estimateTokens(systemPrompt + userPrompt);
       const outputTokens = estimateTokens(responseText);
       recordUsage(inputTokens, outputTokens);
       incrementSuccess();
-      
+      clearLastError();
+
       return responseText;
     } catch (err) {
       incrementFailed();
       console.error("Gemini API Error:", err);
-      if (err.status === 429) throw new Error('Rate limit exceeded.');
+      if (err.status === 429) {
+        setLastError('rate_limit', 'Rate limit exceeded.');
+        throw new Error('Rate limit exceeded.');
+      }
+      setLastError('api_error', err.message || 'Unknown API error');
       throw new Error(`Gemini API failed: ${err.message}`);
+    } finally {
+      endGeneration();
     }
   }
 

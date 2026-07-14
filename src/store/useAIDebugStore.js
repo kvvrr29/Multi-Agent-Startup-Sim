@@ -16,6 +16,10 @@ export const useAIDebugStore = create((set) => ({
   // Raw log entries (most recent first)
   rawLogs: [],
 
+  // Live status signals for the AI status indicator (doc §12)
+  activeGenerations: 0,
+  lastError: null, // { kind: 'rate_limit' | 'api_error', message, timestamp }
+
   // ── actions ──────────────────────────────────────────────────────────────
 
   incrementSent: () =>
@@ -50,10 +54,23 @@ export const useAIDebugStore = create((set) => ({
 
   clearLogs: () => set({ rawLogs: [] }),
 
+  beginGeneration: () =>
+    set((s) => ({ activeGenerations: s.activeGenerations + 1 })),
+
+  endGeneration: () =>
+    set((s) => ({ activeGenerations: Math.max(0, s.activeGenerations - 1) })),
+
+  setLastError: (kind, message) =>
+    set({ lastError: { kind, message, timestamp: new Date().toISOString() } }),
+
+  clearLastError: () => set({ lastError: null }),
+
   reset: () =>
     set({
       apiStats: { sent: 0, successful: 0, failed: 0 },
       generationSources: { domain: null, ceo: null, pm: null, developer: null, marketing: null },
       rawLogs: [],
+      activeGenerations: 0,
+      lastError: null,
     }),
 }));

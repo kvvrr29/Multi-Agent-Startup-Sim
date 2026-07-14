@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useSettingsStore } from '../store/useSettingsStore';
-import { X, Key, Settings, Brain, AlertTriangle } from 'lucide-react';
+import { X, Key, Settings, Brain, AlertTriangle, Terminal } from 'lucide-react';
 
 export default function AISettingsModal({ onClose }) {
-  const { apiKey, aiProvider, aiModeEnabled, setApiKey, setAiProvider, setAiModeEnabled } = useSettingsStore();
+  const { apiKey, aiProvider, aiModeEnabled, developerMode, setApiKey, setAiProvider, setAiModeEnabled, setDeveloperMode } = useSettingsStore();
   const [localKey, setLocalKey] = useState(apiKey);
   const [localProvider, setLocalProvider] = useState(aiProvider);
   const [localEnabled, setLocalEnabled] = useState(aiModeEnabled);
+  const [localDevMode, setLocalDevMode] = useState(developerMode);
 
   const handleSave = () => {
     setApiKey(localKey);
     setAiProvider(localProvider);
     setAiModeEnabled(localEnabled);
+    setDeveloperMode(localDevMode);
     onClose();
   };
 
@@ -84,6 +86,20 @@ export default function AISettingsModal({ onClose }) {
               </div>
             </>
           )}
+
+          {/* Developer Tools (doc §11) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px', border: `1px solid ${localDevMode ? 'var(--accent-purple)' : 'var(--border-color)'}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Terminal size={18} color={localDevMode ? 'var(--accent-purple)' : 'var(--text-muted)'} />
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.9rem' }}>Developer Mode</strong>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Show AI Debug Panel, Prompt Inspector, raw logs & API metrics</span>
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={localDevMode} onChange={(e) => setLocalDevMode(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+            </label>
+          </div>
 
           {/* Fallback Notice */}
           {!localEnabled && (

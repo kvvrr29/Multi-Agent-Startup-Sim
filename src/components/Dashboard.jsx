@@ -6,6 +6,7 @@ import VersionHistory from './VersionHistory';
 import MemoryInspector from './MemoryInspector';
 import AgentTimeline from './AgentTimeline';
 import { useProjectStore, isAgentBusy } from '../store/useProjectStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import ErrorBoundary from './ErrorBoundary';
 import AISettingsModal from './AISettingsModal';
 import AICostDashboard from './AICostDashboard';
@@ -134,6 +135,7 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = React.useState(false);
   const [activePanel, setActivePanel] = React.useState('agents');
 
+  const developerMode = useSettingsStore(state => state.developerMode);
   const agents = useProjectStore(state => state.agents);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
@@ -149,9 +151,15 @@ export default function Dashboard() {
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
 
       {showSettings && <AISettingsModal onClose={() => setShowSettings(false)} />}
-      <AICostDashboard />
-      <PromptInspector />
-      <AIDebugPanel />
+
+      {/* Debug tools are developer-only (doc §11) */}
+      {developerMode && (
+        <>
+          <AICostDashboard />
+          <PromptInspector />
+          <AIDebugPanel />
+        </>
+      )}
 
       {/* 1. Left Navigation Rail */}
       <div style={{
