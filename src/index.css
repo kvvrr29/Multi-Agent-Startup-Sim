@@ -239,3 +239,59 @@ a:hover {
   font-size: 0.85em;
   color: var(--accent-cyan);
 }
+
+.markdown-content {
+  line-height: 1.65;
+}
+
+.markdown-content h3 {
+  font-size: 1.05rem;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child {
+  margin-top: 0;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.88rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.markdown-content tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--primary-electric);
+  margin: 1rem 0;
+  padding: 0.25rem 1rem;
+  color: var(--text-muted);
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1.5rem 0;
+}
+
+.diagram-zoom-content svg {
+  min-width: 60vw;
+  height: auto;
+}
