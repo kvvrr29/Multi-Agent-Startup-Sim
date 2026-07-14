@@ -5,16 +5,10 @@ import { validateAIResponse, createResponseSchema } from './validationLayer';
 import { useProjectStore } from '../../store/useProjectStore';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
+import { AGENT_ROLES } from '../../config/sectionOwnership';
 
-/**
- * Maps agents to the blueprint sections they are responsible for.
- */
-const AGENT_RESPONSIBILITIES = {
-  ceo: ['executiveSummary', 'businessModel'],
-  pm: ['problemStatement', 'productRoadmap'],
-  developer: ['architecture', 'umlDiagram', 'erDiagram'],
-  marketing: ['marketingStrategy']
-};
+// Sections each agent is responsible for generating (single source of truth).
+const AGENT_RESPONSIBILITIES = AGENT_ROLES;
 
 export const generateAgentContent = async (agentRole, instruction = '') => {
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRole];

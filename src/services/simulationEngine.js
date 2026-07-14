@@ -6,10 +6,57 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { classifyDomain } from './ai/domainClassifier';
 import { routeAIRevision } from './ai/aiRouter';
-import { SECTION_OWNERSHIP } from '../config/sectionOwnership';
+import { SECTION_OWNERSHIP, AGENT_ROLES } from '../config/sectionOwnership';
+import { SECTION_TITLES } from '../config/blueprintSections';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
+
+// The order and messaging of the initial generation pipeline.
+const AGENT_PIPELINE = [
+  {
+    id: 'ceo',
+    thinking: 'Evaluating market & business model',
+    working: 'Drafting Business Strategy',
+    doneMsg: 'CEO completed Executive Summary, Target Users, Business Model, Budget, and Risks.',
+    contribution: ['Defined revenue model', 'Identified target user segments', 'Estimated budget & business risks']
+  },
+  {
+    id: 'pm',
+    thinking: 'Structuring Product Roadmap',
+    working: 'Defining Problem, Solution & MVP',
+    doneMsg: 'Product Manager completed Problem Statement, Solution, MVP Scope, Features, Roadmap, and Timeline.',
+    contribution: ['Prioritized MVP features', 'Authored Problem Statement & Solution', 'Planned roadmap and timeline']
+  },
+  {
+    id: 'developer',
+    thinking: 'Designing System Architecture',
+    working: 'Generating Architecture & Diagrams',
+    doneMsg: 'Developer completed Architecture, Technology Stack, UML, and Database Schemas.',
+    contribution: ['Designed system architecture', 'Selected technology stack', 'Generated UML & ER diagrams']
+  },
+  {
+    id: 'marketing',
+    thinking: 'Planning Go-to-Market',
+    working: 'Drafting Launch Strategy',
+    doneMsg: 'Marketing completed Go-to-Market Strategy.',
+    contribution: ['Developed launch strategy', 'Identified acquisition channels']
+  }
+];
+
+// Composed locally by the Mediator — never AI-generated (doc §4).
+const composeAgentContributions = () => {
+  const { agents } = useProjectStore.getState();
+  const lines = AGENT_PIPELINE.map(({ id, contribution }) => {
+    const agent = agents[id];
+    const sections = (AGENT_ROLES[id] || []).map(s => SECTION_TITLES[s] || s).join(', ');
+    return `### ${agent?.name || id} — ${agent?.role || id}\n- **Sections:** ${sections}\n${contribution.map(c => `- ${c}`).join('\n')}`;
+  });
+  lines.push(`### Alex — Mediator\n- **Sections:** ${SECTION_TITLES.agentContributions}, ${SECTION_TITLES.finalRecommendations}\n- Classified project domain\n- Routed tasks to specialist agents\n- Assembled and versioned the final blueprint`);
+  return lines.join('\n\n');
+};
 
 export const runInitialSimulation = async (projectData) => {
   const store = useProjectStore.getState();
@@ -80,94 +127,43 @@ export const runInitialSimulation = async (projectData) => {
 
   const blueprintContent = generateDynamicBlueprint(projectData);
 
-  // 2. CEO Agent evaluates business
+  // 2. Specialist agents generate their sections in pipeline order
   store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
-  store.updateAgentStatus('ceo', AGENT_STATUS.THINKING, 'Evaluating market & business model');
-  store.addWorkflowEvent({ message: 'Mediator assigned task to CEO.', agent: 'mediator' });
-  await sleep(1000);
-  
-  store.updateAgentStatus('ceo', AGENT_STATUS.WORKING, 'Drafting Executive Summary');
-  const ceoContent = await handleAgentGeneration('ceo', {
-    executiveSummary: blueprintContent.executiveSummary,
-    businessModel: blueprintContent.businessModel
-  });
+  for (const step of AGENT_PIPELINE) {
+    const { id, thinking, working, doneMsg, contribution } = step;
+    const sections = AGENT_ROLES[id];
 
-  store.updateBlueprintSection('executiveSummary', ceoContent.executiveSummary, 'pending', 'High');
-  store.updateBlueprintSection('businessModel', ceoContent.businessModel, 'pending', 'Medium');
-  store.updateAgentStatus('ceo', AGENT_STATUS.COMPLETED);
-  store.addWorkflowEvent({ 
-    message: 'CEO completed Executive Summary and Business Model.', 
-    agent: 'ceo',
-    contribution: ['Generated revenue model', 'Defined target audience']
-  });
+    store.updateAgentStatus(id, AGENT_STATUS.THINKING, thinking);
+    store.addWorkflowEvent({ message: `Mediator assigned task to ${useProjectStore.getState().agents[id].role}.`, agent: 'mediator' });
+    await sleep(1000);
 
-  // 3. PM Agent plans features
+    store.updateAgentStatus(id, AGENT_STATUS.WORKING, working);
+    const content = await handleAgentGeneration(id, pick(blueprintContent, sections));
+
+    sections.forEach(sectionKey => {
+      if (content[sectionKey]) {
+        store.updateBlueprintSection(sectionKey, content[sectionKey], 'pending', 'High', 'v1');
+      }
+    });
+
+    store.updateAgentStatus(id, AGENT_STATUS.COMPLETED);
+    store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
+    await sleep(500);
+  }
+
+  // 3. Mediator wraps up: contributions (always local) + final recommendations
   await sleep(500);
-  store.updateAgentStatus('pm', AGENT_STATUS.THINKING, 'Structuring Product Roadmap');
-  store.addWorkflowEvent({ message: 'Mediator assigned task to Product Manager.', agent: 'mediator' });
-  await sleep(1000);
-  
-  store.updateAgentStatus('pm', AGENT_STATUS.WORKING, 'Defining MVP Features');
-  const pmContent = await handleAgentGeneration('pm', {
-    problemStatement: blueprintContent.problemStatement,
-    productRoadmap: blueprintContent.productRoadmap
-  });
-
-  store.updateBlueprintSection('problemStatement', pmContent.problemStatement, 'pending', 'High', 'v1');
-  store.updateBlueprintSection('productRoadmap', pmContent.productRoadmap, 'pending', 'Medium', 'v1');
-  store.updateAgentStatus('pm', AGENT_STATUS.COMPLETED);
-  store.addWorkflowEvent({ 
-    message: 'Product Manager completed Roadmap and MVP Definition.', 
-    agent: 'pm',
-    contribution: ['Prioritized MVP features', 'Authored Problem Statement', 'Defined user workflows']
-  });
-
-  // 4. Developer Agent plans architecture
-  await sleep(500);
-  store.updateAgentStatus('developer', AGENT_STATUS.THINKING, 'Designing System Architecture');
-  store.addWorkflowEvent({ message: 'Mediator assigned task to Developer.', agent: 'mediator' });
-  await sleep(1000);
-  
-  store.updateAgentStatus('developer', AGENT_STATUS.WORKING, 'Generating Architecture Diagrams');
-  const devContent = await handleAgentGeneration('developer', {
-    architecture: blueprintContent.architecture,
-    umlDiagram: blueprintContent.umlDiagram,
-    erDiagram: blueprintContent.erDiagram
-  });
-
-  store.updateBlueprintSection('architecture', devContent.architecture, 'pending', 'High');
-  store.updateBlueprintSection('umlDiagram', devContent.umlDiagram, 'pending', 'High');
-  store.updateBlueprintSection('erDiagram', devContent.erDiagram, 'pending', 'Medium');
-  store.updateAgentStatus('developer', AGENT_STATUS.COMPLETED);
-  store.addWorkflowEvent({ 
-    message: 'Developer completed Architecture, UML, and Database Schemas.', 
-    agent: 'developer',
-    contribution: ['Designed microservices architecture', 'Generated UML use cases', 'Drafted ER Database schemas']
-  });
-
-  // 5. Marketing Agent plans launch
-  await sleep(500);
-  store.updateAgentStatus('marketing', AGENT_STATUS.THINKING, 'Planning Go-to-Market');
-  store.addWorkflowEvent({ message: 'Mediator assigned task to Marketing.', agent: 'mediator' });
-  await sleep(1000);
-  
-  store.updateAgentStatus('marketing', AGENT_STATUS.WORKING, 'Drafting Launch Strategy');
-  const mktContent = await handleAgentGeneration('marketing', {
-    marketingStrategy: blueprintContent.marketingStrategy
-  });
-
-  store.updateBlueprintSection('marketingStrategy', mktContent.marketingStrategy, 'pending', 'Medium');
-  store.updateAgentStatus('marketing', AGENT_STATUS.COMPLETED);
-  store.addWorkflowEvent({ 
-    message: 'Marketing completed Go-to-Market Strategy.', 
-    agent: 'marketing',
-    contribution: ['Developed launch strategy', 'Identified acquisition channels']
-  });
-
-  // 6. Mediator wraps up
-  await sleep(1000);
   store.updateAgentStatus('mediator', AGENT_STATUS.WORKING, 'Finalizing Blueprint');
-  await sleep(1500);
+
+  store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'High', 'v1');
+
+  const mediatorContent = await handleAgentGeneration('mediator', {
+    finalRecommendations: blueprintContent.finalRecommendations
+  });
+  if (mediatorContent.finalRecommendations) {
+    store.updateBlueprintSection('finalRecommendations', mediatorContent.finalRecommendations, 'pending', 'High', 'v1');
+  }
+  await sleep(1000);
   store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
   
   // Reset all statuses for next interaction
