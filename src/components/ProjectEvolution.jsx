@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { runRevisionSimulation, previewRevision, applyRevisionSimulation } from '../services/simulationEngine';
+import { previewRevision, applyRevisionSimulation } from '../services/simulationEngine';
 import { useProjectStore, isAgentBusy } from '../store/useProjectStore';
-import { Send, Sparkles, ChevronRight, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Send, Sparkles, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const SUGGESTIONS = [
   "Reduce Budget",
@@ -12,7 +12,7 @@ const SUGGESTIONS = [
   "Make MVP Smaller"
 ];
 
-const CATEGORIES = ["Business", "Product", "Architecture", "Marketing"];
+const CATEGORIES = ["Business", "Product", "Technical", "Marketing", "Scope"];
 
 export default function ProjectEvolution() {
   const [customRequest, setCustomRequest] = useState('');
@@ -22,12 +22,13 @@ export default function ProjectEvolution() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   
   const agents = useProjectStore(state => state.agents);
+  const workflowActive = useProjectStore(state => state.workflow.active);
   const activeRevision = useProjectStore(state => state.activeRevision);
   const recentRevisionResult = useProjectStore(state => state.recentRevisionResult);
   const clearRevisionState = useProjectStore(state => state.clearRevisionState);
   
   // Global Lock: True if ANY agent is actively occupied (Completed/Failed don't block)
-  const isBusy = Object.values(agents).some(isAgentBusy) || isPreviewing;
+  const isBusy = workflowActive || Object.values(agents).some(isAgentBusy) || isPreviewing;
 
   const handleSuggestionClick = async (suggestion) => {
     if (isBusy) return;
@@ -43,7 +44,7 @@ export default function ProjectEvolution() {
     if (!customRequest.trim() || isBusy) return;
     clearRevisionState();
     setIsPreviewing(true);
-    const result = await previewRevision(customRequest);
+    const result = await previewRevision(customRequest, null, category);
     setPreview(result);
     setIsPreviewing(false);
     setCustomRequest('');
