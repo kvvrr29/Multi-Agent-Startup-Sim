@@ -5,7 +5,7 @@ import { create } from 'zustand';
 const INPUT_COST_PER_TOKEN = 0.075 / 1000000;
 const OUTPUT_COST_PER_TOKEN = 0.30 / 1000000;
 
-export const useAICostStore = create((set, get) => ({
+export const useAICostStore = create((set) => ({
   totalRequests: 0,
   totalInputTokens: 0,
   totalOutputTokens: 0,
