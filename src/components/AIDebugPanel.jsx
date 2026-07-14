@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAIDebugStore } from '../store/useAIDebugStore';
-import { Activity, Terminal, X, ChevronDown, ChevronUp, Trash2, CheckCircle, AlertTriangle, Zap } from 'lucide-react';
+import { Activity, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 const TAB = { METRICS: 'metrics', SOURCES: 'sources', LOGS: 'logs' };
 
