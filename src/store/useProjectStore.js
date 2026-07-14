@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { createBlueprintSchema } from '../services/blueprintSchema';
+import { getBrowserStorage } from './persistence';
 
 export const AGENT_ROLES = {
   MEDIATOR: 'Mediator',
@@ -46,9 +48,11 @@ const initialAgents = {
   marketing: { id: 'marketing', name: 'Marcus', role: AGENT_ROLES.MARKETING, status: AGENT_STATUS.IDLE, currentTask: null },
 };
 
-const initialBlueprint = createBlueprintSchema();
+const createInitialAgents = () => Object.fromEntries(
+  Object.entries(initialAgents).map(([key, value]) => [key, { ...value }])
+);
 
-export const useProjectStore = create((set) => ({
+export const useProjectStore = create(persist((set, get) => ({
   // App State
   currentView: 'create', // 'create', 'dashboard'
 
@@ -56,10 +60,10 @@ export const useProjectStore = create((set) => ({
   project: null,
   
   // Agents State
-  agents: initialAgents,
+  agents: createInitialAgents(),
   
   // Blueprint Data
-  blueprint: initialBlueprint,
+  blueprint: createBlueprintSchema(),
   
   // Workflow Timeline
   workflowEvents: [],
@@ -67,9 +71,23 @@ export const useProjectStore = create((set) => ({
   // Active Revision State
   activeRevision: null,
   recentRevisionResult: null,
+  workflow: { active: false, runId: null, kind: null, startedAt: null },
 
   // Actions
   setCurrentView: (view) => set({ currentView: view }),
+
+  beginWorkflow: (kind) => {
+    if (get().workflow.active) return null;
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    set({ workflow: { active: true, runId, kind, startedAt: new Date().toISOString() } });
+    return runId;
+  },
+  isCurrentWorkflow: (runId) => get().workflow.active && get().workflow.runId === runId,
+  endWorkflow: (runId) => {
+    if (get().workflow.runId !== runId) return false;
+    set({ workflow: { active: false, runId: null, kind: null, startedAt: null } });
+    return true;
+  },
   
   setActiveRevision: (data) => set({ activeRevision: data }),
   setRecentRevisionResult: (data) => set({ recentRevisionResult: data }),
@@ -97,7 +115,7 @@ export const useProjectStore = create((set) => ({
     }
   })),
 
-  updateBlueprintSection: (sectionKey, content, status = 'pending', confidence = 'High', lastModifiedVersion = 'v1') => set((state) => ({
+  updateBlueprintSection: (sectionKey, content, status = 'pending', confidence = 'High', lastModifiedVersion = 'v1', metadata = {}) => set((state) => ({
     blueprint: {
       ...state.blueprint,
       [sectionKey]: { 
@@ -105,7 +123,8 @@ export const useProjectStore = create((set) => ({
         content, 
         status, 
         confidence,
-        lastModifiedVersion
+        lastModifiedVersion,
+        ...metadata
       }
     }
   })),
@@ -122,12 +141,14 @@ export const useProjectStore = create((set) => ({
     return { blueprint: restored };
   }),
 
-  approveBlueprintSection: (sectionKey) => set((state) => ({
-    blueprint: {
+  approveBlueprintSection: (sectionKey, runId = null) => {
+    if ((get().workflow.active && get().workflow.runId !== runId) || !get().blueprint[sectionKey]) return false;
+    set((state) => ({ blueprint: {
       ...state.blueprint,
       [sectionKey]: { ...state.blueprint[sectionKey], status: 'approved' }
-    }
-  })),
+    }}));
+    return true;
+  },
 
   addWorkflowEvent: (event) => set((state) => ({
     workflowEvents: [...state.workflowEvents, { id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9), timestamp: new Date(), ...event }]
@@ -136,8 +157,26 @@ export const useProjectStore = create((set) => ({
   reset: () => set({
     currentView: 'create',
     project: null,
-    agents: initialAgents,
-    blueprint: initialBlueprint,
-    workflowEvents: []
+    agents: createInitialAgents(),
+    blueprint: createBlueprintSchema(),
+    workflowEvents: [],
+    activeRevision: null,
+    recentRevisionResult: null,
+    workflow: { active: false, runId: null, kind: null, startedAt: null }
   })
+}), {
+  name: 'mass-project-v2',
+  version: 2,
+  storage: createJSONStorage(getBrowserStorage),
+  partialize: ({ currentView, project, blueprint, workflowEvents }) => ({ currentView, project, blueprint, workflowEvents }),
+  migrate: (persisted = {}) => ({
+    ...persisted,
+    currentView: persisted.project ? 'dashboard' : 'create',
+    blueprint: { ...createBlueprintSchema(), ...(persisted.blueprint || {}) }
+  }),
+  onRehydrateStorage: () => (state) => {
+    if (!state) return;
+    state.resetAllAgents();
+    state.endWorkflow(state.workflow?.runId);
+  }
 }));
