@@ -3,17 +3,16 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import mermaid from 'mermaid';
 import { useProjectStore } from '../store/useProjectStore';
-import { useAIDebugStore } from '../store/useAIDebugStore';
 import ErrorBoundary from './ErrorBoundary';
-import { CheckCircle, AlertCircle, RefreshCw, Send, Lock, ChevronDown, ChevronRight, Copy, Check, Maximize2, Minimize2, X, ZoomIn } from 'lucide-react';
-import { runRevisionSimulation } from '../services/simulationEngine';
+import { CheckCircle, AlertCircle, RefreshCw, Send, Lock, ChevronDown, ChevronRight, Copy, Check, Maximize2, Minimize2, X, ZoomIn, ZoomOut, RotateCcw, Scan } from 'lucide-react';
+import { runRevisionSimulation, approveSectionWorkflow } from '../services/simulationEngine';
 import { ConfidenceLabel } from './AIStatusUtils';
 import { SECTION_OWNERSHIP } from '../config/sectionOwnership';
 
 mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
-  securityLevel: 'loose',
+  securityLevel: 'strict',
   fontFamily: 'Inter, sans-serif'
 });
 
@@ -91,9 +90,8 @@ const MarkdownRenderer = ({ content, onZoomDiagram }) => {
 };
 
 // Small badge showing whether the owning agent's content came from Gemini or the fallback simulator
-const SourceBadge = ({ agentRole }) => {
-  const generationSources = useAIDebugStore(s => s.generationSources);
-  const source = agentRole ? generationSources[agentRole] : null;
+const SourceBadge = ({ sectionData }) => {
+  const source = sectionData?.generationSource;
   if (!source) return null;
   const isGemini = source === 'Gemini';
   return (
@@ -103,14 +101,14 @@ const SourceBadge = ({ agentRole }) => {
       border: `1px solid ${isGemini ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)'}`,
       color: isGemini ? '#10b981' : '#f59e0b'
     }}>
-      {isGemini ? 'Gemini' : 'Fallback'}
+      {isGemini ? 'Gemini' : source}
     </span>
   );
 };
 
 // Section block with approval workflow, collapse, and copy
 const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
-  const approveBlueprintSection = useProjectStore(state => state.approveBlueprintSection);
+  const workflowActive = useProjectStore(state => state.workflow.active);
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [collapsed, setCollapsed] = useState(false);
@@ -118,7 +116,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
   const agentRole = SECTION_OWNERSHIP[id] || null;
 
   const handleApprove = () => {
-    approveBlueprintSection(id);
+    approveSectionWorkflow(id);
   };
 
   const handleCopy = async () => {
@@ -161,7 +159,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <SourceBadge agentRole={agentRole} />
+          <SourceBadge sectionData={sectionData} />
           {sectionData.confidence && (
             <ConfidenceLabel value={sectionData.confidence} agentRole={agentRole} />
           )}
@@ -178,13 +176,13 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
 
           {/* Action Buttons */}
           <div className="section-actions" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '8px' }}>
-            <button onClick={handleApprove} className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: sectionData.status === 'approved' ? 'transparent' : 'var(--success)', border: sectionData.status === 'approved' ? '1px solid var(--success)' : 'none' }}>
+            <button disabled={workflowActive} onClick={handleApprove} className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: sectionData.status === 'approved' ? 'transparent' : 'var(--success)', border: sectionData.status === 'approved' ? '1px solid var(--success)' : 'none', opacity: workflowActive ? 0.5 : 1 }}>
               {sectionData.status === 'approved' ? <><Lock size={14} /> Approved</> : <><CheckCircle size={14} /> Approve</>}
             </button>
-            <button onClick={() => setIsRequestingChanges(!isRequestingChanges)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+            <button disabled={workflowActive} onClick={() => setIsRequestingChanges(!isRequestingChanges)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
               <AlertCircle size={14} /> {isRequestingChanges ? 'Cancel Edit' : 'Modify Section'}
             </button>
-            <button onClick={() => runRevisionSimulation(`Regenerate ${label}`, '', id)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: 0.8 }}>
+            <button disabled={workflowActive} onClick={() => runRevisionSimulation(`Regenerate ${label}`, '', id)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: workflowActive ? 0.5 : 0.8 }}>
               <RefreshCw size={14} /> Regenerate
             </button>
           </div>
@@ -218,16 +216,18 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
 };
 
 // Sticky table of contents with approval markers (doc §10)
-const TableOfContents = ({ sections, onNavigate }) => (
+const TableOfContents = ({ sections, onNavigate }) => {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
   <nav style={{
     position: 'sticky', top: 0, alignSelf: 'flex-start',
     width: '215px', flexShrink: 0, maxHeight: '100%', overflowY: 'auto',
     paddingRight: '1rem'
   }}>
-    <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-      Contents
-    </div>
-    {sections.map(section => (
+    <button onClick={() => setCollapsed(value => !value)} className="btn-ghost" style={{ width: '100%', display: 'flex', justifyContent: 'space-between', border: 0, padding: '5px 6px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+      Contents {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+    </button>
+    {!collapsed && sections.map(section => (
       <button
         key={section.id}
         onClick={() => onNavigate(section.id)}
@@ -248,9 +248,12 @@ const TableOfContents = ({ sections, onNavigate }) => (
       </button>
     ))}
   </nav>
-);
+  );
+};
 
-const DiagramZoomModal = ({ svg, onClose }) => (
+const DiagramZoomModal = ({ svg, onClose }) => {
+  const [scale, setScale] = useState(1);
+  return (
   <div
     onClick={onClose}
     style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
@@ -258,14 +261,21 @@ const DiagramZoomModal = ({ svg, onClose }) => (
     <button onClick={onClose} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', padding: '10px', display: 'flex' }}>
       <X size={20} />
     </button>
-    <div
-      onClick={(e) => e.stopPropagation()}
-      className="diagram-zoom-content"
-      style={{ maxWidth: '92vw', maxHeight: '88vh', overflow: 'auto', background: 'var(--bg-secondary)', borderRadius: '12px', padding: '2rem', cursor: 'default' }}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div onClick={(e) => e.stopPropagation()} style={{ width: '92vw', height: '88vh', background: 'var(--bg-secondary)', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
+      <div className="section-actions" style={{ display: 'flex', gap: '6px', padding: '10px', borderBottom: '1px solid var(--border-color)' }}>
+        <button aria-label="Zoom out" className="btn-secondary" onClick={() => setScale(value => Math.max(0.25, value - 0.25))}><ZoomOut size={15} /></button>
+        <button aria-label="Zoom in" className="btn-secondary" onClick={() => setScale(value => Math.min(4, value + 0.25))}><ZoomIn size={15} /></button>
+        <button aria-label="Reset zoom" className="btn-secondary" onClick={() => setScale(1)}><RotateCcw size={15} /> Reset</button>
+        <button aria-label="Fit diagram" className="btn-secondary" onClick={() => setScale(0.75)}><Scan size={15} /> Fit</button>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>{Math.round(scale * 100)}% · drag scrollbars to pan</span>
+      </div>
+      <div className="diagram-zoom-content" style={{ flex: 1, overflow: 'auto', padding: '2rem', cursor: 'grab' }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${100 / scale}%` }} dangerouslySetInnerHTML={{ __html: svg }} />
+      </div>
+    </div>
   </div>
-);
+  );
+};
 
 function BlueprintViewerInner() {
   const blueprint = useProjectStore(state => state.blueprint);
