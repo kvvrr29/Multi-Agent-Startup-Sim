@@ -30,13 +30,14 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
   const { setSource, pushLog } = useAIDebugStore.getState();
   const maxAttempts = 2;
   let retryFeedback = null;
+  let previousRawResponse = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let rawResponse = null;
     let fallbackReason = null;
     try {
       const promptForAttempt = retryFeedback
-        ? `${userPrompt}\n\n--- RETRY FEEDBACK ---\n${retryFeedback}`
+        ? `${userPrompt}\n\n--- PREVIOUS RAW RESPONSE ---\n${previousRawResponse}\n\n--- EXACT VALIDATION FEEDBACK ---\n${retryFeedback}`
         : userPrompt;
 
       rawResponse = await generateAIContent(systemPrompt, promptForAttempt, schema);
@@ -45,12 +46,21 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
       if (validation.passed) {
         pushLog({ agent: agentRole, prompt: promptForAttempt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validation.content, scores: validation.scores, validationResult: 'PASSED', fallbackReason: null });
         setSource(agentRole, 'Gemini');
-        return { content: validation.content, decisions: validation.decisions, scores: validation.scores };
+        return {
+          content: validation.content,
+          decisions: validation.decisions,
+          scores: validation.scores,
+          stages: validation.stages,
+          generationSource: 'Gemini',
+          generatedBy: agentRole,
+          generatedAt: new Date().toISOString()
+        };
       }
 
       fallbackReason = `Validation failed (overall ${validation.scores.overall}%): ${validation.issues.join(' ')}`;
       pushLog({ agent: agentRole, prompt: promptForAttempt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validation.content, scores: validation.scores, validationResult: 'FAILED', fallbackReason });
       retryFeedback = buildRetryFeedback(validation);
+      previousRawResponse = rawResponse;
     } catch (err) {
       // API/network error — retry without feedback (nothing to correct)
       fallbackReason = err.message || 'Unknown error';
