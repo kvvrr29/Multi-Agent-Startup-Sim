@@ -25,7 +25,7 @@ export default function AISettingsModal({ onClose }) {
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem' }}>
             <Settings size={20} color="var(--primary-electric)" /> AI Settings
           </h2>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <button aria-label="Close AI Settings" onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
             <X size={20} />
           </button>
         </div>
@@ -42,7 +42,7 @@ export default function AISettingsModal({ onClose }) {
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={localEnabled} onChange={(e) => setLocalEnabled(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+              <input aria-label="Enable AI Mode" type="checkbox" checked={localEnabled} onChange={(e) => setLocalEnabled(e.target.checked)} style={{ width: '18px', height: '18px' }} />
             </label>
           </div>
 
@@ -81,7 +81,7 @@ export default function AISettingsModal({ onClose }) {
                   </p>
                 )}
                 <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Your key is stored securely in your browser's local storage and is never sent to our servers.
+                  Your key is kept only in memory for this tab and is never persisted or logged.
                 </p>
               </div>
             </>
@@ -97,7 +97,7 @@ export default function AISettingsModal({ onClose }) {
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={localDevMode} onChange={(e) => setLocalDevMode(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+              <input aria-label="Developer Mode" type="checkbox" checked={localDevMode} onChange={(e) => setLocalDevMode(e.target.checked)} style={{ width: '18px', height: '18px' }} />
             </label>
           </div>
 
