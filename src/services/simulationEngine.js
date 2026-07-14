@@ -1,5 +1,5 @@
 import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
-import { useVersionStore } from '../store/versionStore';
+import { useVersionStore, composeVersionSummary } from '../store/versionStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 import { generateDynamicBlueprint } from './blueprintFactory';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -204,7 +204,8 @@ export const runInitialSimulation = async (projectData) => {
     versionStore.saveVersion(
       currentBlueprint,
       useAI ? '[AI Generated] Initial Project Creation' : '[Fallback Factory] Initial Project Creation',
-      ['ceo', 'pm', 'developer', 'marketing']
+      ['ceo', 'pm', 'developer', 'marketing', 'mediator'],
+      Object.keys(SECTION_OWNERSHIP)
     );
 
     store.addWorkflowEvent({
@@ -304,8 +305,7 @@ export const applyRevisionSimulation = async (previewData) => {
     });
 
     // 2. WAITING & AGENT WORK
-    let summary = aiModeEnabled ? `[AI Generated] Applied changes across ${affectedSections.length} sections.` : `[Fallback Factory] Applied changes across ${affectedSections.length} sections.`;
-    let changesMade = [];
+    let changedKeys = [];
     const nextVersionId = `v${versionStore.versions.length + 1}`;
 
     store.updateAgentStatus('mediator', AGENT_STATUS.WAITING, 'Waiting for team');
@@ -328,7 +328,7 @@ export const applyRevisionSimulation = async (previewData) => {
              // Only update sections this task was routed to
              if (taskSections.includes(sectionKey)) {
                store.updateBlueprintSection(sectionKey, content, 'pending', 'High', nextVersionId);
-               changesMade.push(`${sectionKey} Updated`);
+               changedKeys.push(sectionKey);
              }
            });
          } catch (err) {
@@ -343,7 +343,7 @@ export const applyRevisionSimulation = async (previewData) => {
         taskSections.forEach(sectionKey => {
            const existing = store.blueprint[sectionKey]?.content || '';
            store.updateBlueprintSection(sectionKey, existing + `\n\n**Revision:** Adjusted based on request: ${taskDescription || instruction}`, 'pending', 'Medium', nextVersionId);
-           changesMade.push(`${sectionKey} Updated`);
+           changedKeys.push(sectionKey);
         });
       }
 
@@ -355,20 +355,24 @@ export const applyRevisionSimulation = async (previewData) => {
     // 4. UPDATING
     store.updateAgentStatus('mediator', AGENT_STATUS.UPDATING, 'Finalizing Blueprint');
     await sleep(1500);
-    
+
+    changedKeys = [...new Set(changedKeys)];
+    const changesMade = changedKeys.map(k => `${SECTION_TITLES[k] || k} Updated`);
+    const summary = composeVersionSummary(changedKeys, aiModeEnabled ? '[AI Generated]' : '[Fallback Factory]');
+
     const currentBlueprint = useProjectStore.getState().blueprint;
-    versionStore.saveVersion(currentBlueprint, summary, assignedAgents);
-    
-    store.addWorkflowEvent({ 
-      type: 'revision', 
-      message: `Revision Applied: ${instruction}`, 
+    versionStore.saveVersion(currentBlueprint, summary, assignedAgents, changedKeys);
+
+    store.addWorkflowEvent({
+      type: 'revision',
+      message: `Revision Applied: ${instruction}`,
       agent: 'mediator',
       request: instruction,
       assignedAgent: assignedAgents.join(', ').toUpperCase(),
       updatedSections: changesMade,
       version: nextVersionId
     });
-    
+
     store.setRecentRevisionResult({ message: 'Revision Applied Successfully', changes: changesMade, version: nextVersionId });
     store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Revision Finished');
     await sleep(1000);

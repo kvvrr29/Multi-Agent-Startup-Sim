@@ -110,6 +110,18 @@ export const useProjectStore = create((set) => ({
     }
   })),
 
+  // Full-blueprint replacement used by version restore (doc §14): restores
+  // content AND approval state, and clears sections absent from the snapshot.
+  setBlueprint: (blueprint) => set(() => {
+    const restored = createBlueprintSchema();
+    Object.keys(blueprint || {}).forEach(key => {
+      if (restored[key]) {
+        restored[key] = { ...restored[key], ...blueprint[key] };
+      }
+    });
+    return { blueprint: restored };
+  }),
+
   approveBlueprintSection: (sectionKey) => set((state) => ({
     blueprint: {
       ...state.blueprint,
