@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import ReactFlow, { Background, MarkerType, useNodesState, useEdgesState, Handle, Position } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
@@ -16,10 +16,14 @@ const iconMap = {
 
 const statusColors = {
   [AGENT_STATUS.IDLE]: 'var(--text-muted)',
+  [AGENT_STATUS.ANALYZING]: 'var(--accent-cyan)',
+  [AGENT_STATUS.ROUTING]: 'var(--accent-purple)',
+  [AGENT_STATUS.WAITING]: 'var(--warning)',
   [AGENT_STATUS.ASSIGNED]: 'var(--accent-purple)',
   [AGENT_STATUS.THINKING]: 'var(--accent-cyan)',
   [AGENT_STATUS.WORKING]: 'var(--primary-electric)',
   [AGENT_STATUS.REVIEWING]: 'var(--accent-cyan)',
+  [AGENT_STATUS.UPDATING]: 'var(--primary-electric)',
   [AGENT_STATUS.COMPLETED]: 'var(--success)',
   [AGENT_STATUS.FAILED]: 'var(--danger)'
 };
@@ -28,7 +32,7 @@ const statusColors = {
 const AgentNode = ({ data }) => {
   if (!data) return null; // Safe guard
   
-  const isWorking = data.status === AGENT_STATUS.THINKING || data.status === AGENT_STATUS.WORKING;
+  const isWorking = data.status !== AGENT_STATUS.IDLE && data.status !== AGENT_STATUS.COMPLETED && data.status !== AGENT_STATUS.FAILED;
   
   return (
     <div className="glass-panel" style={{ 
@@ -62,7 +66,11 @@ const AgentNode = ({ data }) => {
         {data.status === AGENT_STATUS.THINKING && <><Brain size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Thinking...</span></>}
         {data.status === AGENT_STATUS.WORKING && <><Loader size={12} color="var(--primary-electric)" style={{ animation: 'spin 2s linear infinite' }} /> <span style={{ color: 'var(--primary-electric)'}}>Working...</span></>}
         {data.status === AGENT_STATUS.ASSIGNED && <span style={{ color: 'var(--accent-purple)' }}>Assigned</span>}
+        {data.status === AGENT_STATUS.ANALYZING && <><Loader size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)' }}>Analyzing...</span></>}
+        {data.status === AGENT_STATUS.ROUTING && <><Loader size={12} color="var(--accent-purple)" /> <span style={{ color: 'var(--accent-purple)' }}>Routing...</span></>}
+        {data.status === AGENT_STATUS.WAITING && <><Loader size={12} color="var(--warning)" /> <span style={{ color: 'var(--warning)' }}>Waiting...</span></>}
         {data.status === AGENT_STATUS.REVIEWING && <><Eye size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Reviewing...</span></>}
+        {data.status === AGENT_STATUS.UPDATING && <><Loader size={12} color="var(--primary-electric)" /> <span style={{ color: 'var(--primary-electric)' }}>Updating...</span></>}
         {data.status === AGENT_STATUS.FAILED && <><XCircle size={12} color="var(--danger)" /> <span style={{ color: 'var(--danger)'}}>Failed</span></>}
       </div>
 
@@ -121,7 +129,7 @@ function AgentVisualizerInner() {
       const targetAgent = agents[edge.target];
       if (!targetAgent) return edge;
       
-      const isActive = targetAgent.status === AGENT_STATUS.THINKING || targetAgent.status === AGENT_STATUS.WORKING;
+      const isActive = targetAgent.status !== AGENT_STATUS.IDLE && targetAgent.status !== AGENT_STATUS.COMPLETED && targetAgent.status !== AGENT_STATUS.FAILED;
       return { 
         ...edge, 
         animated: isActive,
