@@ -8,7 +8,22 @@
 const MIN_SECTION_LENGTH = 50;
 const BANNED_PHRASES = ['lorem ipsum', 'as an ai'];
 const SAAS_BUZZWORDS = ['freemium', 'white-label', 'invite only beta'];
-const PASS_THRESHOLD = 70;
+export const VALIDATION_THRESHOLDS = {
+  structural: 100,
+  agentRelevance: 60,
+  domainRelevance: 60,
+  developerDomainRelevance: 70,
+  overall: 70
+};
+
+export const DECISION_CATEGORIES = ['Business', 'Product', 'Technical', 'Marketing', 'Scope'];
+const AGENT_DECISION_CATEGORIES = {
+  ceo: ['Business', 'Scope'],
+  pm: ['Product', 'Scope'],
+  developer: ['Technical', 'Scope'],
+  marketing: ['Marketing', 'Scope'],
+  mediator: DECISION_CATEGORIES
+};
 
 // Concept groups per agent (doc §1 Stage 2). Each group is a synonym list;
 // the group counts as matched when any synonym appears in the combined text.
@@ -135,7 +150,7 @@ export const validateAgentRelevance = (combinedText, agentRole) => {
 
   const score = Math.round((matched / groups.length) * 100);
   const issues = [];
-  if (score < 50) {
+  if (score < VALIDATION_THRESHOLDS.agentRelevance) {
     issues.push(`Content does not cover the ${agentRole.toUpperCase()} agent's core responsibilities. Missing concepts: ${missingConcepts.join(', ')}.`);
   }
   return { score, issues, missingConcepts };
@@ -156,8 +171,9 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
 
   // Entity coverage
   let entityScore = 100;
+  let matchedEntities = [];
   if (mandatoryKeywords.length > 0) {
-    const matchedEntities = mandatoryKeywords.filter(kw => lower.includes(kw.toLowerCase()));
+    matchedEntities = mandatoryKeywords.filter(kw => lower.includes(kw.toLowerCase()));
     entityScore = Math.round((matchedEntities.length / mandatoryKeywords.length) * 100);
     if (agentRole === 'developer' && matchedEntities.length === 0) {
       issues.push(`Technical output must model the project's core domain entities (${mandatoryKeywords.join(', ')}) but none appear.`);
@@ -188,7 +204,43 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
     issues.push(`Content is not specific enough to the project domain (${domain || 'unknown'}${industry ? ` / ${industry}` : ''}). Reference its actual entities and terminology.`);
   }
 
-  return { score, issues };
+  return {
+    score,
+    issues,
+    criticalIssues: agentRole === 'developer' && mandatoryKeywords.length > 0 && matchedEntities.length === 0
+      ? [`Developer output is missing every mandatory technical entity: ${mandatoryKeywords.join(', ')}.`]
+      : []
+  };
+};
+
+export const validateDecisions = (decisions, agentRole) => {
+  if (decisions === undefined) return { decisions: [], issues: [] };
+  if (!Array.isArray(decisions)) {
+    return { decisions: [], issues: ['Decisions were ignored because they are not an array.'] };
+  }
+
+  const allowed = AGENT_DECISION_CATEGORIES[agentRole] || DECISION_CATEGORIES;
+  const issues = [];
+  const valid = [];
+  decisions.forEach((decision, index) => {
+    const structurallyValid = decision && typeof decision === 'object' && !Array.isArray(decision)
+      && ['category', 'key', 'value', 'rationale'].every(key => typeof decision[key] === 'string' && decision[key].trim());
+    if (!structurallyValid) {
+      issues.push(`Decision ${index + 1} was ignored because it is malformed.`);
+      return;
+    }
+    if (!DECISION_CATEGORIES.includes(decision.category) || !allowed.includes(decision.category)) {
+      issues.push(`Decision ${index + 1} was ignored because category "${decision.category}" is not authorized for ${agentRole || 'this agent'}.`);
+      return;
+    }
+    valid.push({
+      category: decision.category,
+      key: decision.key.trim(),
+      value: decision.value.trim(),
+      rationale: decision.rationale.trim()
+    });
+  });
+  return { decisions: valid, issues };
 };
 
 // ── Combined validator ───────────────────────────────────────────────────────
@@ -206,6 +258,11 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
     return {
       passed: false,
       scores: { structural: 0, agentRelevance: 0, domainRelevance: 0, overall: 0 },
+      stages: {
+        structural: { status: 'failed', score: 0 },
+        agentRelevance: { status: 'failed', score: 0 },
+        domainRelevance: { status: 'failed', score: 0 }
+      },
       issues: ['Response is not valid JSON.'],
       content: {},
       decisions: []
@@ -225,10 +282,19 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
     structural.score * 0.4 + agent.score * 0.3 + domainRes.score * 0.3
   );
 
-  const passed = structural.ok && overall >= PASS_THRESHOLD;
-  const issues = [...structural.issues, ...agent.issues, ...domainRes.issues];
+  const domainThreshold = agentRole === 'developer'
+    ? VALIDATION_THRESHOLDS.developerDomainRelevance
+    : VALIDATION_THRESHOLDS.domainRelevance;
+  const stagePass = {
+    structural: structural.ok && structural.score === VALIDATION_THRESHOLDS.structural,
+    agentRelevance: agent.score >= VALIDATION_THRESHOLDS.agentRelevance,
+    domainRelevance: domainRes.score >= domainThreshold && !(domainRes.criticalIssues?.length)
+  };
+  const passed = Object.values(stagePass).every(Boolean) && overall >= VALIDATION_THRESHOLDS.overall;
+  const decisionsResult = validateDecisions(data?.decisions, agentRole);
+  const issues = [...structural.issues, ...agent.issues, ...domainRes.issues, ...(domainRes.criticalIssues || []), ...decisionsResult.issues];
   if (!passed && issues.length === 0) {
-    issues.push(`Overall validation score ${overall}% is below the ${PASS_THRESHOLD}% threshold.`);
+    issues.push(`One or more validation gates failed (overall ${overall}%).`);
   }
 
   const content = {};
@@ -244,9 +310,15 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
       domainRelevance: domainRes.score,
       overall
     },
+    stages: {
+      structural: { status: stagePass.structural ? 'passed' : 'failed', score: structural.score, threshold: VALIDATION_THRESHOLDS.structural },
+      agentRelevance: { status: stagePass.agentRelevance ? 'passed' : 'failed', score: agent.score, threshold: VALIDATION_THRESHOLDS.agentRelevance },
+      domainRelevance: { status: stagePass.domainRelevance ? 'passed' : 'failed', score: domainRes.score, threshold: domainThreshold }
+    },
     issues,
     content,
-    decisions: Array.isArray(data?.decisions) ? data.decisions : []
+    decisions: decisionsResult.decisions,
+    decisionIssues: decisionsResult.issues
   };
 };
 
@@ -274,8 +346,17 @@ export const createResponseSchema = (sectionKeys) => {
 
   properties.decisions = {
     type: "ARRAY",
-    description: "A list of 1-3 short strings summarizing the key strategic decisions made in this response.",
-    items: { type: "STRING" }
+    description: "A list of 1-3 structured decisions. Use only a category authorized for the agent.",
+    items: {
+      type: "OBJECT",
+      properties: {
+        category: { type: "STRING", enum: DECISION_CATEGORIES },
+        key: { type: "STRING" },
+        value: { type: "STRING" },
+        rationale: { type: "STRING" }
+      },
+      required: ["category", "key", "value", "rationale"]
+    }
   };
 
   return {
