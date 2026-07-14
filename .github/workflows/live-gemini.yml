@@ -1,0 +1,19 @@
+name: Live Gemini Regression
+
+on:
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live
+        env:
+          RUN_LIVE_AI: 1
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
