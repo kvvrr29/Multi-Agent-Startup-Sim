@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { runInitialSimulation } from '../services/simulationEngine';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import { Sparkles, ArrowRight, Settings } from 'lucide-react';
 import { AIStatusBanner } from './AIStatusUtils';
+import AISettingsModal from './AISettingsModal';
 
 export default function ProjectCreation() {
   const setProject = useProjectStore((state) => state.setProject);
+  const [showSettings, setShowSettings] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -64,6 +66,7 @@ export default function ProjectCreation() {
 
   return (
     <div className="container flex items-center justify-center" style={{ minHeight: '100vh', padding: '4rem 0' }}>
+      {showSettings && <AISettingsModal onClose={() => setShowSettings(false)} />}
       <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '2.5rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
@@ -73,6 +76,9 @@ export default function ProjectCreation() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Define your startup vision, and our AI agents will build the blueprint.</p>
           
           <AIStatusBanner />
+          <button type="button" title="Settings" onClick={() => setShowSettings(true)} className="btn-secondary" style={{ padding: '7px 12px', marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Settings size={14} /> AI Settings
+          </button>
 
           {error && (
             <div style={{ padding: '12px', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem' }}>
