@@ -72,21 +72,27 @@ export default function ExportToolbar() {
     URL.revokeObjectURL(url);
   };
 
+  const options = [
+    { label: 'PDF Document', hint: 'Print-ready blueprint with diagrams', icon: FileText, action: handleExportPDF },
+    { label: 'Word Document', hint: 'Editable .doc for further work', icon: Download, action: handleExportDocx },
+    { label: 'Markdown', hint: 'Plain-text source of every section', icon: Code2, action: handleExportMarkdown },
+  ];
+
   return (
-    <div className="glass-panel" style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem', marginBottom: '1rem', alignItems: 'center' }}>
-      <div style={{ flex: 1 }}>
+    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', padding: '1.2rem' }}>
+      <div>
         <h3 style={{ margin: 0, fontSize: '1rem' }}>Export Blueprint</h3>
         <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Download your finalized startup blueprint</p>
       </div>
-      <button onClick={handleExportPDF} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}>
-        <FileText size={14} /> PDF
-      </button>
-      <button onClick={handleExportDocx} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}>
-        <Download size={14} /> DOCX
-      </button>
-      <button onClick={handleExportMarkdown} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px' }}>
-        <Code2 size={14} /> Markdown
-      </button>
+      {options.map(({ label, hint, icon: Icon, action }) => (
+        <button key={label} onClick={action} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', padding: '12px', textAlign: 'left', width: '100%' }}>
+          <Icon size={18} style={{ flexShrink: 0 }} />
+          <span style={{ display: 'flex', flexDirection: 'column' }}>
+            <strong>{label}</strong>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{hint}</span>
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

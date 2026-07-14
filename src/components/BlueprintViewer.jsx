@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 import mermaid from 'mermaid';
 import { useProjectStore } from '../store/useProjectStore';
 import ErrorBoundary from './ErrorBoundary';
-import ExportToolbar from './ExportToolbar';
 import { CheckCircle, AlertCircle, RefreshCw, Send, Lock } from 'lucide-react';
 import { runRevisionSimulation } from '../services/simulationEngine';
 import { ConfidenceLabel } from './AIStatusUtils';
@@ -172,7 +171,6 @@ function BlueprintViewerInner() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <ExportToolbar />
       <div id="blueprint-export-container" className="glass-panel" style={{ flex: 1, overflowY: 'auto', padding: '2rem' }}>
         <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '2rem' }}>
           <h1 style={{ margin: 0, fontSize: '1.8rem' }}>{project.name || 'Untitled Project'}</h1>
