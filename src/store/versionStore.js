@@ -1,67 +1,100 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { SECTION_TITLES } from '../config/blueprintSections';
+import { cloneSerializable, getBrowserStorage } from './persistence';
 
-// "Business Model, System Architecture Updated" style summaries (doc §14)
 export const composeVersionSummary = (affectedSections = [], prefix = '') => {
   const titles = affectedSections.map(s => SECTION_TITLES[s] || s);
-  let body;
-  if (titles.length === 0) {
-    body = 'Blueprint Updated';
-  } else if (titles.length <= 3) {
-    body = `${titles.join(', ')} Updated`;
-  } else {
-    body = `${titles.slice(0, 3).join(', ')} and ${titles.length - 3} more Updated`;
-  }
+  const body = titles.length === 0
+    ? 'Blueprint Updated'
+    : titles.length <= 3
+      ? `${titles.join(', ')} Updated`
+      : `${titles.slice(0, 3).join(', ')} and ${titles.length - 3} more Updated`;
   return prefix ? `${prefix} ${body}` : body;
 };
 
-export const useVersionStore = create((set, get) => ({
+const snapshotProvenance = (blueprint = {}) => Object.fromEntries(
+  Object.entries(blueprint).map(([key, section]) => [key, {
+    generationSource: section?.generationSource || null,
+    generatedBy: section?.generatedBy || null,
+    validationScores: section?.validationScores || null,
+    generatedAt: section?.generatedAt || null,
+    failureReason: section?.failureReason || null
+  }])
+);
+
+const nextVersionId = (versions) => {
+  const max = versions.reduce((value, version) => Math.max(value, Number(String(version.id).replace(/^v/, '')) || 0), 0);
+  return `v${max + 1}`;
+};
+
+export const useVersionStore = create(persist((set, get) => ({
   versions: [],
   currentVersionId: null,
 
-  saveVersion: (blueprint, summary, affectedAgents = [], affectedSections = []) => set((state) => {
-    const newVersion = {
-      id: `v${state.versions.length + 1}`,
+  saveVersion: (blueprint, summary, affectedAgents = [], affectedSections = [], options = {}) => {
+    const id = nextVersionId(get().versions);
+    const blueprintSnapshot = cloneSerializable(blueprint || {});
+    const version = {
+      id,
       timestamp: new Date().toISOString(),
       summary,
-      affectedAgents,
-      affectedSections,
-      blueprintSnapshot: JSON.parse(JSON.stringify(blueprint)) // Deep copy (includes content + approval state)
+      changeType: options.changeType || 'revision',
+      completionStatus: options.completionStatus || 'success',
+      approvalState: Object.fromEntries(Object.entries(blueprintSnapshot).map(([key, section]) => [key, section?.status || 'pending'])),
+      affectedAgents: [...new Set(affectedAgents)],
+      affectedSections: [...new Set(affectedSections)],
+      blueprintSnapshot,
+      memorySnapshot: cloneSerializable(options.memorySnapshot || null),
+      provenanceSnapshot: cloneSerializable(options.provenanceSnapshot || snapshotProvenance(blueprintSnapshot)),
+      restoredFrom: options.restoredFrom || null
     };
-    return {
-      versions: [...state.versions, newVersion],
-      currentVersionId: newVersion.id
-    };
-  }),
-
-  restoreVersion: (versionId) => {
-    const state = get();
-    const version = state.versions.find(v => v.id === versionId);
-    if (version) {
-      set({ currentVersionId: versionId });
-      return JSON.parse(JSON.stringify(version.blueprintSnapshot));
-    }
-    return null;
+    set((state) => ({ versions: [...state.versions, version], currentVersionId: id }));
+    return cloneSerializable(version);
   },
 
+  getVersion: (versionId) => {
+    const version = get().versions.find(item => item.id === versionId);
+    return version ? cloneSerializable(version) : null;
+  },
+  // Kept as a read-only compatibility alias; history never moves backwards.
+  restoreVersion: (versionId) => get().getVersion(versionId)?.blueprintSnapshot || null,
   reset: () => set({ versions: [], currentVersionId: null })
+}), {
+  name: 'mass-versions-v2',
+  version: 2,
+  storage: createJSONStorage(getBrowserStorage),
+  partialize: ({ versions, currentVersionId }) => ({ versions, currentVersionId }),
+  migrate: (persisted = {}) => ({ versions: persisted.versions || [], currentVersionId: persisted.currentVersionId || null })
 }));
 
-// Compares a version snapshot against another blueprint state.
-// Returns { changed: [], added: [], removed: [] } of section keys.
+const stableSectionState = (section = {}) => ({
+  content: section.content || '',
+  status: section.status || 'pending',
+  generationSource: section.generationSource || null,
+  generatedBy: section.generatedBy || null,
+  validationScores: section.validationScores || null,
+  generatedAt: section.generatedAt || null,
+  failureReason: section.failureReason || null
+});
+
 export const diffBlueprints = (snapshot = {}, current = {}) => {
   const changed = [];
   const added = [];
   const removed = [];
   const keys = new Set([...Object.keys(snapshot), ...Object.keys(current)]);
-
   keys.forEach(key => {
-    const before = snapshot[key]?.content?.trim() || '';
-    const after = current[key]?.content?.trim() || '';
-    if (before && !after) removed.push(key);
-    else if (!before && after) added.push(key);
-    else if (before && after && before !== after) changed.push(key);
+    const before = stableSectionState(snapshot[key]);
+    const after = stableSectionState(current[key]);
+    if (before.content.trim() && !after.content.trim()) removed.push(key);
+    else if (!before.content.trim() && after.content.trim()) added.push(key);
+    else if (JSON.stringify(before) !== JSON.stringify(after)) changed.push(key);
   });
-
   return { changed, added, removed };
 };
+
+export const diffVersionState = (version = {}, currentBlueprint = {}, currentMemory = null) => ({
+  blueprint: diffBlueprints(version.blueprintSnapshot || {}, currentBlueprint),
+  memoryChanged: JSON.stringify(version.memorySnapshot || null) !== JSON.stringify(currentMemory || null),
+  provenanceChanged: JSON.stringify(version.provenanceSnapshot || null) !== JSON.stringify(snapshotProvenance(currentBlueprint))
+});
