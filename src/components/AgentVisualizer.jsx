@@ -75,7 +75,10 @@ const AgentNode = ({ data }) => {
              exit={{ opacity: 0, height: 0 }}
              style={{ marginTop: '8px', fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.3)', padding: '6px', borderRadius: '4px' }}
            >
-             {data.currentTask}
+             <div><strong style={{ color: 'var(--text-secondary)' }}>Task:</strong> {data.currentTask}</div>
+             {data.reason && (
+               <div style={{ marginTop: '4px', fontStyle: 'italic' }}><strong style={{ color: 'var(--text-secondary)' }}>Reason:</strong> {data.reason}</div>
+             )}
            </motion.div>
         )}
       </AnimatePresence>

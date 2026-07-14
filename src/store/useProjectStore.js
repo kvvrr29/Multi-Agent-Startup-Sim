@@ -78,17 +78,22 @@ export const useProjectStore = create((set) => ({
   resetAllAgents: () => set((state) => {
     const resetAgents = {};
     Object.keys(state.agents).forEach(k => {
-      resetAgents[k] = { ...state.agents[k], status: AGENT_STATUS.IDLE, currentTask: null };
+      resetAgents[k] = { ...state.agents[k], status: AGENT_STATUS.IDLE, currentTask: null, reason: null };
     });
     return { agents: resetAgents, activeRevision: null };
   }),
   
   setProject: (projectData) => set({ project: projectData, currentView: 'dashboard' }),
   
-  updateAgentStatus: (agentId, status, currentTask = null) => set((state) => ({
+  updateAgentStatus: (agentId, status, currentTask = null, reason = null) => set((state) => ({
     agents: {
       ...state.agents,
-      [agentId]: { ...state.agents[agentId], status, currentTask: currentTask !== null ? currentTask : state.agents[agentId].currentTask }
+      [agentId]: {
+        ...state.agents[agentId],
+        status,
+        currentTask: currentTask !== null ? currentTask : state.agents[agentId].currentTask,
+        reason: reason !== null ? reason : (status === AGENT_STATUS.IDLE ? null : state.agents[agentId].reason)
+      }
     }
   })),
 

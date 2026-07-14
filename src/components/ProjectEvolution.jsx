@@ -106,18 +106,21 @@ export default function ProjectEvolution() {
             <div><strong>Instruction:</strong> {preview.instruction}</div>
             <div><strong>Confidence:</strong> <span style={{ color: preview.confidence === 'High' ? 'var(--success)' : 'var(--warning)' }}>{preview.confidence}</span></div>
             <div>
-              <strong>Assigned Agents:</strong> 
-              <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-                {preview.assignedAgents.map(a => (
-                  <span key={a} style={{ padding: '2px 6px', background: 'var(--accent-purple)', color: '#fff', borderRadius: '4px', textTransform: 'uppercase', fontSize: '0.7rem' }}>{a}</span>
+              <strong>Detected Tasks ({preview.tasks?.length || 0}):</strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                {(preview.tasks || []).map((task, i) => (
+                  <div key={i} style={{ padding: '8px', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', borderLeft: '2px solid var(--accent-purple)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                      <span style={{ padding: '2px 6px', background: 'var(--accent-purple)', color: '#fff', borderRadius: '4px', textTransform: 'uppercase', fontSize: '0.7rem' }}>{task.agent}</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{task.taskDescription}</span>
+                    </div>
+                    {task.reason && (
+                      <div style={{ fontSize: '0.72rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>Why: {task.reason}</div>
+                    )}
+                    <div style={{ fontSize: '0.72rem', marginTop: '2px' }}>Sections: {task.sections.join(', ')}</div>
+                  </div>
                 ))}
               </div>
-            </div>
-            <div>
-              <strong>Affected Sections:</strong>
-              <ul style={{ margin: '4px 0 0 0', paddingLeft: '1.2rem' }}>
-                {preview.affectedSections.map(s => <li key={s}>{s}</li>)}
-              </ul>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>

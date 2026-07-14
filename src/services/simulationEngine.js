@@ -5,7 +5,7 @@ import { generateDynamicBlueprint } from './blueprintFactory';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { classifyDomain } from './ai/domainClassifier';
-import { routeAIRevision } from './ai/aiRouter';
+import { routeAIRevision, heuristicRouting, normalizeRouting } from './ai/aiRouter';
 import { SECTION_OWNERSHIP, AGENT_ROLES } from '../config/sectionOwnership';
 import { SECTION_TITLES } from '../config/blueprintSections';
 import { useAIDebugStore } from '../store/useAIDebugStore';
@@ -231,51 +231,40 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
   const store = useProjectStore.getState();
   const { aiModeEnabled } = useSettingsStore.getState();
 
-  let affectedSections = [];
-  let assignedAgents = [];
-  let confidence = 'High';
+  let routing;
 
   store.updateAgentStatus('mediator', AGENT_STATUS.ANALYZING, 'Analyzing revision intent');
 
   try {
-  if (targetSectionId) {
-    // Local Section Modification
-    affectedSections = [targetSectionId];
-    assignedAgents = [SECTION_OWNERSHIP[targetSectionId]];
-    confidence = 'Explicit (Local)';
-  } else if (aiModeEnabled) {
-    // Global Project Evolution (AI Routed)
-    store.addWorkflowEvent({ type: 'system', message: `Mediator analyzing routing for global change...`, agent: 'mediator' });
-    const memoryStore = useProjectMemoryStore.getState();
-    const domain = memoryStore.memory?.scope?.domain || 'Unknown';
-    const routing = await routeAIRevision(revisionInstruction, domain);
-    affectedSections = routing.affectedSections;
-    assignedAgents = routing.assignedAgents;
-    confidence = routing.confidence;
-  } else {
-    // Global Project Evolution (Static Fallback)
-    const lowerInst = revisionInstruction.toLowerCase();
-    if (lowerInst.includes('price') || lowerInst.includes('budget')) { affectedSections = ['businessModel']; assignedAgents = ['ceo']; }
-    else if (lowerInst.includes('python') || lowerInst.includes('tech')) { affectedSections = ['architecture']; assignedAgents = ['developer']; }
-    else if (lowerInst.includes('student') || lowerInst.includes('marketing')) { affectedSections = ['marketingStrategy']; assignedAgents = ['marketing']; }
-    else { affectedSections = ['productRoadmap']; assignedAgents = ['pm']; }
-    confidence = 'Low (Fallback)';
-  }
+    if (targetSectionId) {
+      // Local Section Modification — explicit, no routing needed
+      routing = normalizeRouting([{
+        agent: SECTION_OWNERSHIP[targetSectionId],
+        sections: [targetSectionId],
+        taskDescription: revisionInstruction,
+        reason: 'Explicit modification of this section requested by the user.'
+      }], 'Explicit (Local)');
+    } else if (aiModeEnabled) {
+      // Global Project Evolution (AI Routed, splits multi-part requests)
+      store.addWorkflowEvent({ type: 'system', message: `Mediator analyzing routing for global change...`, agent: 'mediator' });
+      const memoryStore = useProjectMemoryStore.getState();
+      const domain = memoryStore.memory?.scope?.domain || 'Unknown';
+      routing = await withTimeout(() => routeAIRevision(revisionInstruction, domain), AGENT_GENERATION_TIMEOUT_MS);
+    } else {
+      // Global Project Evolution (Static Fallback)
+      routing = heuristicRouting(revisionInstruction);
+    }
   } catch (err) {
     console.error('[Simulation] Revision preview routing failed:', err);
-    store.addWorkflowEvent({ type: 'error', message: `⚠️ Routing failed: ${err.message}. Defaulting to Product Manager.`, agent: 'mediator' });
-    affectedSections = ['productRoadmap'];
-    assignedAgents = ['pm'];
-    confidence = 'Low (Routing Failed)';
+    store.addWorkflowEvent({ type: 'error', message: `⚠️ Routing failed: ${err.message}. Using heuristic routing.`, agent: 'mediator' });
+    routing = heuristicRouting(revisionInstruction);
   } finally {
     // Mediator must never stay stuck in Analyzing (doc §5)
     store.updateAgentStatus('mediator', AGENT_STATUS.IDLE, null);
   }
 
   return {
-    affectedSections,
-    assignedAgents,
-    confidence,
+    ...routing,
     instruction: revisionInstruction
   };
 };
@@ -286,7 +275,18 @@ export const applyRevisionSimulation = async (previewData) => {
   const versionStore = useVersionStore.getState();
   const { aiModeEnabled } = useSettingsStore.getState();
   
-  const { affectedSections, assignedAgents, instruction, confidence } = previewData;
+  const { instruction, confidence } = previewData;
+  // Legacy previews (no task list) become a single task per agent.
+  const tasks = previewData.tasks?.length
+    ? previewData.tasks
+    : normalizeRouting((previewData.assignedAgents || []).map(agent => ({
+        agent,
+        sections: (previewData.affectedSections || []).filter(s => SECTION_OWNERSHIP[s] === agent),
+        taskDescription: instruction,
+        reason: ''
+      })), confidence).tasks;
+  const affectedSections = [...new Set(tasks.flatMap(t => t.sections))];
+  const assignedAgents = [...new Set(tasks.map(t => t.agent))];
 
   store.setRecentRevisionResult(null);
 
@@ -295,7 +295,13 @@ export const applyRevisionSimulation = async (previewData) => {
     store.updateAgentStatus('mediator', AGENT_STATUS.ROUTING, `Routing to ${assignedAgents.join(', ').toUpperCase()}`);
     store.setActiveRevision({ request: instruction, category: 'AI Routed', targetAgent: assignedAgents.join(', '), expectedStep: `Updating ${affectedSections.length} sections. Confidence: ${confidence}` });
     await sleep(1500);
-    store.addWorkflowEvent({ type: 'system', message: `Mediator assigned tasks to ${assignedAgents.join(', ').toUpperCase()} (Confidence: ${confidence})`, agent: 'mediator' });
+    tasks.forEach(task => {
+      store.addWorkflowEvent({
+        type: 'system',
+        message: `Mediator assigned "${task.taskDescription}" to ${task.agent.toUpperCase()}${task.reason ? ` — ${task.reason}` : ''} (Confidence: ${confidence})`,
+        agent: 'mediator'
+      });
+    });
 
     // 2. WAITING & AGENT WORK
     let summary = aiModeEnabled ? `[AI Generated] Applied changes across ${affectedSections.length} sections.` : `[Fallback Factory] Applied changes across ${affectedSections.length} sections.`;
@@ -304,44 +310,43 @@ export const applyRevisionSimulation = async (previewData) => {
 
     store.updateAgentStatus('mediator', AGENT_STATUS.WAITING, 'Waiting for team');
 
-    // Run agents in parallel
-    const agentPromises = assignedAgents.map(async (targetAgent) => {
-      store.updateAgentStatus(targetAgent, AGENT_STATUS.WORKING, `Implementing changes`);
-      
+    // Run tasks in parallel (one task per agent)
+    const agentPromises = tasks.map(async (task) => {
+      const { agent: targetAgent, sections: taskSections, taskDescription, reason } = task;
+      store.updateAgentStatus(targetAgent, AGENT_STATUS.WORKING, taskDescription || 'Implementing changes', reason);
+
       if (aiModeEnabled) {
          try {
-           const result = await withTimeout(() => generateAgentContent(targetAgent, instruction), AGENT_GENERATION_TIMEOUT_MS);
-           
+           const result = await withTimeout(() => generateAgentContent(targetAgent, taskDescription || instruction), AGENT_GENERATION_TIMEOUT_MS);
+
            if (result.decisions && result.decisions.length > 0) {
              const category = AGENT_MEMORY_CATEGORY[targetAgent] || 'scope';
              result.decisions.forEach((d, i) => memoryStore.updateMemory(category, `revision_${Date.now()}_${i}`, d));
            }
 
            Object.entries(result.content).forEach(([sectionKey, content]) => {
-             // Only update if it's in the affectedSections list OR if it's a global agent payload
-             if (affectedSections.includes(sectionKey)) {
+             // Only update sections this task was routed to
+             if (taskSections.includes(sectionKey)) {
                store.updateBlueprintSection(sectionKey, content, 'pending', 'High', nextVersionId);
                changesMade.push(`${sectionKey} Updated`);
              }
            });
          } catch (err) {
            console.warn(`AI Revision failed for ${targetAgent}.`, err);
-           const reason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
-           store.updateAgentStatus(targetAgent, AGENT_STATUS.FAILED, reason);
-           store.addWorkflowEvent({ type: 'error', message: `⚠️ AI failed for ${targetAgent.toUpperCase()}: ${reason}. Section left unchanged.`, agent: 'mediator' });
+           const failReason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
+           store.updateAgentStatus(targetAgent, AGENT_STATUS.FAILED, failReason);
+           store.addWorkflowEvent({ type: 'error', message: `⚠️ AI failed for ${targetAgent.toUpperCase()}: ${failReason}. Section left unchanged.`, agent: 'mediator' });
            await sleep(800);
          }
       } else {
         // Fallback mock logic
-        affectedSections.forEach(sectionKey => {
-           if (SECTION_OWNERSHIP[sectionKey] === targetAgent) {
-             const existing = store.blueprint[sectionKey]?.content || '';
-             store.updateBlueprintSection(sectionKey, existing + `\n\n**Revision:** Adjusted based on request: ${instruction}`, 'pending', 'Medium', nextVersionId);
-             changesMade.push(`${sectionKey} Updated`);
-           }
+        taskSections.forEach(sectionKey => {
+           const existing = store.blueprint[sectionKey]?.content || '';
+           store.updateBlueprintSection(sectionKey, existing + `\n\n**Revision:** Adjusted based on request: ${taskDescription || instruction}`, 'pending', 'Medium', nextVersionId);
+           changesMade.push(`${sectionKey} Updated`);
         });
       }
-      
+
       store.updateAgentStatus(targetAgent, AGENT_STATUS.IDLE, null);
     });
 
