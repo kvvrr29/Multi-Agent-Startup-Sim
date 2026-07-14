@@ -295,3 +295,59 @@ a:hover {
   min-width: 60vw;
   height: auto;
 }
+
+button:disabled {
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+@media (max-width: 899px) {
+  .dashboard-nav {
+    width: 64px !important;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+
+  .dashboard-context-panel {
+    position: fixed !important;
+    left: 64px;
+    right: 0;
+    bottom: 0;
+    width: auto !important;
+    max-height: 56vh;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.5);
+  }
+
+  .dashboard-main {
+    min-width: 0;
+  }
+
+  #blueprint-export-container {
+    padding: 1rem !important;
+  }
+
+  #blueprint-export-container > div:last-child {
+    display: block !important;
+  }
+
+  #blueprint-export-container nav {
+    position: static !important;
+    width: 100% !important;
+    max-height: 160px !important;
+    margin-bottom: 1rem;
+  }
+
+  .section-actions {
+    flex-wrap: wrap;
+  }
+
+  form .flex.gap-4 {
+    flex-wrap: wrap;
+  }
+
+  form .flex.gap-4 > * {
+    min-width: 180px;
+  }
+}
