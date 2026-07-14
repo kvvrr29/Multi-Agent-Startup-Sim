@@ -261,8 +261,8 @@ export function generateDynamicBlueprint(projectData) {
   const techBackend = memory.technical?.backend || null;
   const hasMobile = memory.scope?.platforms?.includes('mobile') || (projectData?.platform || '').includes('mobile') || false;
 
-  let domain = memory.domain || 'general';
-  if (!memory.domain) {
+  let domain = memory.scope?.domain || memory.domain || 'general';
+  if (!memory.scope?.domain && !memory.domain) {
     if (idea.includes('food') || idea.includes('delivery') || idea.includes('restaurant')) {
       domain = 'food';
     } else if (idea.includes('chess') || idea.includes('coach') || idea.includes('lesson')) {
@@ -694,9 +694,12 @@ erDiagram
   const profile = DOMAIN_PROFILES[domain] || DOMAIN_PROFILES.general;
 
   // Apply memory overrides
+  const backendPattern = /Node\.js(?: microservices| \(Express\/Fastify\))?|Java Spring Boot \/ \.NET Core/g;
   let finalArchitecture = selected.architecture;
+  let finalTechStack = buildTechStack(profile.techStack);
   if (techBackend) {
-    finalArchitecture = finalArchitecture.replace(/Node\.js|Go|Java Spring Boot \/ \.NET Core/g, techBackend);
+    finalArchitecture = finalArchitecture.replace(backendPattern, techBackend);
+    finalTechStack = finalTechStack.replace(backendPattern, techBackend);
   }
 
   let finalRoadmap = selected.roadmap;
@@ -723,7 +726,7 @@ To streamline existing workflows and capture market share through superior UX an
     keyFeatures: buildKeyFeatures(profile.keyFeatures),
     productRoadmap: finalRoadmap.trim(),
     architecture: finalArchitecture.trim(),
-    technologyStack: buildTechStack(profile.techStack),
+    technologyStack: finalTechStack,
     umlDiagram: selected.uml.trim(),
     erDiagram: selected.erd.trim(),
     marketingStrategy: selected.marketing.trim(),
