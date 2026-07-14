@@ -16,7 +16,7 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
 
   if (aiProvider === 'gemini') {
     const ai = new GoogleGenAI({ apiKey });
-    const { incrementSent, incrementSuccess, incrementFailed, beginGeneration, endGeneration, setLastError, clearLastError } = useAIDebugStore.getState();
+    const { incrementSent, incrementSuccess, incrementFailed, beginGeneration, endGeneration, setLastError, clearLastError, setConnectionStatus } = useAIDebugStore.getState();
 
     const config = {
       systemInstruction: systemPrompt,
@@ -45,6 +45,8 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
       recordUsage(inputTokens, outputTokens);
       incrementSuccess();
       clearLastError();
+      // A configured key is not a connection. Only a successful response earns it.
+      setConnectionStatus('connected');
 
       return responseText;
     } catch (err) {
