@@ -12,11 +12,18 @@
     "test:unit": "vitest run src",
     "test:e2e": "playwright test",
     "test:live": "vitest run tests/live/gemini.live.test.js --testTimeout=180000",
-    "check": "npm run lint && npm run test:unit && npm run build && npm run test:e2e"
+    "check": "npm run lint && npm run test:unit && npm run build && npm run test:e2e",
+    "server": "node server/index.js",
+    "dev:full": "concurrently -n api,web -c blue,green \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
+    "@supabase/supabase-js": "^2.110.7",
+    "concurrently": "^10.0.3",
+    "cors": "^2.8.6",
     "docx": "^9.7.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.41.0",
     "html2pdf.js": "^0.14.0",

@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+// The app is gated behind Supabase magic-link auth. E2E runs sign in with a
+// seeded test user via env credentials; without them the suite skips instead
+// of failing (create a user in Supabase Auth and export these to enable):
+//   E2E_SUPABASE_EMAIL / E2E_SUPABASE_PASSWORD
+const E2E_EMAIL = process.env.E2E_SUPABASE_EMAIL;
+const E2E_PASSWORD = process.env.E2E_SUPABASE_PASSWORD;
+
+test.skip(!E2E_EMAIL || !E2E_PASSWORD, 'Set E2E_SUPABASE_EMAIL / E2E_SUPABASE_PASSWORD to run the e2e suite against Supabase auth.');
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('e2e-initialized')) {
@@ -9,6 +18,13 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('mass_ai_mode', 'false');
   });
   await page.goto('/');
+  await page.getByRole('button', { name: /Send Magic Link/ }).waitFor({ timeout: 15_000 }).catch(() => {});
+  await page.evaluate(async ({ email, password }) => {
+    if (!window.__supabase) return;
+    const { data } = await window.__supabase.auth.getSession();
+    if (!data.session) await window.__supabase.auth.signInWithPassword({ email, password });
+  }, { email: E2E_EMAIL, password: E2E_PASSWORD });
+  await page.getByLabel('Project Name *').waitFor({ timeout: 15_000 });
 });
 
 test('simulator generates, revises, versions, persists, and exposes exports', async ({ page }, testInfo) => {

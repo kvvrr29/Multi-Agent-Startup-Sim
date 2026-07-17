@@ -64,7 +64,7 @@ export default function AISettingsModal({ onClose }) {
 
               {/* API Key */}
               <div>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>API Key</label>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>API Key (optional)</label>
                 <div style={{ position: 'relative' }}>
                   <Key size={16} style={{ position: 'absolute', left: '10px', top: '12px', color: 'var(--text-muted)' }} />
                   <input 
@@ -76,12 +76,12 @@ export default function AISettingsModal({ onClose }) {
                   />
                 </div>
                 {!localKey && (
-                  <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertTriangle size={12} /> A valid API key is required to use AI Mode.
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <AlertTriangle size={12} /> Leave empty to use the server-side AI proxy (recommended) — the key stays on the server.
                   </p>
                 )}
                 <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Your key is kept only in memory for this tab and is never persisted or logged.
+                  If you enter your own key, it is kept only in memory for this tab and is never persisted or logged.
                 </p>
               </div>
             </>
