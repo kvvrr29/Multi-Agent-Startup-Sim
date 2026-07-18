@@ -1,24 +1,44 @@
-import React, { useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import mermaid from 'mermaid';
-import { useProjectStore } from '../store/useProjectStore';
-import ErrorBoundary from './ErrorBoundary';
-import { CheckCircle, AlertCircle, RefreshCw, Send, Lock, ChevronDown, ChevronRight, Copy, Check, Maximize2, Minimize2, X, ZoomIn, ZoomOut, RotateCcw, Scan } from 'lucide-react';
-import { runRevisionSimulation, approveSectionWorkflow } from '../services/simulationEngine';
-import { ConfidenceLabel } from './AIStatusUtils';
-import { SECTION_OWNERSHIP } from '../config/sectionOwnership';
+import React, { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import mermaid from "mermaid";
+import { useProjectStore } from "../store/useProjectStore";
+import ErrorBoundary from "./ErrorBoundary";
+import {
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  Send,
+  Lock,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+  Maximize2,
+  Minimize2,
+  X,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Scan,
+} from "lucide-react";
+import {
+  runRevisionSimulation,
+  approveSectionWorkflow,
+} from "../services/simulationEngine";
+import { ConfidenceLabel } from "./AIStatusUtils";
+import { SECTION_OWNERSHIP } from "../config/sectionOwnership";
 
 mermaid.initialize({
   startOnLoad: false,
-  theme: 'dark',
-  securityLevel: 'strict',
-  fontFamily: 'Inter, sans-serif'
+  theme: "dark",
+  securityLevel: "strict",
+  fontFamily: "Inter, sans-serif",
 });
 
 const Mermaid = ({ chart, onZoom }) => {
   const ref = useRef(null);
-  const [svg, setSvg] = useState('');
+  const [svg, setSvg] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -38,22 +58,34 @@ const Mermaid = ({ chart, onZoom }) => {
       }
     };
     renderChart();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [chart]);
 
   return (
     <ErrorBoundary componentName="Mermaid Diagram">
-      <div style={{ position: 'relative' }}>
-        <div ref={ref} dangerouslySetInnerHTML={{ __html: svg }} className="my-4 p-4 bg-[rgba(0,0,0,0.2)] rounded-md flex justify-center" />
+      <div style={{ position: "relative" }}>
+        <div
+          ref={ref}
+          dangerouslySetInnerHTML={{ __html: svg }}
+          className="my-4 p-4 bg-[rgba(0,0,0,0.2)] rounded-md flex justify-center"
+        />
         {svg && onZoom && (
           <button
             onClick={() => onZoom(svg)}
             title="Zoom diagram"
             style={{
-              position: 'absolute', top: '8px', right: '8px',
-              background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
-              borderRadius: '6px', color: 'var(--text-secondary)', cursor: 'pointer',
-              padding: '6px', display: 'flex'
+              position: "absolute",
+              top: "8px",
+              right: "8px",
+              background: "rgba(0,0,0,0.5)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "6px",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              padding: "6px",
+              display: "flex",
             }}
           >
             <ZoomIn size={14} />
@@ -64,57 +96,85 @@ const Mermaid = ({ chart, onZoom }) => {
   );
 };
 
-const MarkdownRenderer = ({ content, onZoomDiagram }) => {
+const MarkdownRenderer = React.memo(({ content, onZoomDiagram }) => {
   return (
     <ErrorBoundary componentName="Markdown Content">
       <div className="markdown-content">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            code({inline, className, children, ...props}) {
-              const match = /language-(\w+)/.exec(className || '')
-              if (!inline && match && match[1] === 'mermaid') {
-                return <Mermaid chart={String(children).replace(/\n$/, '')} onZoom={onZoomDiagram} />
+            code({ inline, className, children, ...props }) {
+              const match = /language-(\w+)/.exec(className || "");
+              if (!inline && match && match[1] === "mermaid") {
+                return (
+                  <Mermaid
+                    chart={String(children).replace(/\n$/, "")}
+                    onZoom={onZoomDiagram}
+                  />
+                );
               }
               return !inline ? (
-                <pre style={{ background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: 'var(--radius-sm)', overflowX: 'auto' }}>
-                  <code className={className} {...props}>{children}</code>
+                <pre
+                  style={{
+                    background: "rgba(0,0,0,0.3)",
+                    padding: "1rem",
+                    borderRadius: "var(--radius-sm)",
+                    overflowX: "auto",
+                  }}
+                >
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
                 </pre>
               ) : (
-                <code className={className} {...props}>{children}</code>
-              )
-            }
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            },
           }}
         >
-          {content || ''}
+          {content || ""}
         </ReactMarkdown>
       </div>
     </ErrorBoundary>
   );
-};
+});
 
 // Small badge showing whether the owning agent's content came from Gemini or the fallback simulator
 const SourceBadge = ({ sectionData }) => {
   const source = sectionData?.generationSource;
   if (!source) return null;
-  const isGemini = source === 'Gemini';
+  const isGemini = source === "Gemini";
   return (
-    <span title={isGemini ? 'Generated by Gemini AI' : 'Generated by the Fallback Simulator (not AI)'} style={{
-      fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '10px',
-      background: isGemini ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
-      border: `1px solid ${isGemini ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)'}`,
-      color: isGemini ? '#10b981' : '#f59e0b'
-    }}>
-      {isGemini ? 'Gemini' : source}
+    <span
+      title={
+        isGemini
+          ? "Generated by Gemini AI"
+          : "Generated by the Fallback Simulator (not AI)"
+      }
+      style={{
+        fontSize: "0.68rem",
+        fontWeight: 700,
+        padding: "2px 8px",
+        borderRadius: "10px",
+        background: isGemini
+          ? "rgba(16,185,129,0.12)"
+          : "rgba(245,158,11,0.12)",
+        border: `1px solid ${isGemini ? "rgba(16,185,129,0.35)" : "rgba(245,158,11,0.35)"}`,
+        color: isGemini ? "#10b981" : "#f59e0b",
+      }}
+    >
+      {isGemini ? "Gemini" : source}
     </span>
   );
 };
 
 // Section block with approval workflow, collapse, and copy
 const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
-  const workflowActive = useProjectStore(state => state.workflow.active);
+  const workflowActive = useProjectStore((state) => state.workflow.active);
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
   const agentRole = SECTION_OWNERSHIP[id] || null;
@@ -125,49 +185,106 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(sectionData.content || '');
+      await navigator.clipboard.writeText(sectionData.content || "");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (e) {
-      console.error('Copy failed:', e);
+      console.error("Copy failed:", e);
     }
   };
 
   const handleSubmitFeedback = () => {
     if (!feedback.trim()) return;
 
-    if (sectionData.status === 'approved') {
-      const confirmModify = window.confirm('This section is already approved. Modifying it will remove its approved status. Continue?');
+    if (sectionData.status === "approved") {
+      const confirmModify = window.confirm(
+        "This section is already approved. Modifying it will remove its approved status. Continue?",
+      );
       if (!confirmModify) return;
     }
 
-    runRevisionSimulation(`Update ${label}: ${feedback}`, '', id);
-    setFeedback('');
+    runRevisionSimulation(`Update ${label}: ${feedback}`, "", id);
+    setFeedback("");
     setIsRequestingChanges(false);
   };
 
   return (
-    <div id={`blueprint-section-${id}`} style={{ padding: '1.5rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: `1px solid ${sectionData.status === 'approved' ? 'var(--success)' : 'var(--border-color)'}`, transition: 'all 0.3s ease', scrollMarginTop: '1rem' }}>
-
+    <div
+      id={`blueprint-section-${id}`}
+      style={{
+        padding: "1.5rem",
+        background: "var(--bg-secondary)",
+        borderRadius: "var(--radius-md)",
+        border: `1px solid ${sectionData.status === "approved" ? "var(--success)" : "var(--border-color)"}`,
+        transition: "all 0.3s ease",
+        scrollMarginTop: "1rem",
+      }}
+    >
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: collapsed ? 0 : '1rem' }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: collapsed ? 0 : "1rem",
+        }}
+      >
         <div
           onClick={() => setCollapsed(!collapsed)}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            cursor: "pointer",
+            flex: 1,
+            minWidth: 0,
+          }}
         >
-          {collapsed ? <ChevronRight size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
-          {sectionData.status === 'approved' && <CheckCircle size={16} color="var(--success)" />}
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: sectionData.status === 'approved' ? 'var(--success)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {collapsed ? (
+            <ChevronRight size={16} color="var(--text-muted)" />
+          ) : (
+            <ChevronDown size={16} color="var(--text-muted)" />
+          )}
+          {sectionData.status === "approved" && (
+            <CheckCircle size={16} color="var(--success)" />
+          )}
+          <span
+            style={{
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              color:
+                sectionData.status === "approved"
+                  ? "var(--success)"
+                  : "var(--text-secondary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
             {label}
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <SourceBadge sectionData={sectionData} />
           {sectionData.confidence && (
-            <ConfidenceLabel value={sectionData.confidence} agentRole={agentRole} />
+            <ConfidenceLabel
+              value={sectionData.confidence}
+              agentRole={agentRole}
+            />
           )}
-          <button onClick={handleCopy} title="Copy section content" className="section-actions" style={{ background: 'transparent', border: 'none', color: copied ? 'var(--success)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: '4px' }}>
+          <button
+            onClick={handleCopy}
+            title="Copy section content"
+            className="section-actions"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: copied ? "var(--success)" : "var(--text-muted)",
+              cursor: "pointer",
+              display: "flex",
+              padding: "4px",
+            }}
+          >
             {copied ? <Check size={14} /> : <Copy size={14} />}
           </button>
         </div>
@@ -176,39 +293,115 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
       {!collapsed && (
         <>
           {/* Content */}
-          <MarkdownRenderer content={sectionData.content} onZoomDiagram={onZoomDiagram} />
+          <MarkdownRenderer
+            content={sectionData.content}
+            onZoomDiagram={onZoomDiagram}
+          />
 
           {/* Action Buttons */}
-          <div className="section-actions" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '8px' }}>
-            <button disabled={workflowActive} onClick={handleApprove} className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: sectionData.status === 'approved' ? 'transparent' : 'var(--success)', border: sectionData.status === 'approved' ? '1px solid var(--success)' : 'none', opacity: workflowActive ? 0.5 : 1 }}>
-              {sectionData.status === 'approved' ? <><Lock size={14} /> Approved</> : <><CheckCircle size={14} /> Approve</>}
+          <div
+            className="section-actions"
+            style={{
+              marginTop: "1.5rem",
+              paddingTop: "1rem",
+              borderTop: "1px solid var(--border-color)",
+              display: "flex",
+              gap: "8px",
+            }}
+          >
+            <button
+              disabled={workflowActive}
+              onClick={handleApprove}
+              className="btn-primary"
+              style={{
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                background:
+                  sectionData.status === "approved"
+                    ? "transparent"
+                    : "var(--success)",
+                border:
+                  sectionData.status === "approved"
+                    ? "1px solid var(--success)"
+                    : "none",
+                opacity: workflowActive ? 0.5 : 1,
+              }}
+            >
+              {sectionData.status === "approved" ? (
+                <>
+                  <Lock size={14} /> Approved
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={14} /> Approve
+                </>
+              )}
             </button>
-            <button disabled={workflowActive} onClick={() => setIsRequestingChanges(!isRequestingChanges)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-              <AlertCircle size={14} /> {isRequestingChanges ? 'Cancel Edit' : 'Modify Section'}
+            <button
+              disabled={workflowActive}
+              onClick={() => setIsRequestingChanges(!isRequestingChanges)}
+              className="btn-secondary"
+              style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+            >
+              <AlertCircle size={14} />{" "}
+              {isRequestingChanges ? "Cancel Edit" : "Modify Section"}
             </button>
-            <button disabled={workflowActive} onClick={() => runRevisionSimulation(`Regenerate ${label}`, '', id)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: workflowActive ? 0.5 : 0.8 }}>
+            <button
+              disabled={workflowActive}
+              onClick={() =>
+                runRevisionSimulation(`Regenerate ${label}`, "", id)
+              }
+              className="btn-secondary"
+              style={{
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                opacity: workflowActive ? 0.5 : 0.8,
+              }}
+            >
               <RefreshCw size={14} /> Regenerate
             </button>
           </div>
 
           {/* Helper Text */}
           {isRequestingChanges && (
-            <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--accent-purple)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div
+              style={{
+                marginTop: "1rem",
+                fontSize: "0.75rem",
+                color: "var(--accent-purple)",
+                fontStyle: "italic",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
               <AlertCircle size={12} /> Changes only this section.
             </div>
           )}
 
           {/* Feedback Input Dropdown */}
           {isRequestingChanges && (
-            <div style={{ marginTop: '0.5rem', display: 'flex', gap: '8px' }}>
+            <div style={{ marginTop: "0.5rem", display: "flex", gap: "8px" }}>
               <input
                 type="text"
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder={`E.g., Make the ${label.toLowerCase()} target enterprise B2B instead...`}
-                style={{ flex: 1, padding: '8px 12px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--border-color)",
+                  background: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  fontSize: "0.85rem",
+                }}
               />
-              <button onClick={handleSubmitFeedback} className="btn-primary" style={{ padding: '0 12px' }}>
+              <button
+                onClick={handleSubmitFeedback}
+                className="btn-primary"
+                style={{ padding: "0 12px" }}
+              >
                 <Send size={14} />
               </button>
             </div>
@@ -223,118 +416,328 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
 const TableOfContents = ({ sections, onNavigate }) => {
   const [collapsed, setCollapsed] = useState(false);
   return (
-  <nav style={{
-    position: 'sticky', top: 0, alignSelf: 'flex-start',
-    width: '215px', flexShrink: 0, maxHeight: '100%', overflowY: 'auto',
-    paddingRight: '1rem'
-  }}>
-    <button onClick={() => setCollapsed(value => !value)} className="btn-ghost" style={{ width: '100%', display: 'flex', justifyContent: 'space-between', border: 0, padding: '5px 6px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-      Contents {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-    </button>
-    {!collapsed && sections.map(section => (
+    <nav
+      style={{
+        position: "sticky",
+        top: 0,
+        alignSelf: "flex-start",
+        width: "215px",
+        flexShrink: 0,
+        maxHeight: "100%",
+        overflowY: "auto",
+        paddingRight: "1rem",
+      }}
+    >
       <button
-        key={section.id}
-        onClick={() => onNavigate(section.id)}
+        onClick={() => setCollapsed((value) => !value)}
+        className="btn-ghost"
         style={{
-          display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          padding: '5px 6px', borderRadius: '4px', textAlign: 'left',
-          fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'inherit'
+          width: "100%",
+          display: "flex",
+          justifyContent: "space-between",
+          border: 0,
+          padding: "5px 6px",
+          fontSize: "0.72rem",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          color: "var(--text-muted)",
+          marginBottom: "8px",
         }}
-        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
       >
-        <span style={{
-          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-          background: section.status === 'approved' ? 'var(--success)' : 'var(--warning)'
-        }} />
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{section.title}</span>
+        Contents{" "}
+        {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
       </button>
-    ))}
-  </nav>
+      {!collapsed &&
+        sections.map((section) => (
+          <button
+            key={section.id}
+            onClick={() => onNavigate(section.id)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              width: "100%",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: "5px 6px",
+              borderRadius: "4px",
+              textAlign: "left",
+              fontSize: "0.78rem",
+              color: "var(--text-secondary)",
+              fontFamily: "inherit",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.05)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "transparent")
+            }
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                flexShrink: 0,
+                background:
+                  section.status === "approved"
+                    ? "var(--success)"
+                    : "var(--warning)",
+              }}
+            />
+            <span
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {section.title}
+            </span>
+          </button>
+        ))}
+    </nav>
   );
 };
 
 const DiagramZoomModal = ({ svg, onClose }) => {
   const [scale, setScale] = useState(1);
   return (
-  <div
-    onClick={onClose}
-    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
-  >
-    <button onClick={onClose} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', padding: '10px', display: 'flex' }}>
-      <X size={20} />
-    </button>
-    <div onClick={(e) => e.stopPropagation()} style={{ width: '92vw', height: '88vh', background: 'var(--bg-secondary)', borderRadius: '12px', display: 'flex', flexDirection: 'column' }}>
-      <div className="section-actions" style={{ display: 'flex', gap: '6px', padding: '10px', borderBottom: '1px solid var(--border-color)' }}>
-        <button aria-label="Zoom out" className="btn-secondary" onClick={() => setScale(value => Math.max(0.25, value - 0.25))}><ZoomOut size={15} /></button>
-        <button aria-label="Zoom in" className="btn-secondary" onClick={() => setScale(value => Math.min(4, value + 0.25))}><ZoomIn size={15} /></button>
-        <button aria-label="Reset zoom" className="btn-secondary" onClick={() => setScale(1)}><RotateCcw size={15} /> Reset</button>
-        <button aria-label="Fit diagram" className="btn-secondary" onClick={() => setScale(0.75)}><Scan size={15} /> Fit</button>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>{Math.round(scale * 100)}% · drag scrollbars to pan</span>
-      </div>
-      <div className="diagram-zoom-content" style={{ flex: 1, overflow: 'auto', padding: '2rem', cursor: 'grab' }}>
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${100 / scale}%` }} dangerouslySetInnerHTML={{ __html: svg }} />
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.85)",
+        zIndex: 1100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "zoom-out",
+      }}
+    >
+      <button
+        onClick={onClose}
+        style={{
+          position: "absolute",
+          top: "20px",
+          right: "20px",
+          background: "rgba(255,255,255,0.1)",
+          border: "none",
+          borderRadius: "8px",
+          color: "#fff",
+          cursor: "pointer",
+          padding: "10px",
+          display: "flex",
+        }}
+      >
+        <X size={20} />
+      </button>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "92vw",
+          height: "88vh",
+          background: "var(--bg-secondary)",
+          borderRadius: "12px",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          className="section-actions"
+          style={{
+            display: "flex",
+            gap: "6px",
+            padding: "10px",
+            borderBottom: "1px solid var(--border-color)",
+          }}
+        >
+          <button
+            aria-label="Zoom out"
+            className="btn-secondary"
+            onClick={() => setScale((value) => Math.max(0.25, value - 0.25))}
+          >
+            <ZoomOut size={15} />
+          </button>
+          <button
+            aria-label="Zoom in"
+            className="btn-secondary"
+            onClick={() => setScale((value) => Math.min(4, value + 0.25))}
+          >
+            <ZoomIn size={15} />
+          </button>
+          <button
+            aria-label="Reset zoom"
+            className="btn-secondary"
+            onClick={() => setScale(1)}
+          >
+            <RotateCcw size={15} /> Reset
+          </button>
+          <button
+            aria-label="Fit diagram"
+            className="btn-secondary"
+            onClick={() => setScale(0.75)}
+          >
+            <Scan size={15} /> Fit
+          </button>
+          <span
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "0.75rem",
+              marginLeft: "auto",
+            }}
+          >
+            {Math.round(scale * 100)}% · drag scrollbars to pan
+          </span>
+        </div>
+        <div
+          className="diagram-zoom-content"
+          style={{ flex: 1, overflow: "auto", padding: "2rem", cursor: "grab" }}
+        >
+          <div
+            style={{
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+              width: `${100 / scale}%`,
+            }}
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </div>
       </div>
     </div>
-  </div>
   );
 };
 
 function BlueprintViewerInner() {
-  const blueprint = useProjectStore(state => state.blueprint);
-  const project = useProjectStore(state => state.project);
+  const blueprint = useProjectStore((state) => state.blueprint);
+  const project = useProjectStore((state) => state.project);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomedDiagram, setZoomedDiagram] = useState(null);
   const scrollRef = useRef(null);
 
   // Schema order is preserved by the blueprint object; show only filled sections
-  const sections = Object.values(blueprint || {}).filter(s => s && s.content && s.content.trim().length > 0);
+  const sections = Object.values(blueprint || {}).filter(
+    (s) => s && s.content && s.content.trim().length > 0,
+  );
 
   const handleNavigate = (id) => {
     const el = document.getElementById(`blueprint-section-${id}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (!project) return null;
 
   const containerStyle = isFullscreen
-    ? { position: 'fixed', inset: 0, zIndex: 950, background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', padding: '1rem' }
-    : { display: 'flex', flexDirection: 'column', height: '100%' };
+    ? {
+        position: "fixed",
+        inset: 0,
+        zIndex: 950,
+        background: "var(--bg-primary)",
+        display: "flex",
+        flexDirection: "column",
+        padding: "1rem",
+      }
+    : { display: "flex", flexDirection: "column", height: "100%" };
 
   return (
     <div style={containerStyle}>
-      {zoomedDiagram && <DiagramZoomModal svg={zoomedDiagram} onClose={() => setZoomedDiagram(null)} />}
+      {zoomedDiagram && (
+        <DiagramZoomModal
+          svg={zoomedDiagram}
+          onClose={() => setZoomedDiagram(null)}
+        />
+      )}
 
-      <div id="blueprint-export-container" ref={scrollRef} className="glass-panel" style={{ flex: 1, overflowY: 'auto', padding: '2rem', minHeight: 0 }}>
-        <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div
+        id="blueprint-export-container"
+        ref={scrollRef}
+        className="glass-panel"
+        style={{ flex: 1, overflowY: "auto", padding: "2rem", minHeight: 0 }}
+      >
+        <div
+          style={{
+            borderBottom: "1px solid var(--border-color)",
+            paddingBottom: "1rem",
+            marginBottom: "2rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
           <div>
-            <h1 style={{ margin: 0, fontSize: '1.8rem' }}>{project.name || 'Untitled Project'}</h1>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>Startup Blueprint</p>
+            <h1 style={{ margin: 0, fontSize: "1.8rem" }}>
+              {project.name || "Untitled Project"}
+            </h1>
+            <p style={{ margin: 0, color: "var(--text-muted)" }}>
+              Startup Blueprint
+            </p>
           </div>
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
             className="btn-secondary section-actions"
-            title={isFullscreen ? 'Exit reading mode' : 'Full-screen reading mode'}
-            style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            title={
+              isFullscreen ? "Exit reading mode" : "Full-screen reading mode"
+            }
+            style={{
+              padding: "8px 12px",
+              fontSize: "0.8rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
           >
-            {isFullscreen ? <><Minimize2 size={14} /> Exit Reading Mode</> : <><Maximize2 size={14} /> Reading Mode</>}
+            {isFullscreen ? (
+              <>
+                <Minimize2 size={14} /> Exit Reading Mode
+              </>
+            ) : (
+              <>
+                <Maximize2 size={14} /> Reading Mode
+              </>
+            )}
           </button>
         </div>
 
         {sections.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '4rem' }}>
+          <div
+            style={{
+              textAlign: "center",
+              color: "var(--text-muted)",
+              marginTop: "4rem",
+            }}
+          >
             <p>The blueprint is currently empty.</p>
             <p>Wait for the AI agents to begin their analysis...</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start' }}>
-            <div className="section-actions" style={{ display: 'contents' }}>
-              <TableOfContents sections={sections} onNavigate={handleNavigate} />
+          <div
+            style={{
+              display: "flex",
+              gap: "2.5rem",
+              alignItems: "flex-start",
+            }}
+          >
+            <div className="section-actions" style={{ display: "contents" }}>
+              <TableOfContents
+                sections={sections}
+                onNavigate={handleNavigate}
+              />
             </div>
-            <div className="flex flex-col gap-6" style={{ flex: 1, minWidth: 0, maxWidth: '860px' }}>
-              {sections.map(section => (
-                <SectionBlock key={section.id} id={section.id} label={section.title} sectionData={section} onZoomDiagram={setZoomedDiagram} />
+            <div
+              className="flex flex-col gap-6"
+              style={{ flex: 1, minWidth: 0 }}
+            >
+              {sections.map((section) => (
+                <SectionBlock
+                  key={section.id}
+                  id={section.id}
+                  label={section.title}
+                  sectionData={section}
+                  onZoomDiagram={setZoomedDiagram}
+                />
               ))}
             </div>
           </div>
@@ -344,10 +747,12 @@ function BlueprintViewerInner() {
   );
 }
 
-export default function BlueprintViewer() {
+// Memoized: Dashboard re-renders on every panel switch, and re-rendering the
+// full blueprint (ReactMarkdown parse per section) is what made switching lag.
+export default React.memo(function BlueprintViewer() {
   return (
     <ErrorBoundary componentName="BlueprintViewer">
       <BlueprintViewerInner />
     </ErrorBoundary>
   );
-}
+});
