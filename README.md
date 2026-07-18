@@ -2,7 +2,7 @@
 
 A React app where a virtual startup team of five AI agents — **Alex** (Mediator), **Sarah** (CEO), **David** (PM), **Elena** (Developer), and **Marcus** (Marketing) — collaboratively turns a startup idea into a complete, versioned **Startup Blueprint** (18 sections: executive summary through final recommendations, including mermaid architecture/UML/ER diagrams).
 
-Powered by **Gemini 2.5 Flash** with a domain classifier, a 3-stage scored validation pipeline, per-agent memory, and a static fallback simulator when AI is unavailable.
+Powered by **Gemini Flash** (via the `gemini-flash-latest` rolling alias) with a domain classifier, a 3-stage scored validation pipeline, per-agent memory, and a static fallback simulator when AI is unavailable.
 
 ## Quick start
 

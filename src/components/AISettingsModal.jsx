@@ -56,7 +56,7 @@ export default function AISettingsModal({ onClose }) {
                   onChange={(e) => setLocalProvider(e.target.value)}
                   style={{ width: '100%', padding: '10px', background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
                 >
-                  <option value="gemini">Google Gemini (v2.5 Flash)</option>
+                  <option value="gemini">Google Gemini (Flash, latest)</option>
                   <option value="openai" disabled>OpenAI (Coming Soon)</option>
                   <option value="claude" disabled>Anthropic Claude (Coming Soon)</option>
                 </select>

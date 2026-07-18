@@ -9,7 +9,9 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnx
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const PORT = process.env.PORT || 8787;
 
-const ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+// Rolling aliases first — they track Google's current models, so retired ids
+// (like gemini-2.5-flash for keys created after mid-2026) can't break us.
+const ALLOWED_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'];
 
 const app = express();
 app.use(cors());
@@ -106,7 +108,7 @@ app.post('/api/ai/generate', withUser, async (req, res) => {
   if (!userPrompt || typeof userPrompt !== 'string') {
     return res.status(400).json({ error: 'bad_request', message: 'userPrompt (string) is required.' });
   }
-  const chosenModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-2.5-flash';
+  const chosenModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
 
   const payload = {
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],

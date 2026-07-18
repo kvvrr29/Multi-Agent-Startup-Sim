@@ -27,7 +27,9 @@ const generateViaBrowserKey = async (apiKey, systemPrompt, userPrompt, jsonSchem
     config.responseSchema = jsonSchema;
   }
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    // Rolling alias: always resolves to the current Flash model, so retired
+    // model ids (e.g. gemini-2.5-flash for new keys) can't break generation.
+    model: 'gemini-flash-latest',
     contents: userPrompt,
     config: config
   });
