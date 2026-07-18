@@ -23,14 +23,18 @@ const Mermaid = ({ chart, onZoom }) => {
   useEffect(() => {
     let isMounted = true;
     const renderChart = async () => {
+      const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
       try {
         if (chart) {
-          const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
           const { svg } = await mermaid.render(id, chart);
           if (isMounted) setSvg(svg);
         }
       } catch (e) {
         console.error("Mermaid error:", e);
+      } finally {
+        // mermaid.render appends a scratch <div id="d{id}"> to <body> and can
+        // leave it behind (aborted/duplicate renders), stretching the page.
+        document.getElementById(`d${id}`)?.remove();
       }
     };
     renderChart();
