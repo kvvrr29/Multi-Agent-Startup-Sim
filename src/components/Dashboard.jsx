@@ -15,8 +15,9 @@ import AIDebugPanel from './AIDebugPanel';
 import ExportToolbar from './ExportToolbar';
 import { AIModeBadge, AIStatusBanner } from './AIStatusUtils';
 import { resetAllProjectData } from '../services/simulationEngine';
+import { useAuthStore } from '../store/useAuthStore';
 
-import { Bot, Database, History, BarChart2, Download, Settings, BriefcaseBusiness, BookOpen, Plus } from 'lucide-react';
+import { Bot, Database, History, BarChart2, Download, Settings, BriefcaseBusiness, BookOpen, Plus, LogOut } from 'lucide-react';
 
 import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
 import BlueprintHealthInspector from './BlueprintHealthInspector';
@@ -184,6 +185,7 @@ export default function Dashboard() {
         ))}
         <div style={{ flex: 1 }} />
         <NavButton icon={Settings} label="Settings" active={showSettings} onClick={() => setShowSettings(true)} />
+        <NavButton icon={LogOut} label="Sign Out" active={false} onClick={() => useAuthStore.getState().signOut()} />
       </div>
 
       {/* 2. Context Panel — only one at a time */}
@@ -227,7 +229,12 @@ export default function Dashboard() {
               <div key={key}><strong style={{ textTransform: 'capitalize' }}>{key.replace(/([A-Z])/g, ' $1')}:</strong> <span style={{ color: 'var(--text-secondary)' }}>{value || 'Not specified'}</span></div>
             ))}
             <button className="btn-secondary" onClick={() => {
-              if (window.confirm('Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data.')) resetAllProjectData();
+              if (window.confirm('Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.')) {
+                // Detach from the cloud row BEFORE clearing stores, otherwise the
+                // sync would overwrite the saved project with empty state.
+                useAuthStore.getState().detachCloud();
+                resetAllProjectData();
+              }
             }} style={{ marginTop: '8px', padding: '8px', display: 'flex', justifyContent: 'center', gap: '6px' }}>
               <Plus size={14} /> New Project
             </button>

@@ -1,12 +1,69 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { runInitialSimulation } from '../services/simulationEngine';
-import { Sparkles, ArrowRight, Settings } from 'lucide-react';
+import { Sparkles, ArrowRight, Settings, FolderOpen, Trash2, LogOut, CloudDownload } from 'lucide-react';
 import { AIStatusBanner } from './AIStatusUtils';
 import AISettingsModal from './AISettingsModal';
+import { useAuthStore } from '../store/useAuthStore';
+import { createCloudProject, openCloudProject } from '../services/cloudSync';
+
+function CloudProjectList() {
+  const cloudProjects = useAuthStore(state => state.cloudProjects);
+  const refreshProjects = useAuthStore(state => state.refreshProjects);
+  const deleteCloudProject = useAuthStore(state => state.deleteCloudProject);
+  const [openingId, setOpeningId] = useState(null);
+
+  useEffect(() => { refreshProjects(); }, [refreshProjects]);
+
+  if (cloudProjects.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
+      <h3 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+        Your Projects
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {cloudProjects.map(p => (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)' }}>
+            <FolderOpen size={14} color="var(--primary-electric)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated {new Date(p.updated_at).toLocaleString()}</div>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={openingId === p.id}
+              onClick={async () => {
+                setOpeningId(p.id);
+                await openCloudProject(p.id);
+                setOpeningId(null);
+              }}
+              style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+            >
+              <CloudDownload size={12} /> {openingId === p.id ? 'Opening…' : 'Open'}
+            </button>
+            <button
+              type="button"
+              title={`Delete ${p.name}`}
+              onClick={() => {
+                if (window.confirm(`Delete "${p.name}" from the cloud? This cannot be undone.`)) deleteCloudProject(p.id);
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ProjectCreation() {
   const setProject = useProjectStore((state) => state.setProject);
+  const user = useAuthStore(state => state.user);
+  const signOut = useAuthStore(state => state.signOut);
   const [showSettings, setShowSettings] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -39,9 +96,9 @@ export default function ProjectCreation() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validation Engine
     if (formData.name.trim().length < 3) {
       setError('Project name must be at least 3 characters long.');
@@ -55,12 +112,17 @@ export default function ProjectCreation() {
       setError('Please fill out all required fields (Audience, Budget).');
       return;
     }
-    
+
     setError('');
+
+    // Register the project in the cloud first so sync has a row to write into.
+    // A failure here is non-fatal: the app still works locally.
+    await createCloudProject(formData.name);
+
     // Set the project to switch the view to Dashboard
     setProject(formData);
-    
-    // Kick off the mocked agent simulation
+
+    // Kick off the agent simulation
     runInitialSimulation(formData);
   };
 
@@ -76,9 +138,14 @@ export default function ProjectCreation() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Define your startup vision, and our AI agents will build the blueprint.</p>
           
           <AIStatusBanner />
-          <button type="button" title="Settings" onClick={() => setShowSettings(true)} className="btn-secondary" style={{ padding: '7px 12px', marginBottom: '1rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Settings size={14} /> AI Settings
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '1rem' }}>
+            <button type="button" title="Settings" onClick={() => setShowSettings(true)} className="btn-secondary" style={{ padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Settings size={14} /> AI Settings
+            </button>
+            <button type="button" title={`Sign out ${user?.email || ''}`} onClick={signOut} className="btn-secondary" style={{ padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <LogOut size={14} /> Sign Out
+            </button>
+          </div>
 
           {error && (
             <div style={{ padding: '12px', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem' }}>
@@ -86,6 +153,8 @@ export default function ProjectCreation() {
             </div>
           )}
         </div>
+
+        <CloudProjectList />
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="flex flex-col gap-1">

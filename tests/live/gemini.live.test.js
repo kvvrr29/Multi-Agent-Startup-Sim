@@ -18,7 +18,7 @@ describe.skipIf(!enabled)('opt-in Gemini seven-category regression', () => {
     const outputs = [];
     for (const [expected, description] of projects) {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: `Produce a compact multi-agent regression record for this startup: ${description}. Include domain-specific CEO, product, developer, and marketing analysis; architecture/ER/UML concepts; routes for a pricing-and-backend revision; and structured durable decisions.`,
         config: {
           responseMimeType: 'application/json',

@@ -1,0 +1,87 @@
+import React, { useEffect, useState } from 'react';
+import { useAuthStore } from '../store/useAuthStore';
+import { startSync, stopSync } from '../services/cloudSync';
+import { Mail, LogIn, Loader } from 'lucide-react';
+
+export default function AuthGate({ children }) {
+  const session = useAuthStore(state => state.session);
+  const authMessage = useAuthStore(state => state.authMessage);
+  const authError = useAuthStore(state => state.authError);
+  const init = useAuthStore(state => state.init);
+  const signInWithEmail = useAuthStore(state => state.signInWithEmail);
+
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => { init(); }, [init]);
+
+  useEffect(() => {
+    if (session) startSync();
+    return stopSync;
+  }, [session]);
+
+  if (session === undefined) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: '100vh', gap: '10px', color: 'var(--text-secondary)' }}>
+        <Loader size={18} style={{ animation: 'spin 2s linear infinite' }} /> Connecting…
+      </div>
+    );
+  }
+
+  if (!session) {
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!email.trim() || sending) return;
+      setSending(true);
+      await signInWithEmail(email.trim());
+      setSending(false);
+    };
+
+    return (
+      <div className="container flex items-center justify-center" style={{ minHeight: '100vh' }}>
+        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
+            <LogIn size={24} />
+          </div>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Enter your email and we&apos;ll send you a magic link. Your projects are saved to your account.
+          </p>
+
+          {authMessage && (
+            <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--success)', borderRadius: 'var(--radius-md)', color: 'var(--success)', fontSize: '0.85rem' }}>
+              {authMessage}
+            </div>
+          )}
+          {authError && (
+            <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.85rem' }}>
+              ⚠️ {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <label htmlFor="auth-email" style={{ position: 'absolute', left: '-9999px' }}>Email address</label>
+            <input
+              id="auth-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              style={{
+                width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
+                background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit'
+              }}
+            />
+            <button type="submit" disabled={sending} className="btn btn-primary" style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}>
+              <Mail size={16} /> {sending ? 'Sending…' : 'Send Magic Link'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
+}

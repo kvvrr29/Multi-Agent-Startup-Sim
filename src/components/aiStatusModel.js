@@ -18,13 +18,16 @@ export function useAIMode() {
   const activeGenerations = useAIDebugStore(s => s.activeGenerations);
   const lastError = useAIDebugStore(s => s.lastError);
   const connectionStatus = useAIDebugStore(s => s.connectionStatus);
-  const isGeminiConfigured = aiModeEnabled && !!apiKey?.trim();
+  // AI is "configured" when AI Mode is on: a personal key uses Gemini directly,
+  // otherwise requests go through the server-side proxy (key never in browser).
+  const isGeminiConfigured = aiModeEnabled;
+  const usingServerProxy = aiModeEnabled && !apiKey?.trim();
   const hasLiveOutput = Object.values(generationSources).some(s => s === 'Gemini');
   const hasFallbackOutput = Object.values(generationSources).some(s => s === 'Fallback');
   const mode = isGeminiConfigured ? 'Gemini' : 'Simulator';
   const reason = !aiModeEnabled
     ? 'AI Mode is disabled in Settings'
-    : !apiKey?.trim() ? 'Gemini API Key Missing' : null;
+    : usingServerProxy ? 'Using server-side AI proxy' : null;
 
   let status;
   if (!isGeminiConfigured) status = AI_STATUS.SIMULATOR;
@@ -35,5 +38,5 @@ export function useAIMode() {
   else if (connectionStatus === 'connected' || hasLiveOutput) status = AI_STATUS.CONNECTED;
   else status = AI_STATUS.CONFIGURED;
 
-  return { mode, reason, status, lastError, isGeminiConfigured, hasLiveOutput, hasFallbackOutput };
+  return { mode, reason, status, lastError, isGeminiConfigured, usingServerProxy, hasLiveOutput, hasFallbackOutput };
 }
