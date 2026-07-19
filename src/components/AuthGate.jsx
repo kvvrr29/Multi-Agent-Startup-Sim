@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
-import { startSync, stopSync } from '../services/cloudSync';
+import { useProjectStore } from '../store/useProjectStore';
+import { startSync, stopSync, flush, openCloudProject } from '../services/cloudSync';
+import { resetAllProjectData } from '../services/simulationEngine';
 import { Mail, LogIn, Loader } from 'lucide-react';
 
 export default function AuthGate({ children }) {
@@ -12,18 +14,78 @@ export default function AuthGate({ children }) {
 
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
+  const [booted, setBooted] = useState(false);
+  const [bootError, setBootError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => { init(); }, [init]);
 
+  // Bootstrap after sign-in: open the most recently used project (list is
+  // sorted by last_opened_at) so returning users land on the Dashboard;
+  // first-time users go to the create screen. An unreachable API must show
+  // an error — never be mistaken for "this user has no projects".
   useEffect(() => {
-    if (session) startSync();
-    return stopSync;
-  }, [session]);
+    if (!session) {
+      setBooted(false);
+      setBootError(null);
+      resetAllProjectData();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const projects = await useAuthStore.getState().refreshProjects();
+      if (cancelled) return;
+      if (projects === null) {
+        setBootError('Could not load your projects. Is the API server running?');
+        return;
+      }
+      if (projects.length > 0) {
+        const opened = await openCloudProject(projects[0].id);
+        if (cancelled) return;
+        if (!opened) {
+          setBootError(`Could not open "${projects[0].name}". Check your connection and retry.`);
+          return;
+        }
+      } else {
+        useProjectStore.setState({ currentView: 'create' });
+      }
+      setBootError(null);
+      setBooted(true);
+      startSync();
+    })();
+    return () => { cancelled = true; stopSync(); };
+  }, [session, retryKey]);
 
-  if (session === undefined) {
+  // Best effort: push pending changes before the tab closes.
+  useEffect(() => {
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, []);
+
+  if (session && bootError) {
+    return (
+      <div className="container flex items-center justify-center" style={{ minHeight: '100vh' }}>
+        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
+          <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.85rem' }}>
+            ⚠️ {bootError}
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => { setBootError(null); setRetryKey(k => k + 1); }}
+            style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (session === undefined || (session && !booted)) {
     return (
       <div className="flex items-center justify-center" style={{ minHeight: '100vh', gap: '10px', color: 'var(--text-secondary)' }}>
-        <Loader size={18} style={{ animation: 'spin 2s linear infinite' }} /> Connecting…
+        <Loader size={18} style={{ animation: 'spin 2s linear infinite' }} /> {session ? 'Loading your projects…' : 'Connecting…'}
       </div>
     );
   }
@@ -43,9 +105,10 @@ export default function AuthGate({ children }) {
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
             <LogIn size={24} />
           </div>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In</h1>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In or Sign Up</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Enter your email and we&apos;ll send you a magic link. Your projects are saved to your account.
+            Enter your email and we&apos;ll send you a magic link — new accounts are created automatically.
+            Your projects are saved to your account.
           </p>
 
           {authMessage && (
