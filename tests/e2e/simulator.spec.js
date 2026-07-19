@@ -24,6 +24,19 @@ test.beforeEach(async ({ page }) => {
     const { data } = await window.__supabase.auth.getSession();
     if (!data.session) await window.__supabase.auth.signInWithPassword({ email, password });
   }, { email: E2E_EMAIL, password: E2E_PASSWORD });
+  // Returning users land on the Dashboard with their last project auto-opened.
+  // Delete the seeded user's cloud projects so each test starts on the create
+  // screen with a clean database.
+  await page.evaluate(async () => {
+    if (!window.__supabase) return;
+    const { data } = await window.__supabase.auth.getSession();
+    if (!data.session) return;
+    const headers = { Authorization: `Bearer ${data.session.access_token}` };
+    const res = await fetch('/api/projects', { headers });
+    const projects = res.ok ? await res.json() : [];
+    await Promise.all(projects.map(p => fetch(`/api/projects/${p.id}`, { method: 'DELETE', headers })));
+  });
+  await page.reload();
   await page.getByLabel('Project Name *').waitFor({ timeout: 15_000 });
 });
 
@@ -51,26 +64,32 @@ test('simulator generates, revises, versions, persists, and exposes exports', as
   await page.reload();
   await expect(page.getByText('MediCore', { exact: true })).toBeVisible();
 
-  await page.getByTitle('Export').click();
-  await expect(page.getByRole('button', { name: /Word Document/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Markdown/ })).toBeVisible();
+  await expect(page.getByTitle('Export')).toHaveCount(0);
+  const downloadButton = page.getByRole('button', { name: 'Download blueprint' });
+  await expect(downloadButton).toBeVisible();
+  await downloadButton.click();
+  await expect(page.getByRole('menuitem', { name: 'PDF' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Word' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Markdown' })).toBeVisible();
 
   if (testInfo.project.name === 'desktop') {
     const [markdown] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('button', { name: /Markdown/ }).click()
+      page.getByRole('menuitem', { name: 'Markdown' }).click()
     ]);
     expect(markdown.suggestedFilename()).toMatch(/\.md$/);
 
+    await downloadButton.click();
     const [word] = await Promise.all([
       page.waitForEvent('download', { timeout: 30_000 }),
-      page.getByRole('button', { name: /Word Document/ }).click()
+      page.getByRole('menuitem', { name: 'Word' }).click()
     ]);
     expect(word.suggestedFilename()).toMatch(/\.docx$/);
 
+    await downloadButton.click();
     const [pdf] = await Promise.all([
       page.waitForEvent('download', { timeout: 30_000 }),
-      page.getByRole('button', { name: /PDF Document/ }).click()
+      page.getByRole('menuitem', { name: 'PDF' }).click()
     ]);
     expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
 
