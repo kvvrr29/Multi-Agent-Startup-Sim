@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 import { SECTION_TITLES } from '../config/blueprintSections';
-import { cloneSerializable, getBrowserStorage } from './persistence';
+import { cloneSerializable } from './persistence';
 
 export const composeVersionSummary = (affectedSections = [], prefix = '') => {
   const titles = affectedSections.map(s => SECTION_TITLES[s] || s);
@@ -28,7 +27,8 @@ const nextVersionId = (versions) => {
   return `v${max + 1}`;
 };
 
-export const useVersionStore = create(persist((set, get) => ({
+// No local persistence: hydrated from the cloud via openCloudProject().
+export const useVersionStore = create((set, get) => ({
   versions: [],
   currentVersionId: null,
 
@@ -60,12 +60,6 @@ export const useVersionStore = create(persist((set, get) => ({
   // Kept as a read-only compatibility alias; history never moves backwards.
   restoreVersion: (versionId) => get().getVersion(versionId)?.blueprintSnapshot || null,
   reset: () => set({ versions: [], currentVersionId: null })
-}), {
-  name: 'mass-versions-v2',
-  version: 2,
-  storage: createJSONStorage(getBrowserStorage),
-  partialize: ({ versions, currentVersionId }) => ({ versions, currentVersionId }),
-  migrate: (persisted = {}) => ({ versions: persisted.versions || [], currentVersionId: persisted.currentVersionId || null })
 }));
 
 const stableSectionState = (section = {}) => ({
