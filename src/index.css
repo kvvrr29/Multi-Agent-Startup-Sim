@@ -398,7 +398,19 @@ body > div[id^="ddocx-mermaid-"] {
         position: static !important;
         width: 100% !important;
         max-height: 160px !important;
+    }
+
+    .blueprint-viewer-sidebar {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: none !important;
         margin-bottom: 1rem;
+    }
+
+    .blueprint-export-fab {
+        left: 1rem !important;
+        bottom: 1rem !important;
     }
 
     .section-actions {
