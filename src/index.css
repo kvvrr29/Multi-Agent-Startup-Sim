@@ -355,7 +355,8 @@ button:disabled {
 
 /* Mermaid appends scratch render containers to <body>; if one survives it
    adds phantom height below the app. Keep any stray out of the layout. */
-body > div[id^="dmermaid-"] {
+body > div[id^="dmermaid-"],
+body > div[id^="ddocx-mermaid-"] {
     position: absolute !important;
     top: -9999px;
     height: 0;

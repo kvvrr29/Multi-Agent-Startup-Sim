@@ -21,6 +21,7 @@ import {
   ZoomOut,
   RotateCcw,
   Scan,
+  AlertCircle,
 } from "lucide-react";
 import {
   runRevisionSimulation,
@@ -32,6 +33,9 @@ mermaid.initialize({
   theme: "dark",
   securityLevel: "strict",
   fontFamily: "Inter, sans-serif",
+  // On invalid diagram text mermaid otherwise draws its error graphic into the
+  // scratch <div> and throws before cleaning it up, leaving phantom page height.
+  suppressErrorRendering: true,
 });
 
 const Mermaid = ({ chart, onZoom }) => {

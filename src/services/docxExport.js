@@ -35,8 +35,9 @@ const svgToPng = (svg) => new Promise((resolve, reject) => {
 });
 
 const renderDiagram = async (chart, index) => {
+  const id = `docx-mermaid-${Date.now()}-${index}`;
   try {
-    const { svg } = await mermaid.render(`docx-mermaid-${Date.now()}-${index}`, chart);
+    const { svg } = await mermaid.render(id, chart);
     const png = await svgToPng(svg);
     return new Paragraph({
       alignment: AlignmentType.CENTER,
@@ -44,6 +45,10 @@ const renderDiagram = async (chart, index) => {
     });
   } catch (error) {
     return new Paragraph({ children: [new TextRun({ text: `Diagram source (render failed: ${error.message})`, italics: true })] });
+  } finally {
+    // mermaid.render appends a scratch <div id="d{id}"> to <body> and leaves it
+    // behind when the diagram fails to parse, stretching the page.
+    document.getElementById(`d${id}`)?.remove();
   }
 };
 
@@ -98,7 +103,7 @@ const markdownBlocks = async (markdown, diagramOffset) => {
 };
 
 export const createBlueprintDocx = async (project, blueprint) => {
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', suppressErrorRendering: true });
   const children = [
     new Paragraph({ text: project?.name || 'Startup Blueprint', heading: HeadingLevel.TITLE }),
     new Paragraph({ text: 'Startup Blueprint', subtitle: true })
