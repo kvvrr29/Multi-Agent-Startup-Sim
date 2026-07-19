@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import { cloneSerializable, getBrowserStorage } from './persistence';
+import { cloneSerializable } from './persistence';
 
 export const MEMORY_CATEGORIES = ['business', 'product', 'technical', 'marketing', 'scope'];
 const CATEGORY_MAP = {
@@ -16,7 +15,8 @@ export const createEmptyMemory = () => ({
   scope: {}
 });
 
-export const useProjectMemoryStore = create(persist((set, get) => ({
+// No local persistence: hydrated from the cloud via openCloudProject().
+export const useProjectMemoryStore = create((set, get) => ({
   memory: createEmptyMemory(),
   decisionHistory: [],
 
@@ -35,6 +35,8 @@ export const useProjectMemoryStore = create(persist((set, get) => ({
     if (!category || !decision?.key) return false;
     const entry = {
       ...cloneSerializable(decision),
+      // Stable id so cloud appends are idempotent (decision_entries.client_id).
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       agent: metadata.agent || null,
       instruction: metadata.instruction || null,
       version: metadata.version || null,
@@ -60,13 +62,4 @@ export const useProjectMemoryStore = create(persist((set, get) => ({
     decisionHistory: Array.isArray(snapshot?.decisionHistory) ? cloneSerializable(snapshot.decisionHistory) : []
   }),
   clearMemory: () => set({ memory: createEmptyMemory(), decisionHistory: [] })
-}), {
-  name: 'mass-memory-v2',
-  version: 2,
-  storage: createJSONStorage(getBrowserStorage),
-  partialize: ({ memory, decisionHistory }) => ({ memory, decisionHistory }),
-  migrate: (persisted = {}) => ({
-    memory: { ...createEmptyMemory(), ...(persisted.memory || {}) },
-    decisionHistory: persisted.decisionHistory || []
-  })
 }));
