@@ -47,6 +47,8 @@ export const useAuthStore = create((set, get) => ({
   setActiveCloudId: (id) => set({ activeCloudId: id }),
   detachCloud: () => set({ activeCloudId: null }),
 
+  // Returns the project list, or null when the API is unreachable — callers
+  // must not treat a failure as "the user has no projects".
   refreshProjects: async () => {
     if (!get().session) return [];
     try {
@@ -55,7 +57,7 @@ export const useAuthStore = create((set, get) => ({
       return data || [];
     } catch (err) {
       console.error('[Cloud] Failed to list projects:', err.message);
-      return get().cloudProjects;
+      return null;
     }
   },
 
