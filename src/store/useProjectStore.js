@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 import { createBlueprintSchema } from '../services/blueprintSchema';
-import { getBrowserStorage } from './persistence';
 
 export const AGENT_ROLES = {
   MEDIATOR: 'Mediator',
@@ -52,7 +50,9 @@ const createInitialAgents = () => Object.fromEntries(
   Object.entries(initialAgents).map(([key, value]) => [key, { ...value }])
 );
 
-export const useProjectStore = create(persist((set, get) => ({
+// No local persistence: the database is the source of truth. Stores are
+// hydrated from the cloud via openCloudProject() after sign-in.
+export const useProjectStore = create((set, get) => ({
   // App State
   currentView: 'create', // 'create', 'dashboard'
 
@@ -163,19 +163,4 @@ export const useProjectStore = create(persist((set, get) => ({
     recentRevisionResult: null,
     workflow: { active: false, runId: null, kind: null, startedAt: null }
   })
-}), {
-  name: 'mass-project-v2',
-  version: 2,
-  storage: createJSONStorage(getBrowserStorage),
-  partialize: ({ currentView, project, blueprint, workflowEvents }) => ({ currentView, project, blueprint, workflowEvents }),
-  migrate: (persisted = {}) => ({
-    ...persisted,
-    currentView: persisted.project ? 'dashboard' : 'create',
-    blueprint: { ...createBlueprintSchema(), ...(persisted.blueprint || {}) }
-  }),
-  onRehydrateStorage: () => (state) => {
-    if (!state) return;
-    state.resetAllAgents();
-    state.endWorkflow(state.workflow?.runId);
-  }
 }));
