@@ -54,7 +54,8 @@ test('simulator generates, revises, versions, persists, and exposes exports', as
   await expect(approve).toBeEnabled({ timeout: 5_000 });
   await approve.click();
 
-  await page.getByRole('button', { name: 'Reduce Budget' }).click();
+  await page.getByPlaceholder('Describe the change...').fill('Reduce Budget');
+  await page.getByRole('button', { name: 'Apply Change' }).click();
   await expect(page.getByText('Revision Preview')).toBeVisible();
   await page.getByRole('button', { name: 'Apply Revision' }).click();
   await expect(page.getByText(/Revision Applied Successfully|partially completed/)).toBeVisible({ timeout: 15_000 });
