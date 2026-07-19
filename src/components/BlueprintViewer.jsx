@@ -6,7 +6,7 @@ import { useProjectStore } from "../store/useProjectStore";
 import ErrorBoundary from "./ErrorBoundary";
 import {
   CheckCircle,
-  AlertCircle,
+  Edit,
   RefreshCw,
   Send,
   Lock,
@@ -297,24 +297,18 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
               paddingTop: "1rem",
               borderTop: "1px solid var(--border-color)",
               display: "flex",
-              gap: "8px",
+              justifyContent: "flex-end",
+              gap: "6px",
             }}
           >
             <button
               disabled={workflowActive}
               onClick={handleApprove}
-              className="btn-primary"
+              className="btn-success"
               style={{
-                padding: "6px 12px",
+                padding: "10px 12px",
                 fontSize: "0.8rem",
-                background:
-                  sectionData.status === "approved"
-                    ? "transparent"
-                    : "var(--success)",
-                border:
-                  sectionData.status === "approved"
-                    ? "1px solid var(--success)"
-                    : "none",
+                borderRadius: "8px",
                 opacity: workflowActive ? 0.5 : 1,
               }}
             >
@@ -332,10 +326,14 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
               disabled={workflowActive}
               onClick={() => setIsRequestingChanges(!isRequestingChanges)}
               className="btn-secondary"
-              style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+              style={{
+                padding: "10px 12px",
+                fontSize: "0.8rem",
+                borderRadius: "8px",
+              }}
             >
-              <AlertCircle size={14} />{" "}
-              {isRequestingChanges ? "Cancel Edit" : "Modify Section"}
+              <Edit size={14} />{" "}
+              {isRequestingChanges ? "Cancel Edit" : "Modify"}
             </button>
             <button
               disabled={workflowActive}
@@ -344,8 +342,9 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
               }
               className="btn-secondary"
               style={{
-                padding: "6px 12px",
+                padding: "10px 12px",
                 fontSize: "0.8rem",
+                borderRadius: "8px",
                 opacity: workflowActive ? 0.5 : 0.8,
               }}
             >
@@ -671,11 +670,9 @@ function BlueprintViewerInner() {
               isFullscreen ? "Exit reading mode" : "Full-screen reading mode"
             }
             style={{
-              padding: "8px 12px",
+              padding: "12px",
+              borderRadius: "10px",
               fontSize: "0.8rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
             }}
           >
             {isFullscreen ? (
