@@ -12,17 +12,17 @@ import AISettingsModal from "./AISettingsModal";
 import AICostDashboard from "./AICostDashboard";
 import PromptInspector from "./PromptInspector";
 import AIDebugPanel from "./AIDebugPanel";
-import ExportToolbar from "./ExportToolbar";
 import { AIModeBadge, AIStatusBanner } from "./AIStatusUtils";
 import { resetAllProjectData } from "../services/simulationEngine";
 import { useAuthStore } from "../store/useAuthStore";
+import { flush, openCloudProject } from "../services/cloudSync";
+import CloudProjectList from "./CloudProjectList";
 
 import {
   Bot,
   Database,
   History,
   BarChart2,
-  Download,
   Settings,
   BriefcaseBusiness,
   BookOpen,
@@ -286,7 +286,6 @@ const PANELS = [
   { id: "memory", label: "Project Memory", icon: Database },
   { id: "versions", label: "Versions", icon: History },
   { id: "approval", label: "Approval", icon: BarChart2 },
-  { id: "export", label: "Export", icon: Download },
 ];
 
 const NavButton = ({ icon: Icon, label, active, onClick }) => (
@@ -297,15 +296,15 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
-      gap: "4px",
-      padding: "10px 4px",
+      gap: "5px",
+      padding: "12px 4px",
       width: "100%",
       cursor: "pointer",
       background: active ? "rgba(67, 56, 202, 0.25)" : "transparent",
       border: "none",
       borderLeft: `2px solid ${active ? "var(--primary-electric)" : "transparent"}`,
       color: active ? "var(--primary-electric)" : "var(--text-muted)",
-      fontSize: "0.6rem",
+      fontSize: "0.65rem",
       fontFamily: "inherit",
       transition: "all ease",
     }}
@@ -322,6 +321,7 @@ export default function Dashboard() {
   const developerMode = useSettingsStore((state) => state.developerMode);
   const agents = useProjectStore((state) => state.agents);
   const project = useProjectStore((state) => state.project);
+  const activeCloudId = useAuthStore((state) => state.activeCloudId);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
   // Auto-switch to Agent Activity when a simulation starts so the user
@@ -449,50 +449,70 @@ export default function Dashboard() {
         )}
 
         {activePanel === "project" && (
-          <div
-            className="glass-panel"
-            style={{
-              padding: "1rem",
-              display: "grid",
-              gap: "10px",
-              fontSize: "0.8rem",
-            }}
-          >
-            {Object.entries(project || {}).map(([key, value]) => (
-              <div key={key}>
-                <strong style={{ textTransform: "capitalize" }}>
-                  {key.replace(/([A-Z])/g, " $1")}:
-                </strong>{" "}
-                <span style={{ color: "var(--text-secondary)" }}>
-                  {value || "Not specified"}
-                </span>
-              </div>
-            ))}
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.",
-                  )
-                ) {
-                  // Detach from the cloud row BEFORE clearing stores, otherwise the
-                  // sync would overwrite the saved project with empty state.
-                  useAuthStore.getState().detachCloud();
-                  resetAllProjectData();
-                }
-              }}
+          <>
+            <div className="glass-panel" style={{ padding: "1rem" }}>
+              <CloudProjectList
+                compact
+                activeId={activeCloudId}
+                onOpen={async (id) => {
+                  if (anyBusy) {
+                    window.alert(
+                      "Agents are still working — wait for the current run to finish before switching projects.",
+                    );
+                    return;
+                  }
+                  // Push pending edits into the current project's rows before
+                  // the stores are hydrated with the other project.
+                  await flush();
+                  await openCloudProject(id);
+                }}
+              />
+            </div>
+            <div
+              className="glass-panel"
               style={{
-                marginTop: "8px",
-                padding: "8px",
-                display: "flex",
-                justifyContent: "center",
-                gap: "6px",
+                padding: "1rem",
+                display: "grid",
+                gap: "10px",
+                fontSize: "0.8rem",
               }}
             >
-              <Plus size={14} /> New Project
-            </button>
-          </div>
+              {Object.entries(project || {}).map(([key, value]) => (
+                <div key={key}>
+                  <strong style={{ textTransform: "capitalize" }}>
+                    {key.replace(/([A-Z])/g, " $1")}:
+                  </strong>{" "}
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    {value || "Not specified"}
+                  </span>
+                </div>
+              ))}
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.",
+                    )
+                  ) {
+                    // Detach from the cloud row BEFORE clearing stores, otherwise the
+                    // sync would overwrite the saved project with empty state.
+                    useAuthStore.getState().detachCloud();
+                    resetAllProjectData();
+                  }
+                }}
+                style={{
+                  marginTop: "8px",
+                  padding: "8px",
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: "6px",
+                }}
+              >
+                <Plus size={14} /> New Project
+              </button>
+            </div>
+          </>
         )}
 
         {activePanel === "blueprint" && (
@@ -505,7 +525,8 @@ export default function Dashboard() {
             }}
           >
             The complete 18-section blueprint is open in the workspace. Use
-            Reading Mode for a focused view, or Export to download it.
+            Reading Mode for a focused view. Download controls are below the
+            Table of Contents.
           </div>
         )}
 
@@ -530,12 +551,6 @@ export default function Dashboard() {
               <BlueprintHealthInspector />
             </ErrorBoundary>
           </>
-        )}
-
-        {activePanel === "export" && (
-          <ErrorBoundary componentName="Export">
-            <ExportToolbar />
-          </ErrorBoundary>
         )}
       </div>
 
