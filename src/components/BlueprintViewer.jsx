@@ -9,7 +9,7 @@ import {
   CheckCircle,
   Edit,
   RefreshCw,
-  Send,
+  ArrowUp,
   Lock,
   ChevronDown,
   ChevronRight,
@@ -370,34 +370,41 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
                 gap: "6px",
               }}
             >
-              <AlertCircle size={12} /> Changes only this section.
+              <AlertCircle size={12} /> Changes apply to this section only.
             </div>
           )}
 
           {/* Feedback Input Dropdown */}
           {isRequestingChanges && (
-            <div style={{ marginTop: "0.5rem", display: "flex", gap: "8px" }}>
+            <div style={{ marginTop: "0.5rem", position: "relative" }}>
               <input
                 type="text"
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder={`E.g., Make the ${label.toLowerCase()} target enterprise B2B instead...`}
                 style={{
-                  flex: 1,
-                  padding: "8px 12px",
-                  borderRadius: "4px",
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
                   border: "1px solid var(--border-color)",
-                  background: "var(--bg-primary)",
+                  background: "#111724",
                   color: "var(--text-primary)",
                   fontSize: "0.85rem",
                 }}
               />
               <button
                 onClick={handleSubmitFeedback}
-                className="btn-primary"
-                style={{ padding: "0 12px" }}
+                className="btn-secondary"
+                style={{
+                  position: "absolute",
+                  right: "6px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  padding: "6px 8px",
+                  borderRadius: "6px",
+                }}
               >
-                <Send size={14} />
+                <ArrowUp size={16} />
               </button>
             </div>
           )}
@@ -753,7 +760,12 @@ function BlueprintViewerInner() {
       {sections.length > 0 && (
         <div
           className="blueprint-export-fab section-actions"
-          style={{ position: "absolute", left: "2rem", bottom: "1.5rem", zIndex: 40 }}
+          style={{
+            position: "absolute",
+            left: "2rem",
+            bottom: "1.5rem",
+            zIndex: 40,
+          }}
         >
           <ErrorBoundary componentName="Export">
             <ExportToolbar compact />
