@@ -115,14 +115,13 @@ export const useProjectStore = create(persist((set, get) => ({
     }
   })),
 
-  updateBlueprintSection: (sectionKey, content, status = 'pending', confidence = 'High', lastModifiedVersion = 'v1', metadata = {}) => set((state) => ({
+  updateBlueprintSection: (sectionKey, content, status = 'pending', lastModifiedVersion = 'v1', metadata = {}) => set((state) => ({
     blueprint: {
       ...state.blueprint,
-      [sectionKey]: { 
-        ...state.blueprint[sectionKey], 
-        content, 
-        status, 
-        confidence,
+      [sectionKey]: {
+        ...state.blueprint[sectionKey],
+        content,
+        status,
         lastModifiedVersion,
         ...metadata
       }

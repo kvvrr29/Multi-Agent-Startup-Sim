@@ -26,7 +26,6 @@ export default function MemoryInspector() {
             <div><strong>Project:</strong> <span style={{ color: 'var(--text-primary)' }}>{memory?.scope?.project_type || 'N/A'}</span></div>
             <div><strong>Model:</strong> <span style={{ color: 'var(--text-primary)' }}>{memory?.scope?.business_model || 'N/A'}</span></div>
             <div><strong>Complexity:</strong> <span style={{ color: 'var(--text-primary)' }}>{memory?.scope?.complexity || 'N/A'}</span></div>
-            <div><strong>Confidence:</strong> <span style={{ color: 'var(--text-primary)' }}>{memory?.scope?.confidence || 'N/A'}</span></div>
           </div>
           <div><strong>Mandatory:</strong> <span style={{ color: 'var(--warning)', fontSize: '0.75rem' }}>{memory?.scope?.mandatory_entities || 'N/A'}</span></div>
           <div style={{ marginTop: '4px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '4px', fontStyle: 'italic' }}>

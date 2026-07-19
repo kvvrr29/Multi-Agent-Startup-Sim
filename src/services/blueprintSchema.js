@@ -8,7 +8,6 @@ export const createBlueprintSchema = () => {
       title: section.title,
       type: section.type,
       status: 'pending',
-      confidence: null,
       content: '',
       lastModifiedVersion: 'v1',
       generationSource: null,

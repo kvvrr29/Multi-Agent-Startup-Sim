@@ -105,7 +105,6 @@ export default function ProjectEvolution() {
           </h4>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div><strong>Instruction:</strong> {preview.instruction}</div>
-            <div><strong>Confidence:</strong> <span style={{ color: preview.confidence === 'High' ? 'var(--success)' : 'var(--warning)' }}>{preview.confidence}</span></div>
             <div>
               <strong>Detected Tasks ({preview.tasks?.length || 0}):</strong>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>

@@ -120,7 +120,7 @@ export const runInitialSimulation = async (projectData) => {
       memoryStore.updateMemory('scope', 'confidence', classification.confidence + '%');
       memoryStore.updateMemory('scope', 'reasoning', classification.reasoning);
       
-      store.addWorkflowEvent({ message: `Mediator classified domain as: ${classification.domain} (${classification.industry}) — Confidence: ${classification.confidence}%`, agent: 'mediator' });
+      store.addWorkflowEvent({ message: `Mediator classified domain as: ${classification.domain} (${classification.industry})`, agent: 'mediator' });
     } catch (err) {
       // ⚠️ Surface the domain classification failure as a visible warning — do NOT silently continue
       store.addWorkflowEvent({ type: 'error', message: `⚠️ Domain Classifier FAILED: ${err.message}. Agents will receive incomplete context.`, agent: 'mediator' });
@@ -173,7 +173,7 @@ export const runInitialSimulation = async (projectData) => {
 
       sections.forEach(sectionKey => {
         if (result.content[sectionKey]) {
-          store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', 'High', 'v1', sectionMetadata({
+          store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', 'v1', sectionMetadata({
             source: result.generationSource || 'Gemini', agent: id, scores: result.scores, failureReason: result.failureReason
           }));
         }
@@ -188,13 +188,13 @@ export const runInitialSimulation = async (projectData) => {
     await sleep(500);
     store.updateAgentStatus('mediator', AGENT_STATUS.REVIEWING, 'Reviewing agent outputs');
 
-    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'High', 'v1', sectionMetadata({ source: 'Local', agent: 'mediator' }));
+    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'v1', sectionMetadata({ source: 'Local', agent: 'mediator' }));
 
     const mediatorContent = await handleAgentGeneration('mediator', {
       finalRecommendations: blueprintContent.finalRecommendations
     });
     if (mediatorContent.content.finalRecommendations) {
-      store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', 'High', 'v1', sectionMetadata({
+      store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', 'v1', sectionMetadata({
         source: mediatorContent.generationSource || 'Gemini', agent: 'mediator', scores: mediatorContent.scores, failureReason: mediatorContent.failureReason
       }));
     }
@@ -311,12 +311,12 @@ export const applyRevisionSimulation = async (previewData) => {
 
     // 1. ROUTING
     store.updateAgentStatus('mediator', AGENT_STATUS.ROUTING, `Routing to ${assignedAgents.join(', ').toUpperCase()}`);
-    store.setActiveRevision({ request: instruction, category: previewData.categoryHint || 'AI Routed', targetAgent: assignedAgents.join(', '), expectedStep: `Updating ${tasks.flatMap(t => t.sections).length} sections. Confidence: ${confidence}` });
+    store.setActiveRevision({ request: instruction, category: previewData.categoryHint || 'AI Routed', targetAgent: assignedAgents.join(', '), expectedStep: `Updating ${tasks.flatMap(t => t.sections).length} sections.` });
     await sleep(1500);
     tasks.forEach(task => {
       store.addWorkflowEvent({
         type: 'system',
-        message: `Mediator assigned "${task.taskDescription}" to ${task.agent.toUpperCase()}${task.reason ? ` — ${task.reason}` : ''} (Confidence: ${confidence})`,
+        message: `Mediator assigned "${task.taskDescription}" to ${task.agent.toUpperCase()}${task.reason ? ` — ${task.reason}` : ''}`,
         agent: 'mediator'
       });
     });
@@ -345,7 +345,7 @@ export const applyRevisionSimulation = async (previewData) => {
              if (taskSections.includes(sectionKey)) {
                const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
                if (content.trim() !== existing.trim()) {
-                 store.updateBlueprintSection(sectionKey, content, 'pending', 'High', nextVersionId, sectionMetadata({
+                 store.updateBlueprintSection(sectionKey, content, 'pending', nextVersionId, sectionMetadata({
                    source: result.generationSource || 'Gemini', agent: targetAgent, scores: result.scores
                  }));
                  changedSections.push(sectionKey);
@@ -374,7 +374,7 @@ export const applyRevisionSimulation = async (previewData) => {
            const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
            const revised = `${existing}\n\n**Revision:** Adjusted based on request: ${taskDescription || instruction}`.trim();
            if (revised !== existing.trim()) {
-             store.updateBlueprintSection(sectionKey, revised, 'pending', 'Medium', nextVersionId, sectionMetadata({ source: 'Fallback', agent: targetAgent }));
+             store.updateBlueprintSection(sectionKey, revised, 'pending', nextVersionId, sectionMetadata({ source: 'Fallback', agent: targetAgent }));
              changedSections.push(sectionKey);
            }
         });
