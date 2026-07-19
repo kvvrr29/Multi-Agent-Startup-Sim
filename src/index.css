@@ -148,6 +148,40 @@ a:hover {
     color: var(--text-primary);
 }
 
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.btn-success {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid var(--success);
+    color: var(--success);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-success:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #34d399;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
