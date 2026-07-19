@@ -3,15 +3,6 @@ import { previewRevision, applyRevisionSimulation } from '../services/simulation
 import { useProjectStore, isAgentBusy } from '../store/useProjectStore';
 import { Send, Sparkles, Activity, ArrowRight, CheckCircle, AlertTriangle } from 'lucide-react';
 
-const SUGGESTIONS = [
-  "Reduce Budget",
-  "Use Python",
-  "Add Mobile App",
-  "Improve Scalability",
-  "Target Students",
-  "Make MVP Smaller"
-];
-
 const CATEGORIES = ["Business", "Product", "Technical", "Marketing", "Scope"];
 
 export default function ProjectEvolution() {
@@ -29,15 +20,6 @@ export default function ProjectEvolution() {
   
   // Global Lock: True if ANY agent is actively occupied (Completed/Failed don't block)
   const isBusy = workflowActive || Object.values(agents).some(isAgentBusy) || isPreviewing;
-
-  const handleSuggestionClick = async (suggestion) => {
-    if (isBusy) return;
-    clearRevisionState();
-    setIsPreviewing(true);
-    const result = await previewRevision(suggestion);
-    setPreview(result);
-    setIsPreviewing(false);
-  };
 
   const handleCustomSubmit = async (e) => {
     e.preventDefault();
@@ -152,26 +134,8 @@ export default function ProjectEvolution() {
         </div>
       )}
 
-      {/* 4. Quick Changes */}
+      {/* Custom project-wide change */}
       <div style={{ opacity: isBusy ? 0.5 : 1, pointerEvents: isBusy ? 'none' : 'auto' }}>
-        <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quick Changes</h4>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {SUGGESTIONS.map(suggestion => (
-            <button 
-              key={suggestion}
-              onClick={() => handleSuggestionClick(suggestion)}
-              className="btn btn-outline"
-              style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderRadius: 'var(--radius-full)' }}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 5. Advanced Change */}
-      <div style={{ opacity: isBusy ? 0.5 : 1, pointerEvents: isBusy ? 'none' : 'auto' }}>
-        <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Advanced Change</h4>
         <form onSubmit={handleCustomSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           
           <div style={{ display: 'flex', gap: '8px' }}>
