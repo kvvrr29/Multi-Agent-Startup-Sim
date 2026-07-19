@@ -11,7 +11,7 @@ npm install
 npm run dev:full   # Express API (8787) + Vite frontend (3000)
 ```
 
-Open http://localhost:3000 and sign in with your email (magic link). AI generation goes through a **server-side Gemini proxy** by default — no API key needed in the browser. You can still paste a personal [Gemini API key](https://aistudio.google.com/apikey) in **AI Settings** to call Gemini directly; that key is kept only in memory for the current tab and never persisted. With AI Mode off, the app runs in clearly-labeled **Simulator Mode** using fallback templates.
+Open http://localhost:3000 and sign in with your email (magic link). AI generation goes through a **server-side Gemini proxy** by default — no API key needed in the browser. You can still paste a personal [Gemini API key](https://aistudio.google.com/apikey) in **AI Settings** to call Gemini directly; that key is stored only in the current browser so it survives reloads, and is never synced to the user's account or logged. With AI Mode off, the app runs in clearly-labeled **Simulator Mode** using fallback templates.
 
 ## Backend (Express + Supabase)
 
