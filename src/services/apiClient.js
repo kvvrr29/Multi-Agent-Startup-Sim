@@ -31,9 +31,14 @@ const request = async (path, { method = 'GET', body } = {}) => {
 
 export const api = {
   listProjects: () => request('/api/projects'),
-  createProject: (name) => request('/api/projects', { method: 'POST', body: { name } }),
+  createProject: (form) => request('/api/projects', { method: 'POST', body: form }),
   getProject: (id) => request(`/api/projects/${id}`),
-  updateProject: (id, patch) => request(`/api/projects/${id}`, { method: 'PUT', body: patch }),
+  updateProjectMeta: (id, patch) => request(`/api/projects/${id}`, { method: 'PATCH', body: patch }),
+  upsertSections: (id, sections) => request(`/api/projects/${id}/sections`, { method: 'PUT', body: { sections } }),
+  appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
+  createVersion: (id, version) => request(`/api/projects/${id}/versions`, { method: 'POST', body: version }),
+  upsertMemory: (id, body) => request(`/api/projects/${id}/memory`, { method: 'PUT', body }),
+  appendDecisions: (id, decisions) => request(`/api/projects/${id}/decisions`, { method: 'POST', body: { decisions } }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
   generate: (systemPrompt, userPrompt, jsonSchema) =>
     request('/api/ai/generate', { method: 'POST', body: { systemPrompt, userPrompt, jsonSchema } })
