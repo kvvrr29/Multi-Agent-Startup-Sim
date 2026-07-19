@@ -81,7 +81,7 @@ export default function AISettingsModal({ onClose }) {
                   </p>
                 )}
                 <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  If you enter your own key, it is kept only in memory for this tab and is never persisted or logged.
+                  Your personal key is stored only in this browser so it survives reloads. It is never synced to your account or logged; avoid saving it on a shared device.
                 </p>
               </div>
             </>
