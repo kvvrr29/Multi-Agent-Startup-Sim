@@ -25,7 +25,6 @@ import {
   BarChart2,
   Settings,
   BriefcaseBusiness,
-  BookOpen,
   Plus,
   LogOut,
 } from "lucide-react";
@@ -280,8 +279,7 @@ const ApprovalDashboard = () => {
 
 // One contextual panel at a time (doc §8)
 const PANELS = [
-  { id: "project", label: "Project", icon: BriefcaseBusiness },
-  { id: "blueprint", label: "Blueprint", icon: BookOpen },
+  { id: "project", label: "Your Projects", icon: BriefcaseBusiness },
   { id: "agents", label: "Agent Team", icon: Bot },
   { id: "memory", label: "Project Memory", icon: Database },
   { id: "versions", label: "Versions", icon: History },
@@ -320,7 +318,6 @@ export default function Dashboard() {
 
   const developerMode = useSettingsStore((state) => state.developerMode);
   const agents = useProjectStore((state) => state.agents);
-  const project = useProjectStore((state) => state.project);
   const activeCloudId = useAuthStore((state) => state.activeCloudId);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
@@ -450,84 +447,49 @@ export default function Dashboard() {
 
         {activePanel === "project" && (
           <>
-            <div className="glass-panel" style={{ padding: "1rem" }}>
-              <CloudProjectList
-                compact
-                activeId={activeCloudId}
-                onOpen={async (id) => {
-                  if (anyBusy) {
-                    window.alert(
-                      "Agents are still working — wait for the current run to finish before switching projects.",
-                    );
-                    return;
-                  }
-                  // Push pending edits into the current project's rows before
-                  // the stores are hydrated with the other project.
-                  await flush();
-                  await openCloudProject(id);
-                }}
-              />
-            </div>
-            <div
-              className="glass-panel"
+            <CloudProjectList
+              compact
+              activeId={activeCloudId}
+              onOpen={async (id) => {
+                if (anyBusy) {
+                  window.alert(
+                    "Agents are still working — wait for the current run to finish before switching projects.",
+                  );
+                  return;
+                }
+                // Push pending edits into the current project's rows before
+                // the stores are hydrated with the other project.
+                await flush();
+                await openCloudProject(id);
+              }}
+            />
+            <button
+              className="btn-secondary section-actions"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.",
+                  )
+                ) {
+                  // Detach from the cloud row BEFORE clearing stores, otherwise the
+                  // sync would overwrite the saved project with empty state.
+                  useAuthStore.getState().detachCloud();
+                  resetAllProjectData();
+                }
+              }}
               style={{
-                padding: "1rem",
-                display: "grid",
-                gap: "10px",
-                fontSize: "0.8rem",
+                padding: "12px",
+                borderRadius: "10px",
+                fontSize: "0.9rem",
+                display: "flex",
+                width: "100%",
+                justifyContent: "center",
+                gap: "6px",
               }}
             >
-              {Object.entries(project || {}).map(([key, value]) => (
-                <div key={key}>
-                  <strong style={{ textTransform: "capitalize" }}>
-                    {key.replace(/([A-Z])/g, " $1")}:
-                  </strong>{" "}
-                  <span style={{ color: "var(--text-secondary)" }}>
-                    {value || "Not specified"}
-                  </span>
-                </div>
-              ))}
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.",
-                    )
-                  ) {
-                    // Detach from the cloud row BEFORE clearing stores, otherwise the
-                    // sync would overwrite the saved project with empty state.
-                    useAuthStore.getState().detachCloud();
-                    resetAllProjectData();
-                  }
-                }}
-                style={{
-                  marginTop: "8px",
-                  padding: "8px",
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: "6px",
-                }}
-              >
-                <Plus size={14} /> New Project
-              </button>
-            </div>
+              <Plus size={16} /> New Project
+            </button>
           </>
-        )}
-
-        {activePanel === "blueprint" && (
-          <div
-            className="glass-panel"
-            style={{
-              padding: "1rem",
-              fontSize: "0.82rem",
-              color: "var(--text-secondary)",
-            }}
-          >
-            The complete 18-section blueprint is open in the workspace. Use
-            Reading Mode for a focused view. Download controls are below the
-            Table of Contents.
-          </div>
         )}
 
         {activePanel === "memory" && (
