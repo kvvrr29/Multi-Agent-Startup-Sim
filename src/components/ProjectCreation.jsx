@@ -1,70 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { runInitialSimulation } from '../services/simulationEngine';
-import { Sparkles, ArrowRight, Settings, FolderOpen, Trash2, LogOut, CloudDownload } from 'lucide-react';
+import { Sparkles, ArrowRight, Settings, LogOut, ArrowLeft } from 'lucide-react';
 import { AIStatusBanner } from './AIStatusUtils';
 import AISettingsModal from './AISettingsModal';
 import { useAuthStore } from '../store/useAuthStore';
 import { createCloudProject, openCloudProject } from '../services/cloudSync';
-
-function CloudProjectList() {
-  const cloudProjects = useAuthStore(state => state.cloudProjects);
-  const refreshProjects = useAuthStore(state => state.refreshProjects);
-  const deleteCloudProject = useAuthStore(state => state.deleteCloudProject);
-  const [openingId, setOpeningId] = useState(null);
-
-  useEffect(() => { refreshProjects(); }, [refreshProjects]);
-
-  if (cloudProjects.length === 0) return null;
-
-  return (
-    <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
-      <h3 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-        Your Projects
-      </h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {cloudProjects.map(p => (
-          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)' }}>
-            <FolderOpen size={14} color="var(--primary-electric)" style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated {new Date(p.updated_at).toLocaleString()}</div>
-            </div>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={openingId === p.id}
-              onClick={async () => {
-                setOpeningId(p.id);
-                await openCloudProject(p.id);
-                setOpeningId(null);
-              }}
-              style={{ padding: '5px 10px', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-            >
-              <CloudDownload size={12} /> {openingId === p.id ? 'Opening…' : 'Open'}
-            </button>
-            <button
-              type="button"
-              title={`Delete ${p.name}`}
-              onClick={() => {
-                if (window.confirm(`Delete "${p.name}" from the cloud? This cannot be undone.`)) deleteCloudProject(p.id);
-              }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', padding: '4px' }}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+import CloudProjectList from './CloudProjectList';
 
 export default function ProjectCreation() {
   const setProject = useProjectStore((state) => state.setProject);
+  const currentProject = useProjectStore((state) => state.project);
+  const setCurrentView = useProjectStore((state) => state.setCurrentView);
   const user = useAuthStore(state => state.user);
   const signOut = useAuthStore(state => state.signOut);
   const [showSettings, setShowSettings] = useState(false);
+  const [creating, setCreating] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -114,10 +65,16 @@ export default function ProjectCreation() {
     }
 
     setError('');
+    setCreating(true);
 
-    // Register the project in the cloud first so sync has a row to write into.
-    // A failure here is non-fatal: the app still works locally.
-    await createCloudProject(formData.name);
+    // The database is the source of truth: without a cloud row there is
+    // nowhere to store the project, so creation failure blocks the flow.
+    const cloudId = await createCloudProject(formData);
+    setCreating(false);
+    if (!cloudId) {
+      setError('Could not save the project to your account. Check your connection and try again.');
+      return;
+    }
 
     // Set the project to switch the view to Dashboard
     setProject(formData);
@@ -154,7 +111,18 @@ export default function ProjectCreation() {
           )}
         </div>
 
-        <CloudProjectList />
+        {currentProject && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setCurrentView('dashboard')}
+            style={{ marginBottom: '1.5rem', padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <ArrowLeft size={14} /> Back to Dashboard
+          </button>
+        )}
+
+        <CloudProjectList onOpen={openCloudProject} />
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="flex flex-col gap-1">
@@ -296,8 +264,8 @@ export default function ProjectCreation() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}>
-            Generate Blueprint <ArrowRight size={18} />
+          <button type="submit" disabled={creating} className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}>
+            {creating ? 'Creating…' : 'Generate Blueprint'} <ArrowRight size={18} />
           </button>
         </form>
       </div>
