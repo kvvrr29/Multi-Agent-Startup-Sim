@@ -26,8 +26,6 @@ import {
   runRevisionSimulation,
   approveSectionWorkflow,
 } from "../services/simulationEngine";
-import { ConfidenceLabel } from "./AIStatusUtils";
-import { SECTION_OWNERSHIP } from "../config/sectionOwnership";
 
 mermaid.initialize({
   startOnLoad: false,
@@ -177,7 +175,6 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
   const [feedback, setFeedback] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
-  const agentRole = SECTION_OWNERSHIP[id] || null;
 
   const handleApprove = () => {
     approveSectionWorkflow(id);
@@ -266,12 +263,6 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <SourceBadge sectionData={sectionData} />
-          {sectionData.confidence && (
-            <ConfidenceLabel
-              value={sectionData.confidence}
-              agentRole={agentRole}
-            />
-          )}
           <button
             onClick={handleCopy}
             title="Copy section content"
@@ -635,10 +626,8 @@ function BlueprintViewerInner() {
         position: "fixed",
         inset: 0,
         zIndex: 950,
-        background: "var(--bg-primary)",
         display: "flex",
         flexDirection: "column",
-        padding: "1rem",
       }
     : { display: "flex", flexDirection: "column", height: "100%" };
 
