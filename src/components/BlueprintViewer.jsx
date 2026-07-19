@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { useProjectStore } from "../store/useProjectStore";
 import ErrorBoundary from "./ErrorBoundary";
+import ExportToolbar from "./ExportToolbar";
 import {
   CheckCircle,
   Edit,
@@ -412,14 +413,11 @@ const TableOfContents = ({ sections, onNavigate }) => {
   return (
     <nav
       style={{
-        position: "sticky",
-        top: 0,
-        alignSelf: "flex-start",
-        width: "215px",
-        flexShrink: 0,
-        maxHeight: "100%",
+        flex: 1,
+        minHeight: 0,
         overflowY: "auto",
         paddingRight: "1rem",
+        paddingBottom: "4rem",
       }}
     >
       <button
@@ -632,7 +630,12 @@ function BlueprintViewerInner() {
         display: "flex",
         flexDirection: "column",
       }
-    : { display: "flex", flexDirection: "column", height: "100%" };
+    : {
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+      };
 
   return (
     <div style={containerStyle}>
@@ -710,12 +713,26 @@ function BlueprintViewerInner() {
               alignItems: "flex-start",
             }}
           >
-            <div className="section-actions" style={{ display: "contents" }}>
+            <aside
+              className="blueprint-viewer-sidebar section-actions"
+              style={{
+                position: "sticky",
+                top: 0,
+                alignSelf: "flex-start",
+                width: "215px",
+                height: "calc(100vh - 8rem)",
+                maxHeight: "100%",
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "1rem",
+              }}
+            >
               <TableOfContents
                 sections={sections}
                 onNavigate={handleNavigate}
               />
-            </div>
+            </aside>
             <div
               className="flex flex-col gap-6"
               style={{ flex: 1, minWidth: 0 }}
@@ -733,6 +750,16 @@ function BlueprintViewerInner() {
           </div>
         )}
       </div>
+      {sections.length > 0 && (
+        <div
+          className="blueprint-export-fab section-actions"
+          style={{ position: "absolute", left: "2rem", bottom: "1.5rem", zIndex: 40 }}
+        >
+          <ErrorBoundary componentName="Export">
+            <ExportToolbar compact />
+          </ErrorBoundary>
+        </div>
+      )}
     </div>
   );
 }
