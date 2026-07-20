@@ -9,7 +9,6 @@ import { createCloudProject, openCloudProject } from '../services/cloudSync';
 import CloudProjectList from './CloudProjectList';
 
 export default function ProjectCreation() {
-  const setProject = useProjectStore((state) => state.setProject);
   const currentProject = useProjectStore((state) => state.project);
   const setCurrentView = useProjectStore((state) => state.setCurrentView);
   const user = useAuthStore(state => state.user);
@@ -75,9 +74,6 @@ export default function ProjectCreation() {
       setError('Could not save the project to your account. Check your connection and try again.');
       return;
     }
-
-    // Set the project to switch the view to Dashboard
-    setProject(formData);
 
     // Kick off the agent simulation
     runInitialSimulation(formData);
