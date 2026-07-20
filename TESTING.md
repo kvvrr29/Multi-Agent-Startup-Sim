@@ -5,14 +5,14 @@
 | Gate | Command | Actual result |
 |---|---|---|
 | Lint | `npm run lint` | Passed — zero errors and zero warnings |
-| Unit | `npm run test:unit` | Passed — 8 files, 58 tests |
+| Unit | `npm run test:unit` | Passed — 9 files, 56 tests |
 | Production build | `npm run build` | Passed |
-| Simulator E2E | `npm run test:e2e` | Passed — 4 tests across desktop and mobile; desktop includes actual PDF/DOCX/Markdown downloads and restore-as-new-version |
+| Simulator E2E | `npm run test:e2e` | Passed — 4 runs across desktop and mobile; desktop includes actual PDF/DOCX/Markdown downloads |
 | Live Gemini | `npm run test:live` | Correctly skipped: `RUN_LIVE_AI=1` and `GEMINI_API_KEY` were not supplied |
 
-Unit coverage includes hard validation gates (including 100/100/0), malformed decisions, retry preservation, ownership normalization, multi-intent fallback routing, category hints, structured memory snapshots, approval/provenance diffs, all-fail, partial-fail, unchanged, duplicate workflow, and timeout behavior.
+Unit coverage includes hard validation gates (including 100/100/0), malformed decisions, retry preservation, ownership normalization, multi-intent fallback routing, category hints, structured memory snapshots, cloud sync persistence, all-fail, partial-fail, unchanged, duplicate workflow, and timeout behavior.
 
-Browser coverage includes project creation, all 18 sections, approval versions, Project Evolution preview/apply, monotonic version history, reload persistence, desktop/mobile layouts, Developer Mode gating, and PDF/DOCX/Markdown download paths. Playwright retains traces and screenshots only on failures in `test-results/`.
+Browser coverage includes project creation, all 18 sections, approvals, Project Evolution preview/apply, reload persistence, desktop/mobile layouts, Developer Mode gating, and PDF/DOCX/Markdown download paths. Playwright retains traces and screenshots only on failures in `test-results/`.
 
 **Release status:** deterministic gates are implemented. Do not label Version 2.0 Stable until the opt-in seven-category live Gemini report below has completed successfully.
 
@@ -51,7 +51,6 @@ For each project, verify and tick:
 - [ ] **Project Evolution** — a global change (e.g. "reduce budget and switch backend to Python") splits into per-agent tasks with reasons, preview → apply updates only listed sections
 - [ ] **Modify Section** — a section-local change updates only that section
 - [ ] **Memory persistence** — an earlier decision (e.g. target audience change) survives a later unrelated revision (check Memory panel)
-- [ ] **Version history** — every applied change creates a version; restore returns exact content + approval state; compare shows the right diff
 - [ ] **Approval calculations** — approve a few sections, check the Approval panel percentages
 - [ ] **Export** — PDF, DOCX, and Markdown all download with diagrams and without action buttons
 
