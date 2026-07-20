@@ -32,7 +32,11 @@ const request = async (path, { method = 'GET', body } = {}) => {
 export const api = {
   listProjects: () => request('/api/projects'),
   createProject: (form) => request('/api/projects', { method: 'POST', body: form }),
-  getProject: (id) => request(`/api/projects/${id}`),
+  getProjectBlueprint: (id) => request(`/api/projects/${id}/blueprint`),
+  getProjectMeta: (id) => request(`/api/projects/${id}/meta`),
+  getProjectEvents: (id) => request(`/api/projects/${id}/events`),
+  getProjectMemory: (id) => request(`/api/projects/${id}/memory`),
+  getProjectDecisions: (id) => request(`/api/projects/${id}/decisions`),
   updateProjectMeta: (id, patch) => request(`/api/projects/${id}`, { method: 'PATCH', body: patch }),
   upsertSections: (id, sections) => request(`/api/projects/${id}/sections`, { method: 'PUT', body: { sections } }),
   appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
