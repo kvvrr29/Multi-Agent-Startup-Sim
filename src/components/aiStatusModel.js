@@ -2,7 +2,7 @@ import { AlertTriangle, Cpu, Zap, Activity, WifiOff, Timer } from 'lucide-react'
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 
-export const AI_STATUS = {
+const AI_STATUS = {
   GENERATING: { key: 'generating', label: 'AI Generation Active', color: '#e5e5e5', icon: Activity },
   CONNECTED: { key: 'connected', label: 'Gemini Connected', color: '#10b981', icon: Zap },
   CONFIGURED: { key: 'configured', label: 'Gemini Configured', color: '#b8b8b8', icon: Zap },
