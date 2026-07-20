@@ -1,10 +1,11 @@
 import { api } from './apiClient';
 import { useProjectStore } from '../store/useProjectStore';
-import { useProjectMemoryStore, createEmptyMemory, MEMORY_CATEGORIES } from '../store/projectMemoryStore';
+import { useProjectMemoryStore, MEMORY_CATEGORIES } from '../store/projectMemoryStore';
 import { useSectionHistoryStore } from '../store/sectionHistoryStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { cloneSerializable } from '../store/persistence';
 import { createBlueprintSchema } from './blueprintSchema';
+import { useProjectResourceStore, PROJECT_RESOURCES } from '../store/useProjectResourceStore';
 
 // This module owns long-lived singleton state (store subscriptions + the sync
 // cursor). A hot-swap would strand the old subscriptions and leave the new
@@ -27,6 +28,8 @@ let inFlight = null;
  * this and only sends what changed, instead of the old whole-blob PUT.
  */
 let cursor = null;
+let resourceEpoch = 0;
+const pendingResources = new Map();
 
 const sectionFingerprint = (section = {}) => JSON.stringify({
   content: section.content || '',
@@ -38,13 +41,17 @@ const sectionFingerprint = (section = {}) => JSON.stringify({
   failureReason: section.failureReason || null
 });
 
-const metaFingerprint = (project, memory) => JSON.stringify({
-  name: project?.name || 'Untitled Project',
-  domain: memory?.domain || ''
+const metaFingerprint = (project) => JSON.stringify({
+  name: project?.name || 'Untitled Project'
 });
 
-const memoryFingerprint = (memory = {}) => JSON.stringify(
-  MEMORY_CATEGORIES.map(cat => memory[cat] || {})
+const memoryFingerprints = (memory = {}) => Object.fromEntries(
+  MEMORY_CATEGORIES.map(category => [
+    category,
+    Object.fromEntries(
+      Object.entries(memory[category] || {}).map(([key, value]) => [key, JSON.stringify(value ?? null)])
+    )
+  ])
 );
 
 const snapshotCursor = () => {
@@ -56,8 +63,8 @@ const snapshotCursor = () => {
     ),
     eventCount: workflowEvents.length,
     decisionCount: decisionHistory.length,
-    memoryJSON: memoryFingerprint(memory),
-    metaJSON: metaFingerprint(project, memory)
+    memoryByKey: memoryFingerprints(memory),
+    metaJSON: metaFingerprint(project)
   };
 };
 
@@ -113,21 +120,28 @@ const doPush = async () => {
     tasks.push({ name: 'decisions', run: () => api.appendDecisions(activeCloudId, cloneSerializable(newDecisions)), commit: () => { cursor.decisionCount = next.decisionCount; } });
   }
 
-  if (next.memoryJSON !== cursor.memoryJSON) {
-    const entries = MEMORY_CATEGORIES.flatMap(category =>
-      Object.entries(memory[category] || {}).map(([key, value]) => ({ category, key, value }))
-    );
-    if (entries.length > 0) {
-      tasks.push({ name: 'memory', run: () => api.upsertMemory(activeCloudId, { entries }), commit: () => { cursor.memoryJSON = next.memoryJSON; } });
-    }
+  const changedMemoryEntries = MEMORY_CATEGORIES.flatMap(category =>
+    Object.entries(memory[category] || {})
+      .filter(([key]) => next.memoryByKey[category]?.[key] !== cursor.memoryByKey[category]?.[key])
+      .map(([key, value]) => ({ category, key, value }))
+  );
+  if (changedMemoryEntries.length > 0) {
+    tasks.push({
+      name: 'memory',
+      run: () => api.upsertMemory(activeCloudId, { entries: changedMemoryEntries }),
+      commit: () => {
+        changedMemoryEntries.forEach(({ category, key }) => {
+          cursor.memoryByKey[category][key] = next.memoryByKey[category][key];
+        });
+      }
+    });
   }
 
   if (next.metaJSON !== cursor.metaJSON) {
     tasks.push({
       name: 'meta',
       run: () => api.updateProjectMeta(activeCloudId, {
-        name: project?.name || 'Untitled Project',
-        memoryDomain: memory?.domain || ''
+        name: project?.name || 'Untitled Project'
       }),
       commit: () => { cursor.metaJSON = next.metaJSON; }
     });
@@ -182,19 +196,35 @@ export const startSync = () => {
 export const stopSync = () => {
   unsubscribeAll();
   cursor = null;
+  resetProjectResourceLoading();
+};
+
+export const resetProjectResourceLoading = (projectId = null, status = 'idle') => {
+  resourceEpoch += 1;
+  pendingResources.clear();
+  useProjectResourceStore.getState().resetForProject(projectId, status);
 };
 
 /** Register a new project on the server and make it the sync target. */
 export const createCloudProject = async (form) => {
-  const { session, setActiveCloudId } = useAuthStore.getState();
+  const { session, setActiveCloudId, addCloudProject } = useAuthStore.getState();
   if (!session) return null;
   try {
     const row = await api.createProject(form);
+    addCloudProject(row);
     setActiveCloudId(row.id);
     // Make this the active project for the client-side section history (empty)
     // before the initial simulation starts recording versions.
     useSectionHistoryStore.getState().loadProject(row.id, []);
+    // The create response already persisted the complete form. Initialize the
+    // local project before taking the sync baseline so setProject does not
+    // immediately echo the same metadata back through PATCH /projects/:id.
+    useProjectStore.getState().setProject({ ...form, id: row.id });
     cursor = snapshotCursor();
+    // All four domains are born in this browser and will be appended/upserted
+    // by normal sync. Fetching the just-created, incomplete DB rows would race
+    // initial generation and overwrite local state.
+    resetProjectResourceLoading(row.id, 'ready');
     return row.id;
   } catch (err) {
     console.error('[Cloud] Failed to create project row:', err.message);
@@ -202,7 +232,7 @@ export const createCloudProject = async (form) => {
   }
 };
 
-// ---------- Hydration: composed payload rows → store shapes ----------
+// ---------- Hydration: blueprint rows → store shape ----------
 
 const buildBlueprint = (sectionRows = []) => {
   const blueprint = createBlueprintSchema();
@@ -222,33 +252,23 @@ const buildBlueprint = (sectionRows = []) => {
   return blueprint;
 };
 
-const buildMemory = (memoryRows = [], domain = '') => {
-  const memory = createEmptyMemory();
-  memory.domain = domain;
-  memoryRows.forEach(row => {
-    if (!MEMORY_CATEGORIES.includes(row.category)) return;
-    memory[row.category] = { ...memory[row.category], [row.key]: row.value };
-  });
-  if (domain) memory.scope = { ...memory.scope, domain };
-  return memory;
-};
-
-const buildProjectForm = (row) => ({
-  name: row.name,
-  idea: row.idea || '',
-  targetAudience: row.target_audience || '',
-  budget: row.budget || '',
-  timeline: row.timeline || '',
-  platform: row.platform || 'web',
-  teamSize: row.team_size || '',
-  priorities: row.priorities || ''
-});
-
-/** Load a project from the server and hydrate every store from it. */
+/**
+ * Select a registry project and hydrate its blueprint only. The outgoing
+ * project's pending writes are flushed first; the active stores are not
+ * changed unless the incoming blueprint request succeeds.
+ */
 export const openCloudProject = async (id) => {
+  const registryProject = useAuthStore.getState().cloudProjects.find(project => project.id === id);
+  if (!registryProject) {
+    console.error('[Cloud] Cannot open a project that is not in the registry.');
+    return false;
+  }
+
+  await flush();
+
   let data;
   try {
-    data = await api.getProject(id);
+    data = await api.getProjectBlueprint(id);
   } catch (err) {
     console.error('[Cloud] Failed to open project:', err.message);
     return false;
@@ -256,17 +276,11 @@ export const openCloudProject = async (id) => {
   suspended = true;
   try {
     const projectStore = useProjectStore.getState();
-    projectStore.setBlueprint(buildBlueprint(data.sections));
-    useProjectStore.setState({
-      project: buildProjectForm(data.project),
-      workflowEvents: (data.events || []).map(row => cloneSerializable(row.payload)),
-      currentView: 'dashboard'
-    });
-    projectStore.resetAllAgents();
-    useProjectMemoryStore.getState().restoreSnapshot({
-      memory: buildMemory(data.memory, data.project.memory_domain),
-      decisionHistory: (data.decisions || []).map(row => cloneSerializable(row.payload))
-    });
+    projectStore.clearForProjectSelection(
+      { id, name: registryProject.name },
+      buildBlueprint(data.sections)
+    );
+    useProjectMemoryStore.getState().clearMemory();
     // Reconcile client-side histories: DB wins for approved sections, and local
     // unapproved drafts are restored and overlaid onto the blueprint display.
     useSectionHistoryStore.getState().loadProject(id, data.sections);
@@ -275,5 +289,162 @@ export const openCloudProject = async (id) => {
   }
   useAuthStore.getState().setActiveCloudId(id);
   cursor = snapshotCursor();
+  resetProjectResourceLoading(id);
   return true;
+};
+
+const normalizeListPayload = (payload, key) => Array.isArray(payload) ? payload : (payload?.[key] || []);
+
+const mergeAppendOnly = (databaseRows, localRows) => {
+  const databaseIds = new Set(databaseRows.map(row => String(row?.id ?? '')));
+  return [
+    ...databaseRows,
+    ...localRows.filter(row => !databaseIds.has(String(row?.id ?? '')))
+  ];
+};
+
+const buildMemory = (entries) => {
+  const hydrated = Object.fromEntries(MEMORY_CATEGORIES.map(category => [category, {}]));
+  entries.forEach(entry => {
+    if (MEMORY_CATEGORIES.includes(entry?.category) && typeof entry?.key === 'string') {
+      hydrated[entry.category][entry.key] = entry.value;
+    }
+  });
+  return hydrated;
+};
+
+const applyHydratedResource = (resource, payload) => {
+  suspended = true;
+  try {
+    if (resource === 'meta') {
+      const currentProject = useProjectStore.getState().project || {};
+      const metaWasLocallyChanged = cursor && metaFingerprint(currentProject) !== cursor.metaJSON;
+      const databaseProject = { ...currentProject, ...(payload || {}), id: currentProject.id };
+      useProjectStore.setState({
+        project: {
+          ...databaseProject,
+          ...(metaWasLocallyChanged ? { name: currentProject.name } : {}),
+        }
+      });
+      // Rebase to the database value, not the merged display value, so a local
+      // name edit made before hydration remains dirty and is still sent.
+      if (cursor) cursor.metaJSON = metaFingerprint(databaseProject);
+      return;
+    }
+
+    if (resource === 'events') {
+      const databaseEvents = normalizeListPayload(payload, 'events');
+      const localEvents = useProjectStore.getState().workflowEvents.slice(cursor?.eventCount || 0);
+      useProjectStore.setState({ workflowEvents: mergeAppendOnly(databaseEvents, localEvents) });
+      if (cursor) cursor.eventCount = databaseEvents.length;
+      return;
+    }
+
+    if (resource === 'memory') {
+      const databaseMemory = buildMemory(normalizeListPayload(payload, 'entries'));
+      const currentMemory = useProjectMemoryStore.getState().memory;
+      const currentFingerprints = memoryFingerprints(currentMemory);
+      const locallyChangedEntries = cursor
+        ? MEMORY_CATEGORIES.flatMap(category =>
+            Object.entries(currentMemory[category] || {})
+              .filter(([key]) => currentFingerprints[category]?.[key] !== cursor.memoryByKey[category]?.[key])
+              .map(([key, value]) => ({ category, key, value }))
+          )
+        : [];
+      const mergedMemory = {
+        ...databaseMemory,
+        ...Object.fromEntries(MEMORY_CATEGORIES.map(category => [
+          category,
+          { ...(databaseMemory[category] || {}) }
+        ]))
+      };
+      locallyChangedEntries.forEach(({ category, key, value }) => {
+        mergedMemory[category][key] = value;
+      });
+      useProjectMemoryStore.setState({ memory: mergedMemory });
+      // Rebase each key to its DB value. Any locally overlaid key remains dirty
+      // and the next sync sends only that key rather than the full memory map.
+      if (cursor) {
+        cursor.memoryByKey = memoryFingerprints(databaseMemory);
+      }
+      return;
+    }
+
+    if (resource === 'decisions') {
+      const databaseDecisions = normalizeListPayload(payload, 'decisions');
+      const localDecisions = useProjectMemoryStore.getState().decisionHistory.slice(cursor?.decisionCount || 0);
+      useProjectMemoryStore.setState({
+        decisionHistory: mergeAppendOnly(databaseDecisions, localDecisions)
+      });
+      if (cursor) cursor.decisionCount = databaseDecisions.length;
+    }
+  } finally {
+    suspended = false;
+  }
+};
+
+const RESOURCE_LOADERS = {
+  meta: id => api.getProjectMeta(id),
+  events: id => api.getProjectEvents(id),
+  memory: id => api.getProjectMemory(id),
+  decisions: id => api.getProjectDecisions(id)
+};
+
+const ensureOneResource = (projectId, resource, epoch) => {
+  const key = `${projectId}:${resource}`;
+  const existing = pendingResources.get(key);
+  if (existing) return existing;
+
+  const state = useProjectResourceStore.getState();
+  if (state.projectId === projectId && state.resources[resource]?.status === 'ready') {
+    return Promise.resolve();
+  }
+
+  state.setResourceState(projectId, resource, 'loading');
+  const request = RESOURCE_LOADERS[resource](projectId)
+    .then(payload => {
+      const isCurrent = epoch === resourceEpoch
+        && useAuthStore.getState().activeCloudId === projectId
+        && useProjectResourceStore.getState().projectId === projectId;
+      if (!isCurrent) return;
+      applyHydratedResource(resource, payload);
+      useProjectResourceStore.getState().setResourceState(projectId, resource, 'ready');
+    })
+    .catch(error => {
+      const isCurrent = epoch === resourceEpoch
+        && useAuthStore.getState().activeCloudId === projectId
+        && useProjectResourceStore.getState().projectId === projectId;
+      if (isCurrent) {
+        useProjectResourceStore.getState().setResourceState(
+          projectId,
+          resource,
+          'error',
+          error?.message || `Could not load ${resource}.`
+        );
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (pendingResources.get(key) === request) pendingResources.delete(key);
+    });
+  pendingResources.set(key, request);
+  return request;
+};
+
+/**
+ * Lazily hydrate independent project resources. Fulfilled resources are kept
+ * even when a sibling fails; callers receive one aggregate failure so AI
+ * workflows can stop before using incomplete context.
+ */
+export const ensureProjectResources = async (resourceNames) => {
+  const projectId = useAuthStore.getState().activeCloudId;
+  if (!projectId) throw new Error('Open a project before loading its data.');
+  const resources = [...new Set(resourceNames)].filter(name => PROJECT_RESOURCES.includes(name));
+  const epoch = resourceEpoch;
+  const results = await Promise.allSettled(resources.map(resource => ensureOneResource(projectId, resource, epoch)));
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) throw failed.reason;
+  if (epoch !== resourceEpoch || useAuthStore.getState().activeCloudId !== projectId) {
+    throw new Error('The active project changed while its data was loading.');
+  }
 };
