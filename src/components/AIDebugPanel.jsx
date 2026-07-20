@@ -20,7 +20,7 @@ const SOURCE_BADGE = ({ source }) => {
 };
 
 const LOG_VALIDATION_BADGE = ({ result }) => {
-  const colors = { PASSED: '#10b981', FAILED: '#ef4444', FALLBACK: '#f59e0b', LOW_CONFIDENCE: '#8b5cf6' };
+  const colors = { PASSED: '#10b981', FAILED: '#ef4444', FALLBACK: '#f59e0b', LOW_CONFIDENCE: '#f59e0b' };
   return (
     <span style={{
       padding: '1px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: 700,
@@ -65,8 +65,8 @@ export default function AIDebugPanel() {
   const tabStyle = (t) => ({
     padding: '6px 12px', fontSize: '0.78rem', cursor: 'pointer', border: 'none',
     borderRadius: '4px', fontWeight: activeTab === t ? 700 : 400,
-    background: activeTab === t ? 'var(--primary-electric)' : 'transparent',
-    color: activeTab === t ? '#fff' : 'var(--text-muted)',
+    background: activeTab === t ? 'var(--control-active)' : 'transparent',
+    color: activeTab === t ? 'var(--text-primary)' : 'var(--text-muted)',
   });
 
   return (
@@ -85,7 +85,7 @@ export default function AIDebugPanel() {
         borderTopLeftRadius: '10px', borderTopRightRadius: '10px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 700 }}>
-          <Activity size={16} color="var(--primary-electric)" /> AI Pipeline Debug
+          <Activity size={16} color="var(--accent-primary)" /> AI Pipeline Debug
         </div>
         <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <X size={16} />
@@ -97,7 +97,7 @@ export default function AIDebugPanel() {
         <button style={tabStyle(TAB.METRICS)} onClick={() => setActiveTab(TAB.METRICS)}>API Metrics</button>
         <button style={tabStyle(TAB.SOURCES)} onClick={() => setActiveTab(TAB.SOURCES)}>Sources</button>
         <button style={tabStyle(TAB.LOGS)} onClick={() => setActiveTab(TAB.LOGS)}>
-          Raw Logs {rawLogs.length > 0 && <span style={{ marginLeft: '4px', fontSize: '0.65rem', background: 'var(--accent-purple)', color: '#fff', borderRadius: '8px', padding: '1px 5px' }}>{rawLogs.length}</span>}
+          Raw Logs {rawLogs.length > 0 && <span style={{ marginLeft: '4px', fontSize: '0.65rem', background: 'var(--control-active)', color: 'var(--text-primary)', borderRadius: '8px', padding: '1px 5px' }}>{rawLogs.length}</span>}
         </button>
       </div>
 
@@ -109,7 +109,7 @@ export default function AIDebugPanel() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
               {[
-                { label: 'Sent', value: apiStats.sent, color: '#8b5cf6' },
+                { label: 'Sent', value: apiStats.sent, color: '#a3a3a3' },
                 { label: 'Successful', value: apiStats.successful, color: '#10b981' },
                 { label: 'Failed', value: apiStats.failed, color: '#ef4444' },
               ].map(({ label, value, color }) => (
