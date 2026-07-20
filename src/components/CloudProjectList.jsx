@@ -43,14 +43,14 @@ export default function CloudProjectList({
               padding: "8px 10px",
               borderRadius: "8px",
               background: isActive
-                ? "rgba(67, 56, 202, 0.15)"
+                ? "var(--accent-surface)"
                 : "rgba(0,0,0,0.2)",
-              border: `1px solid ${isActive ? "var(--primary-electric)" : "var(--border-color)"}`,
+              border: `1px solid ${isActive ? "var(--accent-primary)" : "var(--border-color)"}`,
             }}
           >
             <FolderOpen
               size={14}
-              color="var(--primary-electric)"
+              color="var(--accent-primary)"
               style={{ flexShrink: 0 }}
             />
             <div style={{ flex: 1, minWidth: 0 }}>
