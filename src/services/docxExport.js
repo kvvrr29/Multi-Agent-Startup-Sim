@@ -103,7 +103,27 @@ const markdownBlocks = async (markdown, diagramOffset) => {
 };
 
 export const createBlueprintDocx = async (project, blueprint) => {
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', suppressErrorRendering: true });
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'default',
+    suppressErrorRendering: true,
+    themeVariables: {
+      background: '#ffffff',
+      primaryColor: '#e5e5e5',
+      primaryTextColor: '#171717',
+      primaryBorderColor: '#525252',
+      secondaryColor: '#d4d4d4',
+      tertiaryColor: '#f5f5f5',
+      lineColor: '#525252',
+      textColor: '#171717',
+      mainBkg: '#e5e5e5',
+      nodeBorder: '#525252',
+      clusterBkg: '#f5f5f5',
+      clusterBorder: '#737373',
+      edgeLabelBackground: '#ffffff',
+    },
+  });
   const children = [
     new Paragraph({ text: project?.name || 'Startup Blueprint', heading: HeadingLevel.TITLE }),
     new Paragraph({ text: 'Startup Blueprint', subtitle: true })
