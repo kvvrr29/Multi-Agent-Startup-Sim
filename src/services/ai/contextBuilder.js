@@ -24,7 +24,7 @@ export const buildContextString = (customInstruction = '', agentRole = 'mediator
   let context = `--- STARTUP CONTEXT ---\n`;
   context += `Project Name: ${project?.name || 'Unknown'}\n`;
   context += `Project Description (PRIMARY SOURCE OF TRUTH — weigh this above the project name): ${project?.idea || 'Unknown'}\n`;
-  context += `Domain: ${current('scope', 'domain', memory?.domain)}\n`;
+  context += `Domain: ${current('scope', 'domain')}\n`;
   context += `Industry: ${current('scope', 'industry')}\n`;
   context += `Project Type: ${current('scope', 'project_type')}\n`;
   context += `Business Model: ${current('scope', 'business_model')}\n`;
