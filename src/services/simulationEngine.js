@@ -1,5 +1,6 @@
 import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
+import { useSectionHistoryStore } from '../store/sectionHistoryStore';
 import { generateDynamicBlueprint } from './blueprintFactory';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { generateAgentContent } from './ai/aiBlueprintFactory';
@@ -82,6 +83,7 @@ export const runInitialSimulation = async (projectData) => {
   const runId = store.beginWorkflow('initial-generation');
   if (!runId) return { status: 'rejected', reason: 'Another workflow is already active.' };
   const memoryStore = useProjectMemoryStore.getState();
+  const sectionHistory = useSectionHistoryStore.getState();
 
   console.log("Mediator started");
   
@@ -171,7 +173,7 @@ export const runInitialSimulation = async (projectData) => {
 
       sections.forEach(sectionKey => {
         if (result.content[sectionKey]) {
-          store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', sectionMetadata({
+          sectionHistory.addVersion(sectionKey, result.content[sectionKey], sectionMetadata({
             source: result.generationSource || 'Gemini', agent: id, scores: result.scores, failureReason: result.failureReason
           }));
         }
@@ -186,13 +188,13 @@ export const runInitialSimulation = async (projectData) => {
     await sleep(500);
     store.updateAgentStatus('mediator', AGENT_STATUS.REVIEWING, 'Reviewing agent outputs');
 
-    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', sectionMetadata({ source: 'Local', agent: 'mediator' }));
+    sectionHistory.addVersion('agentContributions', composeAgentContributions(), sectionMetadata({ source: 'Local', agent: 'mediator' }));
 
     const mediatorContent = await handleAgentGeneration('mediator', {
       finalRecommendations: blueprintContent.finalRecommendations
     });
     if (mediatorContent.content.finalRecommendations) {
-      store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', sectionMetadata({
+      sectionHistory.addVersion('finalRecommendations', mediatorContent.content.finalRecommendations, sectionMetadata({
         source: mediatorContent.generationSource || 'Gemini', agent: 'mediator', scores: mediatorContent.scores, failureReason: mediatorContent.failureReason
       }));
     }
@@ -277,6 +279,7 @@ export const applyRevisionSimulation = async (previewData) => {
     return result;
   }
   const memoryStore = useProjectMemoryStore.getState();
+  const sectionHistory = useSectionHistoryStore.getState();
   const { aiModeEnabled } = useSettingsStore.getState();
 
   const { instruction, confidence } = previewData;
@@ -329,10 +332,11 @@ export const applyRevisionSimulation = async (previewData) => {
              if (taskSections.includes(sectionKey)) {
                const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
                if (content.trim() !== existing.trim()) {
-                 store.updateBlueprintSection(sectionKey, content, 'pending', sectionMetadata({
+                 // addVersion is a no-op (returns false) for approved/locked sections.
+                 const added = sectionHistory.addVersion(sectionKey, content, sectionMetadata({
                    source: result.generationSource || 'Gemini', agent: targetAgent, scores: result.scores
                  }));
-                 changedSections.push(sectionKey);
+                 if (added) changedSections.push(sectionKey);
                }
              }
            });
@@ -358,8 +362,8 @@ export const applyRevisionSimulation = async (previewData) => {
            const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
            const revised = `${existing}\n\n**Revision:** Adjusted based on request: ${taskDescription || instruction}`.trim();
            if (revised !== existing.trim()) {
-             store.updateBlueprintSection(sectionKey, revised, 'pending', sectionMetadata({ source: 'Fallback', agent: targetAgent }));
-             changedSections.push(sectionKey);
+             const added = sectionHistory.addVersion(sectionKey, revised, sectionMetadata({ source: 'Fallback', agent: targetAgent }));
+             if (added) changedSections.push(sectionKey);
            }
         });
         store.updateAgentStatus(targetAgent, AGENT_STATUS.COMPLETED, changedSections.length ? 'Task completed' : 'No changes required');
@@ -445,6 +449,10 @@ export const approveSectionWorkflow = (sectionKey) => {
     const section = store.blueprint[sectionKey];
     if (!section || section.status === 'approved') return { status: 'unchanged' };
     if (!store.approveBlueprintSection(sectionKey, runId)) return { status: 'failed' };
+    // Collapse the section's client-side history to the viewed version and lock
+    // it; the status flip above is what the cloud sync's approved-only gate
+    // picks up to write this section (and only now) to the database.
+    useSectionHistoryStore.getState().approveSection(sectionKey);
     store.addWorkflowEvent({ type: 'revision', message: `${SECTION_TITLES[sectionKey] || sectionKey} approved`, agent: 'mediator' });
     return { status: 'changed' };
   } finally {
@@ -455,6 +463,7 @@ export const approveSectionWorkflow = (sectionKey) => {
 export const resetAllProjectData = () => {
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
+  useSectionHistoryStore.getState().reset();
   useAIDebugStore.getState().reset();
   useAICostStore.getState().reset();
 };
