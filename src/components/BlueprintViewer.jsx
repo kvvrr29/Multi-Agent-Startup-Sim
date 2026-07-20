@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { useProjectStore } from "../store/useProjectStore";
+import { useSectionHistoryStore } from "../store/sectionHistoryStore";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportToolbar from "./ExportToolbar";
 import {
@@ -13,6 +14,7 @@ import {
   Lock,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Copy,
   Check,
   Maximize2,
@@ -34,6 +36,21 @@ mermaid.initialize({
   theme: "dark",
   securityLevel: "strict",
   fontFamily: "Inter, sans-serif",
+  themeVariables: {
+    background: "#171717",
+    primaryColor: "#303030",
+    primaryTextColor: "#f5f5f5",
+    primaryBorderColor: "#8c8c8c",
+    secondaryColor: "#2b2b2b",
+    tertiaryColor: "#1f1f1f",
+    lineColor: "#a3a3a3",
+    textColor: "#f5f5f5",
+    mainBkg: "#303030",
+    nodeBorder: "#8c8c8c",
+    clusterBkg: "#1f1f1f",
+    clusterBorder: "#555555",
+    edgeLabelBackground: "#171717",
+  },
   // On invalid diagram text mermaid otherwise draws its error graphic into the
   // scratch <div> and throws before cleaning it up, leaving phantom page height.
   suppressErrorRendering: true,
@@ -176,6 +193,11 @@ const SourceBadge = ({ sectionData }) => {
 // Section block with approval workflow, collapse, and copy
 const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
+  // Client-side version-history navigation (primitive selectors to avoid
+  // re-render churn from returning a fresh object each render).
+  const versionCount = useSectionHistoryStore((s) => s.byProject[s.activeProjectId]?.[id]?.versions.length ?? 0);
+  const activeIndex = useSectionHistoryStore((s) => s.byProject[s.activeProjectId]?.[id]?.activeIndex ?? 0);
+  const isApproved = sectionData.status === "approved";
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -267,6 +289,39 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {!isApproved && versionCount > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+              <button
+                onClick={() => useSectionHistoryStore.getState().setActiveIndex(id, activeIndex - 1)}
+                disabled={activeIndex === 0}
+                title="Previous version"
+                style={{
+                  background: "transparent", border: "none", padding: "2px",
+                  color: "var(--text-muted)", display: "flex",
+                  cursor: activeIndex === 0 ? "default" : "pointer",
+                  opacity: activeIndex === 0 ? 0.35 : 1,
+                }}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", minWidth: "38px", textAlign: "center" }}>
+                v{activeIndex + 1}/{versionCount}
+              </span>
+              <button
+                onClick={() => useSectionHistoryStore.getState().setActiveIndex(id, activeIndex + 1)}
+                disabled={activeIndex === versionCount - 1}
+                title="Next version"
+                style={{
+                  background: "transparent", border: "none", padding: "2px",
+                  color: "var(--text-muted)", display: "flex",
+                  cursor: activeIndex === versionCount - 1 ? "default" : "pointer",
+                  opacity: activeIndex === versionCount - 1 ? 0.35 : 1,
+                }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
           <SourceBadge sectionData={sectionData} />
           <button
             onClick={handleCopy}
@@ -307,7 +362,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
             }}
           >
             <button
-              disabled={workflowActive}
+              disabled={workflowActive || isApproved}
               onClick={handleApprove}
               className="btn-success"
               style={{
@@ -317,7 +372,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
                 opacity: workflowActive ? 0.5 : 1,
               }}
             >
-              {sectionData.status === "approved" ? (
+              {isApproved ? (
                 <>
                   <Lock size={14} /> Approved
                 </>
@@ -327,34 +382,39 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
                 </>
               )}
             </button>
-            <button
-              disabled={workflowActive}
-              onClick={() => setIsRequestingChanges(!isRequestingChanges)}
-              className="btn-secondary"
-              style={{
-                padding: "10px 12px",
-                fontSize: "0.8rem",
-                borderRadius: "8px",
-              }}
-            >
-              <Edit size={14} />{" "}
-              {isRequestingChanges ? "Cancel Edit" : "Modify"}
-            </button>
-            <button
-              disabled={workflowActive}
-              onClick={() =>
-                runRevisionSimulation(`Regenerate ${label}`, "", id)
-              }
-              className="btn-secondary"
-              style={{
-                padding: "10px 12px",
-                fontSize: "0.8rem",
-                borderRadius: "8px",
-                opacity: workflowActive ? 0.5 : 0.8,
-              }}
-            >
-              <RefreshCw size={14} /> Regenerate
-            </button>
+            {/* Approved sections are final and locked — no more edits. */}
+            {!isApproved && (
+              <>
+                <button
+                  disabled={workflowActive}
+                  onClick={() => setIsRequestingChanges(!isRequestingChanges)}
+                  className="btn-secondary"
+                  style={{
+                    padding: "10px 12px",
+                    fontSize: "0.8rem",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <Edit size={14} />{" "}
+                  {isRequestingChanges ? "Cancel Edit" : "Modify"}
+                </button>
+                <button
+                  disabled={workflowActive}
+                  onClick={() =>
+                    runRevisionSimulation(`Regenerate ${label}`, "", id)
+                  }
+                  className="btn-secondary"
+                  style={{
+                    padding: "10px 12px",
+                    fontSize: "0.8rem",
+                    borderRadius: "8px",
+                    opacity: workflowActive ? 0.5 : 0.8,
+                  }}
+                >
+                  <RefreshCw size={14} /> Regenerate
+                </button>
+              </>
+            )}
           </div>
 
           {/* Helper Text */}
@@ -363,7 +423,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
               style={{
                 marginTop: "1rem",
                 fontSize: "0.75rem",
-                color: "var(--accent-purple)",
+                color: "var(--accent-secondary)",
                 fontStyle: "italic",
                 display: "flex",
                 alignItems: "center",
@@ -387,7 +447,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
                   padding: "12px 48px 12px 12px",
                   borderRadius: "8px",
                   border: "1px solid var(--border-color)",
-                  background: "#111724",
+                  background: "var(--bg-primary)",
                   color: "var(--text-primary)",
                   fontSize: "0.85rem",
                 }}
