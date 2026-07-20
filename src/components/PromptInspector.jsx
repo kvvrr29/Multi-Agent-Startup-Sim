@@ -24,7 +24,7 @@ export default function PromptInspector() {
       {/* Header */}
       <div style={{ padding: '10px 15px', background: 'var(--bg-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 600 }}>
-          <Terminal size={16} color="var(--primary-electric)" /> System Prompts Inspector
+          <Terminal size={16} color="var(--accent-primary)" /> System Prompts Inspector
         </div>
         <button onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
           <X size={16} />
