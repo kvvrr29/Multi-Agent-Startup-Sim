@@ -18,6 +18,12 @@ export default function AuthGate({ children }) {
   const [bootError, setBootError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
 
+  // Key the bootstrap on the stable user id, NOT the session object. Supabase
+  // mints a fresh session object on token refresh and tab re-focus; depending
+  // on the object would re-run the effect, re-hydrate the stores from the DB
+  // over un-synced local edits, and cancel the pending push via stopSync.
+  const userId = session?.user?.id ?? null;
+
   useEffect(() => { init(); }, [init]);
 
   // Bootstrap after sign-in: open the most recently used project (list is
@@ -25,7 +31,8 @@ export default function AuthGate({ children }) {
   // first-time users go to the create screen. An unreachable API must show
   // an error — never be mistaken for "this user has no projects".
   useEffect(() => {
-    if (!session) {
+    if (!userId) {
+      stopSync();
       setBooted(false);
       setBootError(null);
       resetAllProjectData();
@@ -53,8 +60,8 @@ export default function AuthGate({ children }) {
       setBooted(true);
       startSync();
     })();
-    return () => { cancelled = true; stopSync(); };
-  }, [session, retryKey]);
+    return () => { cancelled = true; };
+  }, [userId, retryKey]);
 
   // Best effort: push pending changes before the tab closes.
   useEffect(() => {
