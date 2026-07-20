@@ -50,8 +50,8 @@ const createInitialAgents = () => Object.fromEntries(
   Object.entries(initialAgents).map(([key, value]) => [key, { ...value }])
 );
 
-// No local persistence: the database is the source of truth. Stores are
-// hydrated from the cloud via openCloudProject() after sign-in.
+// No local persistence: the database is the source of truth. Selecting a
+// registry entry hydrates its blueprint; other project domains remain unloaded.
 export const useProjectStore = create((set, get) => ({
   // App State
   currentView: 'create', // 'create', 'dashboard'
@@ -67,6 +67,10 @@ export const useProjectStore = create((set, get) => ({
   
   // Workflow Timeline
   workflowEvents: [],
+
+  // 'local' means this browser is actively generating a newly-created project.
+  // 'unloaded' means only the selected project's blueprint has been fetched.
+  deferredDataState: 'unloaded',
 
   // Active Revision State
   activeRevision: null,
@@ -101,7 +105,31 @@ export const useProjectStore = create((set, get) => ({
     return { agents: resetAgents, activeRevision: null };
   }),
   
-  setProject: (projectData) => set({ project: projectData, currentView: 'dashboard' }),
+  setProject: (projectData) => set({ project: projectData, currentView: 'dashboard', deferredDataState: 'local' }),
+
+  clearForProjectSelection: (projectData, blueprint) => set({
+    currentView: 'dashboard',
+    project: projectData,
+    agents: createInitialAgents(),
+    blueprint,
+    workflowEvents: [],
+    activeRevision: null,
+    recentRevisionResult: null,
+    workflow: { active: false, runId: null, kind: null, startedAt: null },
+    deferredDataState: 'unloaded'
+  }),
+
+  clearActiveProject: (currentView = 'dashboard') => set({
+    currentView,
+    project: null,
+    agents: createInitialAgents(),
+    blueprint: createBlueprintSchema(),
+    workflowEvents: [],
+    activeRevision: null,
+    recentRevisionResult: null,
+    workflow: { active: false, runId: null, kind: null, startedAt: null },
+    deferredDataState: 'unloaded'
+  }),
   
   updateAgentStatus: (agentId, status, currentTask = null, reason = null) => set((state) => ({
     agents: {
@@ -160,6 +188,7 @@ export const useProjectStore = create((set, get) => ({
     workflowEvents: [],
     activeRevision: null,
     recentRevisionResult: null,
-    workflow: { active: false, runId: null, kind: null, startedAt: null }
+    workflow: { active: false, runId: null, kind: null, startedAt: null },
+    deferredDataState: 'unloaded'
   })
 }));
