@@ -1,4 +1,9 @@
 import { supabase } from './supabaseClient';
+import {
+  DECISION_HISTORY_LIMIT,
+  EVENT_HISTORY_LIMIT,
+  PROJECT_PAGE_LIMIT
+} from '../../shared/readLimits.js';
 
 /**
  * All backend traffic goes through the Express server under /api.
@@ -30,13 +35,16 @@ const request = async (path, { method = 'GET', body } = {}) => {
 };
 
 export const api = {
-  listProjects: () => request('/api/projects'),
+  listProjects: ({ limit = PROJECT_PAGE_LIMIT, offset = 0 } = {}) =>
+    request(`/api/projects?limit=${limit}&offset=${offset}`),
   createProject: (form) => request('/api/projects', { method: 'POST', body: form }),
   getProjectBlueprint: (id) => request(`/api/projects/${id}/blueprint`),
   getProjectMeta: (id) => request(`/api/projects/${id}/meta`),
-  getProjectEvents: (id) => request(`/api/projects/${id}/events`),
+  getProjectEvents: (id, { limit = EVENT_HISTORY_LIMIT, offset = 0 } = {}) =>
+    request(`/api/projects/${id}/events?limit=${limit}&offset=${offset}`),
   getProjectMemory: (id) => request(`/api/projects/${id}/memory`),
-  getProjectDecisions: (id) => request(`/api/projects/${id}/decisions`),
+  getProjectDecisions: (id, { limit = DECISION_HISTORY_LIMIT, offset = 0 } = {}) =>
+    request(`/api/projects/${id}/decisions?limit=${limit}&offset=${offset}`),
   updateProjectMeta: (id, patch) => request(`/api/projects/${id}`, { method: 'PATCH', body: patch }),
   upsertSections: (id, sections) => request(`/api/projects/${id}/sections`, { method: 'PUT', body: { sections } }),
   appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
