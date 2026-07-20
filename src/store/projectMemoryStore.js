@@ -39,7 +39,6 @@ export const useProjectMemoryStore = create((set, get) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       agent: metadata.agent || null,
       instruction: metadata.instruction || null,
-      version: metadata.version || null,
       timestamp: metadata.timestamp || new Date().toISOString()
     };
     set((state) => ({
