@@ -16,14 +16,14 @@ const iconMap = {
 
 const statusColors = {
   [AGENT_STATUS.IDLE]: 'var(--text-muted)',
-  [AGENT_STATUS.ANALYZING]: 'var(--accent-cyan)',
-  [AGENT_STATUS.ROUTING]: 'var(--accent-purple)',
+  [AGENT_STATUS.ANALYZING]: 'var(--accent-primary)',
+  [AGENT_STATUS.ROUTING]: 'var(--accent-secondary)',
   [AGENT_STATUS.WAITING]: 'var(--warning)',
-  [AGENT_STATUS.ASSIGNED]: 'var(--accent-purple)',
-  [AGENT_STATUS.THINKING]: 'var(--accent-cyan)',
-  [AGENT_STATUS.WORKING]: 'var(--primary-electric)',
-  [AGENT_STATUS.REVIEWING]: 'var(--accent-cyan)',
-  [AGENT_STATUS.UPDATING]: 'var(--primary-electric)',
+  [AGENT_STATUS.ASSIGNED]: 'var(--accent-secondary)',
+  [AGENT_STATUS.THINKING]: 'var(--accent-primary)',
+  [AGENT_STATUS.WORKING]: 'var(--accent-primary)',
+  [AGENT_STATUS.REVIEWING]: 'var(--accent-primary)',
+  [AGENT_STATUS.UPDATING]: 'var(--accent-primary)',
   [AGENT_STATUS.COMPLETED]: 'var(--success)',
   [AGENT_STATUS.FAILED]: 'var(--danger)'
 };
@@ -38,7 +38,7 @@ const AgentNode = ({ data }) => {
     <div className="glass-panel" style={{ 
       width: 220, 
       padding: '12px',
-      borderColor: isWorking ? 'var(--primary-electric)' : 'var(--border-color)',
+      borderColor: isWorking ? 'var(--accent-primary)' : 'var(--border-color)',
       boxShadow: isWorking ? 'var(--glow-primary)' : 'var(--shadow-panel)',
       transition: 'all 0.3s ease'
     }}>
@@ -63,14 +63,14 @@ const AgentNode = ({ data }) => {
       <div style={{ marginTop: '12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
         {data.status === AGENT_STATUS.IDLE && <span style={{ color: statusColors[data.status] }}>Idle</span>}
         {data.status === AGENT_STATUS.COMPLETED && <><CheckCircle size={12} color="var(--success)"/> <span style={{ color: 'var(--success)'}}>Done</span></>}
-        {data.status === AGENT_STATUS.THINKING && <><Brain size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Thinking...</span></>}
-        {data.status === AGENT_STATUS.WORKING && <><Loader size={12} color="var(--primary-electric)" style={{ animation: 'spin 2s linear infinite' }} /> <span style={{ color: 'var(--primary-electric)'}}>Working...</span></>}
-        {data.status === AGENT_STATUS.ASSIGNED && <span style={{ color: 'var(--accent-purple)' }}>Assigned</span>}
-        {data.status === AGENT_STATUS.ANALYZING && <><Loader size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)' }}>Analyzing...</span></>}
-        {data.status === AGENT_STATUS.ROUTING && <><Loader size={12} color="var(--accent-purple)" /> <span style={{ color: 'var(--accent-purple)' }}>Routing...</span></>}
+        {data.status === AGENT_STATUS.THINKING && <><Brain size={12} color="var(--accent-primary)" /> <span style={{ color: 'var(--accent-primary)'}}>Thinking...</span></>}
+        {data.status === AGENT_STATUS.WORKING && <><Loader size={12} color="var(--accent-primary)" style={{ animation: 'spin 2s linear infinite' }} /> <span style={{ color: 'var(--accent-primary)'}}>Working...</span></>}
+        {data.status === AGENT_STATUS.ASSIGNED && <span style={{ color: 'var(--accent-secondary)' }}>Assigned</span>}
+        {data.status === AGENT_STATUS.ANALYZING && <><Loader size={12} color="var(--accent-primary)" /> <span style={{ color: 'var(--accent-primary)' }}>Analyzing...</span></>}
+        {data.status === AGENT_STATUS.ROUTING && <><Loader size={12} color="var(--accent-secondary)" /> <span style={{ color: 'var(--accent-secondary)' }}>Routing...</span></>}
         {data.status === AGENT_STATUS.WAITING && <><Loader size={12} color="var(--warning)" /> <span style={{ color: 'var(--warning)' }}>Waiting...</span></>}
-        {data.status === AGENT_STATUS.REVIEWING && <><Eye size={12} color="var(--accent-cyan)" /> <span style={{ color: 'var(--accent-cyan)'}}>Reviewing...</span></>}
-        {data.status === AGENT_STATUS.UPDATING && <><Loader size={12} color="var(--primary-electric)" /> <span style={{ color: 'var(--primary-electric)' }}>Updating...</span></>}
+        {data.status === AGENT_STATUS.REVIEWING && <><Eye size={12} color="var(--accent-primary)" /> <span style={{ color: 'var(--accent-primary)'}}>Reviewing...</span></>}
+        {data.status === AGENT_STATUS.UPDATING && <><Loader size={12} color="var(--accent-primary)" /> <span style={{ color: 'var(--accent-primary)' }}>Updating...</span></>}
         {data.status === AGENT_STATUS.FAILED && <><XCircle size={12} color="var(--danger)" /> <span style={{ color: 'var(--danger)'}}>Failed</span></>}
       </div>
 
@@ -133,8 +133,8 @@ function AgentVisualizerInner() {
       return { 
         ...edge, 
         animated: isActive,
-        style: { stroke: isActive ? 'var(--primary-electric)' : 'var(--border-color)', strokeWidth: isActive ? 2 : 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: isActive ? 'var(--primary-electric)' : 'var(--border-color)' }
+        style: { stroke: isActive ? 'var(--accent-primary)' : 'var(--border-color)', strokeWidth: isActive ? 2 : 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isActive ? 'var(--accent-primary)' : 'var(--border-color)' }
       };
     }));
   }, [agents, setNodes, setEdges]);
