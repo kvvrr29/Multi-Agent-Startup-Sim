@@ -1,10 +1,15 @@
 import { api } from './apiClient';
 import { useProjectStore } from '../store/useProjectStore';
 import { useProjectMemoryStore, createEmptyMemory, MEMORY_CATEGORIES } from '../store/projectMemoryStore';
-import { useVersionStore } from '../store/versionStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { cloneSerializable } from '../store/persistence';
 import { createBlueprintSchema } from './blueprintSchema';
+
+// This module owns long-lived singleton state (store subscriptions + the sync
+// cursor). A hot-swap would strand the old subscriptions and leave the new
+// module unsubscribed, so edits would silently stop syncing until a full
+// reload. Force a full reload on any change to this file instead.
+if (import.meta.hot) import.meta.hot.decline();
 
 const SYNC_DEBOUNCE_MS = 1500;
 
@@ -12,6 +17,9 @@ let timer = null;
 let unsubscribers = [];
 // Hydration writes into the stores; suspend prevents echoing those writes back up.
 let suspended = false;
+// Serializes pushes so a debounced run and an explicit flush() can't overlap
+// and double-advance the cursor.
+let inFlight = null;
 
 /**
  * Last-pushed cursor for the open project. pushNow() diffs the stores against
@@ -22,7 +30,6 @@ let cursor = null;
 const sectionFingerprint = (section = {}) => JSON.stringify({
   content: section.content || '',
   status: section.status || 'pending',
-  lastModifiedVersion: section.lastModifiedVersion || 'v1',
   generationSource: section.generationSource || null,
   generatedBy: section.generatedBy || null,
   validationScores: section.validationScores || null,
@@ -30,10 +37,9 @@ const sectionFingerprint = (section = {}) => JSON.stringify({
   failureReason: section.failureReason || null
 });
 
-const metaFingerprint = (project, memory, currentVersionId) => JSON.stringify({
+const metaFingerprint = (project, memory) => JSON.stringify({
   name: project?.name || 'Untitled Project',
-  domain: memory?.domain || '',
-  version: currentVersionId || null
+  domain: memory?.domain || ''
 });
 
 const memoryFingerprint = (memory = {}) => JSON.stringify(
@@ -43,29 +49,37 @@ const memoryFingerprint = (memory = {}) => JSON.stringify(
 const snapshotCursor = () => {
   const { project, blueprint, workflowEvents } = useProjectStore.getState();
   const { memory, decisionHistory } = useProjectMemoryStore.getState();
-  const { versions, currentVersionId } = useVersionStore.getState();
   return {
     sectionsByKey: Object.fromEntries(
       Object.entries(blueprint || {}).map(([key, section]) => [key, sectionFingerprint(section)])
     ),
     eventCount: workflowEvents.length,
-    versionCount: versions.length,
     decisionCount: decisionHistory.length,
     memoryJSON: memoryFingerprint(memory),
-    metaJSON: metaFingerprint(project, memory, currentVersionId)
+    metaJSON: metaFingerprint(project, memory)
   };
 };
 
 export const pushNow = async () => {
+  // Chain onto any in-flight push so cursor commits stay serialized.
+  const run = (inFlight || Promise.resolve()).then(doPush);
+  inFlight = run.catch(() => {});
+  return run;
+};
+
+const doPush = async () => {
   const { activeCloudId, session } = useAuthStore.getState();
   if (!activeCloudId || !session || suspended || !cursor) return false;
 
   const { project, blueprint, workflowEvents } = useProjectStore.getState();
   const { memory, decisionHistory } = useProjectMemoryStore.getState();
-  const { versions, currentVersionId } = useVersionStore.getState();
 
-  const calls = [];
   const next = snapshotCursor();
+
+  // Each domain is pushed independently and commits its own slice of the
+  // cursor only on success. A failure in one domain must not block the others
+  // or wedge the cursor into re-pushing everything forever.
+  const tasks = [];
 
   const changedSections = Object.entries(blueprint || {})
     .filter(([key]) => next.sectionsByKey[key] !== cursor.sectionsByKey[key])
@@ -73,48 +87,63 @@ export const pushNow = async () => {
       key,
       content: section.content,
       status: section.status,
-      lastModifiedVersion: section.lastModifiedVersion,
       generationSource: section.generationSource,
       generatedBy: section.generatedBy,
       validationScores: section.validationScores,
       generatedAt: section.generatedAt,
       failureReason: section.failureReason
     }));
-  if (changedSections.length > 0) calls.push(api.upsertSections(activeCloudId, changedSections));
+  if (changedSections.length > 0) {
+    tasks.push({ name: 'sections', run: () => api.upsertSections(activeCloudId, changedSections), commit: () => { cursor.sectionsByKey = next.sectionsByKey; } });
+  }
 
   const newEvents = workflowEvents.slice(cursor.eventCount);
-  if (newEvents.length > 0) calls.push(api.appendEvents(activeCloudId, cloneSerializable(newEvents)));
-
-  const newVersions = versions.slice(cursor.versionCount);
-  for (const version of newVersions) calls.push(api.createVersion(activeCloudId, cloneSerializable(version)));
+  if (newEvents.length > 0) {
+    tasks.push({ name: 'events', run: () => api.appendEvents(activeCloudId, cloneSerializable(newEvents)), commit: () => { cursor.eventCount = next.eventCount; } });
+  }
 
   const newDecisions = decisionHistory.slice(cursor.decisionCount);
-  if (newDecisions.length > 0) calls.push(api.appendDecisions(activeCloudId, cloneSerializable(newDecisions)));
+  if (newDecisions.length > 0) {
+    tasks.push({ name: 'decisions', run: () => api.appendDecisions(activeCloudId, cloneSerializable(newDecisions)), commit: () => { cursor.decisionCount = next.decisionCount; } });
+  }
 
   if (next.memoryJSON !== cursor.memoryJSON) {
     const entries = MEMORY_CATEGORIES.flatMap(category =>
       Object.entries(memory[category] || {}).map(([key, value]) => ({ category, key, value }))
     );
-    if (entries.length > 0) calls.push(api.upsertMemory(activeCloudId, { entries }));
+    if (entries.length > 0) {
+      tasks.push({ name: 'memory', run: () => api.upsertMemory(activeCloudId, { entries }), commit: () => { cursor.memoryJSON = next.memoryJSON; } });
+    }
   }
 
   if (next.metaJSON !== cursor.metaJSON) {
-    calls.push(api.updateProjectMeta(activeCloudId, {
-      name: project?.name || 'Untitled Project',
-      memoryDomain: memory?.domain || '',
-      currentVersionLabel: currentVersionId || ''
-    }));
+    tasks.push({
+      name: 'meta',
+      run: () => api.updateProjectMeta(activeCloudId, {
+        name: project?.name || 'Untitled Project',
+        memoryDomain: memory?.domain || ''
+      }),
+      commit: () => { cursor.metaJSON = next.metaJSON; }
+    });
   }
 
-  if (calls.length === 0) return true;
-  try {
-    await Promise.all(calls);
-    cursor = next;
-    return true;
-  } catch (err) {
-    console.error('[Cloud] Sync failed:', err.message);
-    return false;
-  }
+  if (tasks.length === 0) return true;
+
+  const results = await Promise.allSettled(tasks.map(t => t.run()));
+  // The project may have been closed (stopSync) while requests were in flight;
+  // its cursor is gone, so there is nothing left to commit against.
+  if (!cursor) return false;
+  let allOk = true;
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      tasks[i].commit?.();
+    } else {
+      allOk = false;
+      console.error(`[Cloud] Sync failed for ${tasks[i].name}:`, result.reason?.message || result.reason);
+    }
+  });
+
+  return allOk;
 };
 
 /** Await any pending changes; used before switching projects and on unload. */
@@ -129,16 +158,23 @@ const scheduleSync = () => {
   timer = setTimeout(pushNow, SYNC_DEBOUNCE_MS);
 };
 
+const unsubscribeAll = () => {
+  unsubscribers.forEach(unsub => unsub());
+  unsubscribers = [];
+  clearTimeout(timer);
+};
+
 export const startSync = () => {
-  stopSync();
-  unsubscribers = [useProjectStore, useProjectMemoryStore, useVersionStore]
+  // Re-subscribe WITHOUT clearing the cursor: openCloudProject() sets the
+  // cursor just before this runs, and nulling it here would make pushNow's
+  // `!cursor` guard bail forever — edits to a reopened project would never sync.
+  unsubscribeAll();
+  unsubscribers = [useProjectStore, useProjectMemoryStore]
     .map(store => store.subscribe(scheduleSync));
 };
 
 export const stopSync = () => {
-  unsubscribers.forEach(unsub => unsub());
-  unsubscribers = [];
-  clearTimeout(timer);
+  unsubscribeAll();
   cursor = null;
 };
 
@@ -167,7 +203,6 @@ const buildBlueprint = (sectionRows = []) => {
       ...blueprint[row.section_key],
       content: row.content || '',
       status: row.status || 'pending',
-      lastModifiedVersion: row.last_modified_version || 'v1',
       generationSource: row.generation_source,
       generatedBy: row.generated_by,
       validationScores: row.validation_scores,
@@ -177,21 +212,6 @@ const buildBlueprint = (sectionRows = []) => {
   });
   return blueprint;
 };
-
-const buildVersions = (versionRows = []) => versionRows.map(row => ({
-  id: `v${row.version_number}`,
-  timestamp: row.created_at,
-  summary: row.summary,
-  changeType: row.change_type,
-  completionStatus: row.completion_status,
-  approvalState: row.approval_state || {},
-  affectedAgents: row.affected_agents || [],
-  affectedSections: row.affected_sections || [],
-  blueprintSnapshot: row.blueprint_snapshot || {},
-  memorySnapshot: row.memory_snapshot,
-  provenanceSnapshot: row.provenance_snapshot,
-  restoredFrom: row.restored_from
-}));
 
 const buildMemory = (memoryRows = [], domain = '') => {
   const memory = createEmptyMemory();
@@ -237,10 +257,6 @@ export const openCloudProject = async (id) => {
     useProjectMemoryStore.getState().restoreSnapshot({
       memory: buildMemory(data.memory, data.project.memory_domain),
       decisionHistory: (data.decisions || []).map(row => cloneSerializable(row.payload))
-    });
-    useVersionStore.setState({
-      versions: buildVersions(data.versions),
-      currentVersionId: data.project.current_version_label || null
     });
   } finally {
     suspended = false;
