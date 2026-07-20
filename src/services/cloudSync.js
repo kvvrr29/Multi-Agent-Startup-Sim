@@ -1,6 +1,7 @@
 import { api } from './apiClient';
 import { useProjectStore } from '../store/useProjectStore';
 import { useProjectMemoryStore, createEmptyMemory, MEMORY_CATEGORIES } from '../store/projectMemoryStore';
+import { useSectionHistoryStore } from '../store/sectionHistoryStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { cloneSerializable } from '../store/persistence';
 import { createBlueprintSchema } from './blueprintSchema';
@@ -81,8 +82,11 @@ const doPush = async () => {
   // or wedge the cursor into re-pushing everything forever.
   const tasks = [];
 
+  // Only APPROVED sections are persisted. Unapproved drafts and their version
+  // history live entirely client-side (sectionHistoryStore + localStorage) until
+  // the user approves, which flips status to 'approved' and lets it through here.
   const changedSections = Object.entries(blueprint || {})
-    .filter(([key]) => next.sectionsByKey[key] !== cursor.sectionsByKey[key])
+    .filter(([key, section]) => section.status === 'approved' && next.sectionsByKey[key] !== cursor.sectionsByKey[key])
     .map(([key, section]) => ({
       key,
       content: section.content,
@@ -94,7 +98,9 @@ const doPush = async () => {
       failureReason: section.failureReason
     }));
   if (changedSections.length > 0) {
-    tasks.push({ name: 'sections', run: () => api.upsertSections(activeCloudId, changedSections), commit: () => { cursor.sectionsByKey = next.sectionsByKey; } });
+    // Commit only the keys actually pushed, so an unapproved edit stays dirty
+    // (unsent) and its later approval still triggers a push.
+    tasks.push({ name: 'sections', run: () => api.upsertSections(activeCloudId, changedSections), commit: () => { changedSections.forEach(s => { cursor.sectionsByKey[s.key] = next.sectionsByKey[s.key]; }); } });
   }
 
   const newEvents = workflowEvents.slice(cursor.eventCount);
@@ -185,6 +191,9 @@ export const createCloudProject = async (form) => {
   try {
     const row = await api.createProject(form);
     setActiveCloudId(row.id);
+    // Make this the active project for the client-side section history (empty)
+    // before the initial simulation starts recording versions.
+    useSectionHistoryStore.getState().loadProject(row.id, []);
     cursor = snapshotCursor();
     return row.id;
   } catch (err) {
@@ -258,6 +267,9 @@ export const openCloudProject = async (id) => {
       memory: buildMemory(data.memory, data.project.memory_domain),
       decisionHistory: (data.decisions || []).map(row => cloneSerializable(row.payload))
     });
+    // Reconcile client-side histories: DB wins for approved sections, and local
+    // unapproved drafts are restored and overlaid onto the blueprint display.
+    useSectionHistoryStore.getState().loadProject(id, data.sections);
   } finally {
     suspended = false;
   }
