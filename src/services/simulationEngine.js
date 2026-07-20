@@ -1,5 +1,4 @@
 import { useProjectStore, AGENT_STATUS } from '../store/useProjectStore';
-import { useVersionStore, composeVersionSummary, diffBlueprints } from '../store/versionStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 import { generateDynamicBlueprint } from './blueprintFactory';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -74,7 +73,7 @@ const composeAgentContributions = () => {
     const sections = (AGENT_ROLES[id] || []).map(s => SECTION_TITLES[s] || s).join(', ');
     return `### ${agent?.name || id} — ${agent?.role || id}\n- **Sections:** ${sections}\n${contribution.map(c => `- ${c}`).join('\n')}`;
   });
-  lines.push(`### Alex — Mediator\n- **Sections:** ${SECTION_TITLES.agentContributions}, ${SECTION_TITLES.finalRecommendations}\n- Classified project domain\n- Routed tasks to specialist agents\n- Assembled and versioned the final blueprint`);
+  lines.push(`### Alex — Mediator\n- **Sections:** ${SECTION_TITLES.agentContributions}, ${SECTION_TITLES.finalRecommendations}\n- Classified project domain\n- Routed tasks to specialist agents\n- Assembled the final blueprint`);
   return lines.join('\n\n');
 };
 
@@ -83,8 +82,7 @@ export const runInitialSimulation = async (projectData) => {
   const runId = store.beginWorkflow('initial-generation');
   if (!runId) return { status: 'rejected', reason: 'Another workflow is already active.' };
   const memoryStore = useProjectMemoryStore.getState();
-  const versionStore = useVersionStore.getState();
-  
+
   console.log("Mediator started");
   
   // Initialize memory
@@ -140,7 +138,7 @@ export const runInitialSimulation = async (projectData) => {
     try {
       const result = await withTimeout(() => generateAgentContent(agentId), AGENT_GENERATION_TIMEOUT_MS);
       if (!useProjectStore.getState().isCurrentWorkflow(runId)) throw new Error('Stale workflow completion ignored');
-      result.decisions?.forEach(decision => memoryStore.applyDecision(decision, { agent: agentId, instruction: 'Initial project generation', version: 'v1' }));
+      result.decisions?.forEach(decision => memoryStore.applyDecision(decision, { agent: agentId, instruction: 'Initial project generation' }));
       store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via Gemini.`, agent: agentId });
       return result;
     } catch (err) {
@@ -173,7 +171,7 @@ export const runInitialSimulation = async (projectData) => {
 
       sections.forEach(sectionKey => {
         if (result.content[sectionKey]) {
-          store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', 'v1', sectionMetadata({
+          store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', sectionMetadata({
             source: result.generationSource || 'Gemini', agent: id, scores: result.scores, failureReason: result.failureReason
           }));
         }
@@ -188,30 +186,20 @@ export const runInitialSimulation = async (projectData) => {
     await sleep(500);
     store.updateAgentStatus('mediator', AGENT_STATUS.REVIEWING, 'Reviewing agent outputs');
 
-    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', 'v1', sectionMetadata({ source: 'Local', agent: 'mediator' }));
+    store.updateBlueprintSection('agentContributions', composeAgentContributions(), 'pending', sectionMetadata({ source: 'Local', agent: 'mediator' }));
 
     const mediatorContent = await handleAgentGeneration('mediator', {
       finalRecommendations: blueprintContent.finalRecommendations
     });
     if (mediatorContent.content.finalRecommendations) {
-      store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', 'v1', sectionMetadata({
+      store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', sectionMetadata({
         source: mediatorContent.generationSource || 'Gemini', agent: 'mediator', scores: mediatorContent.scores, failureReason: mediatorContent.failureReason
       }));
     }
     await sleep(1000);
     store.updateAgentStatus('mediator', AGENT_STATUS.UPDATING, 'Finalizing Blueprint');
 
-    store.addWorkflowEvent({ message: 'Blueprint generation complete. Saving Version 1.', agent: 'mediator' });
-
-    // Save Version
-    const currentBlueprint = useProjectStore.getState().blueprint;
-    versionStore.saveVersion(
-      currentBlueprint,
-      useAI ? '[AI Generated] Initial Project Creation' : '[Fallback Factory] Initial Project Creation',
-      ['ceo', 'pm', 'developer', 'marketing', 'mediator'],
-      Object.keys(SECTION_OWNERSHIP),
-      { changeType: 'initial', completionStatus: 'success', memorySnapshot: memoryStore.getSnapshot() }
-    );
+    store.addWorkflowEvent({ message: 'Blueprint generation complete.', agent: 'mediator' });
 
     store.addWorkflowEvent({
       type: 'system',
@@ -220,7 +208,7 @@ export const runInitialSimulation = async (projectData) => {
     });
 
     store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Generation Finished');
-    return { status: 'changed', version: 'v1' };
+    return { status: 'changed' };
   } catch (err) {
     // Guaranteed failure state: never leave the workflow hanging (doc §5)
     console.error('[Simulation] Initial generation failed:', err);
@@ -289,9 +277,8 @@ export const applyRevisionSimulation = async (previewData) => {
     return result;
   }
   const memoryStore = useProjectMemoryStore.getState();
-  const versionStore = useVersionStore.getState();
   const { aiModeEnabled } = useSettingsStore.getState();
-  
+
   const { instruction, confidence } = previewData;
   // Legacy previews (no task list) become a single task per agent.
   const tasks = previewData.tasks?.length
@@ -322,9 +309,6 @@ export const applyRevisionSimulation = async (previewData) => {
     });
 
     // 2. WAITING & AGENT WORK
-    const maxVersion = versionStore.versions.reduce((max, version) => Math.max(max, Number(version.id.slice(1)) || 0), 0);
-    const nextVersionId = `v${maxVersion + 1}`;
-
     store.updateAgentStatus('mediator', AGENT_STATUS.WAITING, 'Waiting for team');
 
     // Run tasks in parallel (one task per agent)
@@ -345,7 +329,7 @@ export const applyRevisionSimulation = async (previewData) => {
              if (taskSections.includes(sectionKey)) {
                const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
                if (content.trim() !== existing.trim()) {
-                 store.updateBlueprintSection(sectionKey, content, 'pending', nextVersionId, sectionMetadata({
+                 store.updateBlueprintSection(sectionKey, content, 'pending', sectionMetadata({
                    source: result.generationSource || 'Gemini', agent: targetAgent, scores: result.scores
                  }));
                  changedSections.push(sectionKey);
@@ -354,7 +338,7 @@ export const applyRevisionSimulation = async (previewData) => {
            });
            if (changedSections.length) {
              result.decisions?.forEach(decision => memoryStore.applyDecision(decision, {
-               agent: targetAgent, instruction: taskDescription || instruction, version: nextVersionId
+               agent: targetAgent, instruction: taskDescription || instruction
              }));
            }
            store.updateAgentStatus(targetAgent, AGENT_STATUS.COMPLETED, changedSections.length ? 'Task completed' : 'No changes required');
@@ -374,7 +358,7 @@ export const applyRevisionSimulation = async (previewData) => {
            const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
            const revised = `${existing}\n\n**Revision:** Adjusted based on request: ${taskDescription || instruction}`.trim();
            if (revised !== existing.trim()) {
-             store.updateBlueprintSection(sectionKey, revised, 'pending', nextVersionId, sectionMetadata({ source: 'Fallback', agent: targetAgent }));
+             store.updateBlueprintSection(sectionKey, revised, 'pending', sectionMetadata({ source: 'Fallback', agent: targetAgent }));
              changedSections.push(sectionKey);
            }
         });
@@ -397,8 +381,8 @@ export const applyRevisionSimulation = async (previewData) => {
     if (changedKeys.length === 0) {
       const allFailed = failedTasks.length === taskResults.length;
       const message = allFailed
-        ? 'Revision failed: every assigned task failed. No version was created.'
-        : 'Revision made no content changes. No version was created.';
+        ? 'Revision failed: every assigned task failed. No changes were saved.'
+        : 'Revision made no content changes. Nothing was saved.';
       const result = { message, isError: allFailed, status: allFailed ? 'failed' : 'unchanged', taskResults };
       store.setRecentRevisionResult(result);
       store.addWorkflowEvent({ type: allFailed ? 'error' : 'system', message, agent: 'mediator' });
@@ -408,13 +392,7 @@ export const applyRevisionSimulation = async (previewData) => {
     }
 
     const changesMade = changedKeys.map(k => `${SECTION_TITLES[k] || k} Updated`);
-    const summary = composeVersionSummary(changedKeys, aiModeEnabled ? '[AI Generated]' : '[Fallback Factory]');
     const completionStatus = failedTasks.length ? 'partial' : 'success';
-
-    const currentBlueprint = useProjectStore.getState().blueprint;
-    const savedVersion = versionStore.saveVersion(currentBlueprint, summary, assignedAgents, changedKeys, {
-      changeType: 'revision', completionStatus, memorySnapshot: memoryStore.getSnapshot()
-    });
 
     store.addWorkflowEvent({
       type: 'revision',
@@ -423,14 +401,12 @@ export const applyRevisionSimulation = async (previewData) => {
       request: instruction,
       assignedAgent: assignedAgents.join(', ').toUpperCase(),
       updatedSections: changesMade,
-      version: savedVersion.id,
       status: completionStatus
     });
 
     const result = {
       message: completionStatus === 'partial' ? `Revision partially completed (${failedTasks.length} task${failedTasks.length === 1 ? '' : 's'} failed)` : 'Revision Applied Successfully',
       changes: changesMade,
-      version: savedVersion.id,
       status: completionStatus,
       taskResults,
       unchangedTasks: unchangedTasks.length
@@ -469,54 +445,9 @@ export const approveSectionWorkflow = (sectionKey) => {
     const section = store.blueprint[sectionKey];
     if (!section || section.status === 'approved') return { status: 'unchanged' };
     if (!store.approveBlueprintSection(sectionKey, runId)) return { status: 'failed' };
-    const blueprint = useProjectStore.getState().blueprint;
-    const version = useVersionStore.getState().saveVersion(
-      blueprint,
-      `${SECTION_TITLES[sectionKey] || sectionKey} Approved`,
-      [SECTION_OWNERSHIP[sectionKey]],
-      [sectionKey],
-      { changeType: 'approval', completionStatus: 'success', memorySnapshot: useProjectMemoryStore.getState().getSnapshot() }
-    );
-    store.addWorkflowEvent({ type: 'revision', message: `${SECTION_TITLES[sectionKey] || sectionKey} approved`, agent: 'mediator', version: version.id });
-    return { status: 'changed', version: version.id };
+    store.addWorkflowEvent({ type: 'revision', message: `${SECTION_TITLES[sectionKey] || sectionKey} approved`, agent: 'mediator' });
+    return { status: 'changed' };
   } finally {
-    store.endWorkflow(runId);
-  }
-};
-
-export const restoreVersionWorkflow = async (versionId) => {
-  const store = useProjectStore.getState();
-  const runId = store.beginWorkflow('restore');
-  if (!runId) return { status: 'failed', reason: 'Another workflow is active.' };
-  try {
-    const source = useVersionStore.getState().getVersion(versionId);
-    if (!source) return { status: 'failed', reason: `Version ${versionId} was not found.` };
-    store.updateAgentStatus('mediator', AGENT_STATUS.UPDATING, `Restoring ${versionId}`);
-    const current = store.blueprint;
-    const diff = diffBlueprints(current, source.blueprintSnapshot);
-    const currentMemory = useProjectMemoryStore.getState().getSnapshot();
-    const memoryChanged = JSON.stringify(currentMemory) !== JSON.stringify(source.memorySnapshot || currentMemory);
-    const affectedSections = [...new Set([...diff.changed, ...diff.added, ...diff.removed])];
-    if (affectedSections.length === 0 && !memoryChanged) return { status: 'unchanged' };
-    store.setBlueprint(source.blueprintSnapshot);
-    if (source.memorySnapshot) useProjectMemoryStore.getState().restoreSnapshot(source.memorySnapshot);
-    const restoredBlueprint = useProjectStore.getState().blueprint;
-    const version = useVersionStore.getState().saveVersion(
-      restoredBlueprint,
-      `Restored from ${versionId}`,
-      [...new Set(affectedSections.map(section => SECTION_OWNERSHIP[section]).filter(Boolean))],
-      affectedSections,
-      {
-        changeType: 'restore', completionStatus: 'success', restoredFrom: versionId,
-        memorySnapshot: useProjectMemoryStore.getState().getSnapshot()
-      }
-    );
-    store.addWorkflowEvent({ type: 'revision', message: `Restored from ${versionId} as ${version.id}`, agent: 'mediator', version: version.id });
-    store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, `Restored as ${version.id}`);
-    return { status: 'changed', version: version.id };
-  } finally {
-    await sleep(400);
-    store.resetAllAgents();
     store.endWorkflow(runId);
   }
 };
@@ -524,7 +455,6 @@ export const restoreVersionWorkflow = async (versionId) => {
 export const resetAllProjectData = () => {
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
-  useVersionStore.getState().reset();
   useAIDebugStore.getState().reset();
   useAICostStore.getState().reset();
 };
