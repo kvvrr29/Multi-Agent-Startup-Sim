@@ -35,7 +35,7 @@ export default function ProjectCreation() {
     fontFamily: 'inherit'
   };
   const focusHandlers = {
-    onFocus: (e) => e.target.style.borderColor = 'var(--primary-electric)',
+    onFocus: (e) => e.target.style.borderColor = 'var(--focus-ring)',
     onBlur: (e) => e.target.style.borderColor = 'var(--border-color)'
   };
   const labelStyle = { fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 };
@@ -88,7 +88,7 @@ export default function ProjectCreation() {
       {showSettings && <AISettingsModal onClose={() => setShowSettings(false)} />}
       <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '2.5rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent-surface)', color: 'var(--accent-primary)', marginBottom: '1rem' }}>
             <Sparkles size={24} />
           </div>
           <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Start a New Project</h1>
@@ -141,7 +141,7 @@ export default function ProjectCreation() {
                 color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
                 fontFamily: 'inherit'
               }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--primary-electric)'}
+              onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
             />
           </div>
@@ -162,7 +162,7 @@ export default function ProjectCreation() {
                 color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
                 fontFamily: 'inherit', resize: 'vertical'
               }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--primary-electric)'}
+              onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
               onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
             />
           </div>
@@ -183,7 +183,7 @@ export default function ProjectCreation() {
                   color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
                   fontFamily: 'inherit'
                 }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary-electric)'}
+                onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
                 onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
               />
             </div>
