@@ -19,7 +19,7 @@ export default function AICostDashboard() {
           style={{ padding: '10px 15px', background: 'var(--bg-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderBottom: isExpanded ? '1px solid var(--border-color)' : 'none' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600 }}>
-            <Activity size={14} color="var(--accent-cyan)" /> AI Usage Monitor
+            <Activity size={14} color="var(--accent-primary)" /> AI Usage Monitor
           </div>
           {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </div>
@@ -31,14 +31,14 @@ export default function AICostDashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Requests</span>
               <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Activity size={12} color="var(--primary-electric)" /> {totalRequests}
+                <Activity size={12} color="var(--accent-primary)" /> {totalRequests}
               </span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Input Tokens</span>
               <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Cpu size={12} color="var(--accent-purple)" /> {(totalInputTokens / 1000).toFixed(1)}k
+                <Cpu size={12} color="var(--accent-secondary)" /> {(totalInputTokens / 1000).toFixed(1)}k
               </span>
             </div>
 
