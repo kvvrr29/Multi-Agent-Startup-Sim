@@ -25,7 +25,7 @@ export const AGENT_STATUS = {
 
 // Statuses in which an agent is actively occupied. Completed/Failed/Idle are
 // terminal states — they must never block new work (doc §5: no stuck agents).
-export const BUSY_STATUSES = [
+const BUSY_STATUSES = [
   AGENT_STATUS.ANALYZING,
   AGENT_STATUS.ROUTING,
   AGENT_STATUS.WAITING,
@@ -154,18 +154,6 @@ export const useProjectStore = create((set, get) => ({
       }
     }
   })),
-
-  // Full-blueprint replacement used by cloud hydration: restores
-  // content AND approval state, and clears sections absent from the snapshot.
-  setBlueprint: (blueprint) => set(() => {
-    const restored = createBlueprintSchema();
-    Object.keys(blueprint || {}).forEach(key => {
-      if (restored[key]) {
-        restored[key] = { ...restored[key], ...blueprint[key] };
-      }
-    });
-    return { blueprint: restored };
-  }),
 
   approveBlueprintSection: (sectionKey, runId = null) => {
     if ((get().workflow.active && get().workflow.runId !== runId) || !get().blueprint[sectionKey]) return false;
