@@ -152,6 +152,9 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
     return { byProject, activeProjectId: state.activeProjectId === projectId ? null : state.activeProjectId };
   }),
 
+  // Stop projecting one project's local drafts without deleting them.
+  deactivateProject: () => set({ activeProjectId: null }),
+
   // Clears the ACTIVE project's history (New Project / reset flows).
   reset: () => set((state) => {
     if (!state.activeProjectId) return {};
