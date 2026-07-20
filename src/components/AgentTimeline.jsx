@@ -67,7 +67,6 @@ export default function AgentTimeline() {
                       {ev.updatedSections?.map((sec, i) => <li key={i}>{sec}</li>)}
                     </ul>
                   </div>
-                  <div style={{ color: 'var(--accent-cyan)' }}><strong>Version:</strong> {ev.version}</div>
                 </div>
               ) : (
                 <div style={{ color: isError ? 'var(--danger)' : 'var(--text-muted)' }}>
