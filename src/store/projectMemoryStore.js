@@ -6,7 +6,7 @@ const CATEGORY_MAP = {
   Business: 'business', Product: 'product', Technical: 'technical', Marketing: 'marketing', Scope: 'scope'
 };
 
-export const createEmptyMemory = () => ({
+const createEmptyMemory = () => ({
   business: {},
   product: {},
   technical: {},
@@ -14,18 +14,9 @@ export const createEmptyMemory = () => ({
   scope: {}
 });
 
-const restoreMemoryCategories = (memory) => Object.fromEntries(
-  MEMORY_CATEGORIES.map(category => [
-    category,
-    memory?.[category] && typeof memory[category] === 'object' && !Array.isArray(memory[category])
-      ? cloneSerializable(memory[category])
-      : {}
-  ])
-);
-
 // No local persistence. Project selection clears this store; a panel-specific
 // loader can hydrate it independently of the blueprint.
-export const useProjectMemoryStore = create((set, get) => ({
+export const useProjectMemoryStore = create((set) => ({
   memory: createEmptyMemory(),
   decisionHistory: [],
 
@@ -60,10 +51,5 @@ export const useProjectMemoryStore = create((set, get) => ({
     return true;
   },
 
-  getSnapshot: () => cloneSerializable({ memory: get().memory, decisionHistory: get().decisionHistory }),
-  restoreSnapshot: (snapshot) => set({
-    memory: restoreMemoryCategories(snapshot?.memory),
-    decisionHistory: Array.isArray(snapshot?.decisionHistory) ? cloneSerializable(snapshot.decisionHistory) : []
-  }),
   clearMemory: () => set({ memory: createEmptyMemory(), decisionHistory: [] })
 }));
