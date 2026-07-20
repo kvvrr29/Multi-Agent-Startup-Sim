@@ -15,6 +15,8 @@ import { AIModeBadge, AIStatusBanner } from "./AIStatusUtils";
 import { resetAllProjectData } from "../services/simulationEngine";
 import { useAuthStore } from "../store/useAuthStore";
 import { flush, openCloudProject } from "../services/cloudSync";
+import { ensureProjectResources } from "../services/cloudSync";
+import { useProjectResourceStore } from "../store/useProjectResourceStore";
 import CloudProjectList from "./CloudProjectList";
 
 import {
@@ -309,13 +311,53 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
   </button>
 );
 
+const EmptyProjectState = ({
+  children = "Open a project from Your Projects to view this panel.",
+}) => (
+  <div
+    role="status"
+    style={{
+      padding: "1.25rem",
+      border: "1px dashed var(--border-color)",
+      borderRadius: "10px",
+      color: "var(--text-muted)",
+      fontSize: "0.85rem",
+      lineHeight: 1.5,
+      textAlign: "center",
+    }}
+  >
+    {children}
+  </div>
+);
+
+const ResourceState = ({ label, state, onRetry }) => {
+  if (state?.status === "loading" || state?.status === "idle") {
+    return <EmptyProjectState>Loading {label}…</EmptyProjectState>;
+  }
+  if (state?.status === "error") {
+    return (
+      <div role="alert" style={{ padding: "1rem", border: "1px solid var(--danger)", borderRadius: "10px", color: "var(--danger)", fontSize: "0.82rem" }}>
+        <div>Could not load {label}: {state.error}</div>
+        <button type="button" className="btn-secondary" onClick={onRetry} style={{ marginTop: "10px", padding: "6px 10px" }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function Dashboard() {
   const [showSettings, setShowSettings] = React.useState(false);
-  const [activePanel, setActivePanel] = React.useState("agents");
+  const [activePanel, setActivePanel] = React.useState("project");
 
   const developerMode = useSettingsStore((state) => state.developerMode);
   const agents = useProjectStore((state) => state.agents);
   const activeCloudId = useAuthStore((state) => state.activeCloudId);
+  const metaState = useProjectResourceStore((state) => state.resources.meta);
+  const eventsState = useProjectResourceStore((state) => state.resources.events);
+  const memoryState = useProjectResourceStore((state) => state.resources.memory);
+  const decisionsState = useProjectResourceStore((state) => state.resources.decisions);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
   // Auto-switch to Agent Activity when a simulation starts so the user
@@ -325,6 +367,19 @@ export default function Dashboard() {
     if (anyBusy && !wasBusy.current) setActivePanel("agents");
     wasBusy.current = anyBusy;
   }, [anyBusy]);
+
+  React.useEffect(() => {
+    if (!activeCloudId) return;
+    if (activePanel === "memory") {
+      ensureProjectResources(["memory"]).catch(() => {});
+    } else if (activePanel === "agents") {
+      ensureProjectResources(["meta", "events", "memory", "decisions"]).catch(() => {});
+    }
+  }, [activePanel, activeCloudId]);
+
+  const evolutionStates = [metaState, memoryState, decisionsState];
+  const evolutionReady = evolutionStates.every((state) => state.status === "ready");
+  const evolutionErrors = evolutionStates.filter((state) => state.status === "error");
 
   return (
     <div
@@ -420,27 +475,38 @@ export default function Dashboard() {
           <AIModeBadge />
         </div>
 
-        {activePanel === "agents" && (
-          <>
-            <div
-              style={{
-                flex: "0 0 320px",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              <ErrorBoundary componentName="AgentVisualizer">
-                <AgentVisualizer />
+        {activePanel === "agents" &&
+          (!activeCloudId ? (
+            <EmptyProjectState />
+          ) : (
+            <>
+              <div
+                style={{
+                  flex: "0 0 320px",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <ErrorBoundary componentName="AgentVisualizer">
+                  <AgentVisualizer />
+                </ErrorBoundary>
+              </div>
+              {eventsState.status === "ready" ? (
+                <ErrorBoundary componentName="Agent Timeline">
+                  <AgentTimeline />
+                </ErrorBoundary>
+              ) : (
+                <ResourceState label="agent timeline" state={eventsState} onRetry={() => ensureProjectResources(["events"]).catch(() => {})} />
+              )}
+              <ErrorBoundary componentName="ProjectEvolution">
+                <ProjectEvolution
+                  contextReady={evolutionReady}
+                  contextError={evolutionErrors.map((state) => state.error).join(" ")}
+                  onRetryContext={() => ensureProjectResources(["meta", "memory", "decisions"]).catch(() => {})}
+                />
               </ErrorBoundary>
-            </div>
-            <ErrorBoundary componentName="Agent Timeline">
-              <AgentTimeline />
-            </ErrorBoundary>
-            <ErrorBoundary componentName="ProjectEvolution">
-              <ProjectEvolution />
-            </ErrorBoundary>
-          </>
-        )}
+            </>
+          ))}
 
         {activePanel === "project" && (
           <>
@@ -454,20 +520,22 @@ export default function Dashboard() {
                   );
                   return;
                 }
-                // Push pending edits into the current project's rows before
-                // the stores are hydrated with the other project.
-                await flush();
                 await openCloudProject(id);
               }}
             />
             <button
               className="btn-secondary section-actions"
-              onClick={() => {
+              onClick={async () => {
+                if (!activeCloudId) {
+                  useProjectStore.getState().setCurrentView("create");
+                  return;
+                }
                 if (
                   window.confirm(
                     "Start a new project? This clears the project, blueprint, memory, and debug data. Your cloud copy is kept.",
                   )
                 ) {
+                  await flush();
                   // Detach from the cloud row BEFORE clearing stores, otherwise the
                   // sync would overwrite the saved project with empty state.
                   useAuthStore.getState().detachCloud();
@@ -489,22 +557,30 @@ export default function Dashboard() {
           </>
         )}
 
-        {activePanel === "memory" && (
-          <ErrorBoundary componentName="Memory Inspector">
-            <MemoryInspector />
-          </ErrorBoundary>
-        )}
+        {activePanel === "memory" &&
+          (!activeCloudId ? (
+            <EmptyProjectState />
+          ) : memoryState.status === "ready" ? (
+            <ErrorBoundary componentName="Memory Inspector">
+              <MemoryInspector />
+            </ErrorBoundary>
+          ) : (
+            <ResourceState label="project memory" state={memoryState} onRetry={() => ensureProjectResources(["memory"]).catch(() => {})} />
+          ))}
 
-        {activePanel === "approval" && (
-          <>
-            <ErrorBoundary componentName="Approval Dashboard">
-              <ApprovalDashboard />
-            </ErrorBoundary>
-            <ErrorBoundary componentName="Blueprint Health Inspector">
-              <BlueprintHealthInspector />
-            </ErrorBoundary>
-          </>
-        )}
+        {activePanel === "approval" &&
+          (!activeCloudId ? (
+            <EmptyProjectState />
+          ) : (
+            <>
+              <ErrorBoundary componentName="Approval Dashboard">
+                <ApprovalDashboard />
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Blueprint Health Inspector">
+                <BlueprintHealthInspector />
+              </ErrorBoundary>
+            </>
+          ))}
       </div>
 
       {/* 3. Main Content: Blueprint gets most of the screen */}
@@ -520,7 +596,24 @@ export default function Dashboard() {
         <div>
           <AIStatusBanner />
         </div>
-        <BlueprintViewer />
+        {activeCloudId ? (
+          <BlueprintViewer />
+        ) : (
+          <div
+            role="status"
+            className="glass-panel"
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--text-muted)",
+              textAlign: "center",
+            }}
+          >
+            Select a project to load its blueprint.
+          </div>
+        )}
       </div>
     </div>
   );
