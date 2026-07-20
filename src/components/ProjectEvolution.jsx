@@ -344,15 +344,6 @@ export default function ProjectEvolution() {
               </li>
             ))}
           </ul>
-          <div
-            style={{
-              marginTop: "8px",
-              fontSize: "0.75rem",
-              color: "var(--success)",
-            }}
-          >
-            Version Created: <strong>{recentRevisionResult.version}</strong>
-          </div>
         </div>
       )}
 
