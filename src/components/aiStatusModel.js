@@ -3,9 +3,9 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 
 export const AI_STATUS = {
-  GENERATING: { key: 'generating', label: 'AI Generation Active', color: '#4338ca', icon: Activity },
+  GENERATING: { key: 'generating', label: 'AI Generation Active', color: '#e5e5e5', icon: Activity },
   CONNECTED: { key: 'connected', label: 'Gemini Connected', color: '#10b981', icon: Zap },
-  CONFIGURED: { key: 'configured', label: 'Gemini Configured', color: '#3b82f6', icon: Zap },
+  CONFIGURED: { key: 'configured', label: 'Gemini Configured', color: '#b8b8b8', icon: Zap },
   SIMULATOR: { key: 'simulator', label: 'Simulator Mode', color: '#f59e0b', icon: Cpu },
   RATE_LIMITED: { key: 'rate_limited', label: 'Rate Limited', color: '#ef4444', icon: Timer },
   API_ERROR: { key: 'api_error', label: 'API Error', color: '#ef4444', icon: WifiOff },
