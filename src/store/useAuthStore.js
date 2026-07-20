@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/apiClient';
+import { useSectionHistoryStore } from './sectionHistoryStore';
 
 /**
  * Auth + cloud project registry.
@@ -68,6 +69,7 @@ export const useAuthStore = create((set, get) => ({
       console.error('[Cloud] Failed to delete project:', err.message);
       return false;
     }
+    useSectionHistoryStore.getState().clearProject(id);
     set((state) => ({
       cloudProjects: state.cloudProjects.filter(p => p.id !== id),
       activeCloudId: state.activeCloudId === id ? null : state.activeCloudId
