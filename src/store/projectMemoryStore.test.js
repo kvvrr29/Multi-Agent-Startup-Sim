@@ -26,4 +26,13 @@ describe('structured project memory', () => {
     expect(useProjectMemoryStore.getState().memory.business.targetAudience).toBe('Students');
     expect(useProjectMemoryStore.getState().memory.technical.backend).toBeUndefined();
   });
+
+  it('ignores the removed root domain field in legacy snapshots', () => {
+    useProjectMemoryStore.getState().restoreSnapshot({
+      memory: { domain: 'Legacy', scope: { domain: 'HealthTech' } }
+    });
+
+    expect(useProjectMemoryStore.getState().memory).not.toHaveProperty('domain');
+    expect(useProjectMemoryStore.getState().memory.scope.domain).toBe('HealthTech');
+  });
 });
