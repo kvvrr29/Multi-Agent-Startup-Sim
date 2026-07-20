@@ -384,7 +384,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
                 placeholder={`E.g., Make the ${label.toLowerCase()} target enterprise B2B instead...`}
                 style={{
                   width: "100%",
-                  padding: "12px",
+                  padding: "12px 48px 12px 12px",
                   borderRadius: "8px",
                   border: "1px solid var(--border-color)",
                   background: "#111724",
