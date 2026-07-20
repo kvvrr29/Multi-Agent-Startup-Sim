@@ -5,6 +5,9 @@ import { Database, ChevronDown, ChevronRight } from "lucide-react";
 export default function MemoryInspector() {
   const memory = useProjectMemoryStore((state) => state.memory);
   const [expanded, setExpanded] = useState(true);
+  const hasEntries = Object.values(memory || {}).some(
+    (value) => value && Object.keys(value).length > 0,
+  );
 
   return (
     <div
@@ -56,6 +59,7 @@ export default function MemoryInspector() {
             color: "var(--text-muted)",
           }}
         >
+          {!hasEntries && <div role="status">No saved project memory yet.</div>}
           <div
             style={{
               display: "grid",
@@ -112,9 +116,7 @@ export default function MemoryInspector() {
             <strong>Reasoning:</strong> {memory?.scope?.reasoning || "N/A"}
           </div>
 
-          {Object.entries(memory)
-            .filter(([key]) => key !== "domain")
-            .map(([category, items]) => {
+          {Object.entries(memory).map(([category, items]) => {
               const keys = Object.keys(items || {}).filter(
                 (k) =>
                   !(
