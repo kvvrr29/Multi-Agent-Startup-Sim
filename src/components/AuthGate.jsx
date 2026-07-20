@@ -109,7 +109,7 @@ export default function AuthGate({ children }) {
     return (
       <div className="container flex items-center justify-center" style={{ minHeight: '100vh' }}>
         <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent-surface)', color: 'var(--accent-primary)', marginBottom: '1rem' }}>
             <LogIn size={24} />
           </div>
           <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In or Sign Up</h1>
