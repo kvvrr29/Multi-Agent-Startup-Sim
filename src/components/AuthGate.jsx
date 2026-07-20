@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
-import { useProjectStore } from '../store/useProjectStore';
-import { startSync, stopSync, flush, openCloudProject } from '../services/cloudSync';
+import { startSync, stopSync, flush } from '../services/cloudSync';
 import { resetAllProjectData } from '../services/simulationEngine';
 import { Mail, LogIn, Loader } from 'lucide-react';
 
@@ -26,38 +25,33 @@ export default function AuthGate({ children }) {
 
   useEffect(() => { init(); }, [init]);
 
-  // Bootstrap after sign-in: open the most recently used project (list is
-  // sorted by last_opened_at) so returning users land on the Dashboard;
-  // first-time users go to the create screen. An unreachable API must show
-  // an error — never be mistaken for "this user has no projects".
+  // Bootstrap after sign-in: load the registry only. Project data is fetched
+  // explicitly when the user selects a project from the Dashboard.
   useEffect(() => {
     if (!userId) {
       stopSync();
       setBooted(false);
       setBootError(null);
-      resetAllProjectData();
+      resetAllProjectData({ preserveSectionHistory: true });
       return;
     }
     let cancelled = false;
     (async () => {
+      stopSync();
+      useAuthStore.getState().detachCloud();
+      resetAllProjectData({ preserveSectionHistory: true, currentView: 'dashboard' });
+      setBooted(false);
+
       const projects = await useAuthStore.getState().refreshProjects();
       if (cancelled) return;
       if (projects === null) {
         setBootError('Could not load your projects. Is the API server running?');
         return;
       }
-      if (projects.length > 0) {
-        const opened = await openCloudProject(projects[0].id);
-        if (cancelled) return;
-        if (!opened) {
-          setBootError(`Could not open "${projects[0].name}". Check your connection and retry.`);
-          return;
-        }
-      } else {
-        useProjectStore.setState({ currentView: 'create' });
-      }
       setBootError(null);
       setBooted(true);
+      // Subscriptions are safe with no active target. Selecting a project
+      // establishes its synchronization cursor before edits can be observed.
       startSync();
     })();
     return () => { cancelled = true; };
