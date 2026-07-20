@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { Bot, User, Briefcase, Code, Megaphone } from 'lucide-react';
+import { EVENT_HISTORY_LIMIT } from '../../shared/readLimits.js';
 
 const iconMap = {
   'mediator': <Bot size={16} />,
@@ -12,6 +13,7 @@ const iconMap = {
 
 export default function AgentTimeline() {
   const events = useProjectStore(state => state.workflowEvents);
+  const visibleEvents = events.slice(-EVENT_HISTORY_LIMIT);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -42,7 +44,12 @@ export default function AgentTimeline() {
             No workflow events yet.
           </div>
         )}
-        {events.map((ev, idx) => {
+        {events.length > EVENT_HISTORY_LIMIT && (
+          <div role="status" style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+            Showing the latest {EVENT_HISTORY_LIMIT} events.
+          </div>
+        )}
+        {visibleEvents.map((ev, idx) => {
           const message = ev.message || '';
           const isError = message.toLowerCase().includes('failed') || message.toLowerCase().includes('error');
           return (
