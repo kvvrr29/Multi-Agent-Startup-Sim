@@ -55,8 +55,7 @@ const PROJECT_FIELD_MAP = {
   platform: 'platform',
   teamSize: 'team_size',
   priorities: 'priorities',
-  memoryDomain: 'memory_domain',
-  currentVersionLabel: 'current_version_label'
+  memoryDomain: 'memory_domain'
 };
 
 const pickProjectFields = (body = {}) => {
@@ -108,14 +107,13 @@ app.get('/api/projects/:id', withUser, async (req, res) => {
   if (error) return dbError(res, error);
   if (!project) return res.status(404).json({ error: 'not_found' });
 
-  const [sections, versions, events, memory, decisions] = await Promise.all([
+  const [sections, events, memory, decisions] = await Promise.all([
     req.supabase.from('blueprint_sections').select('*').eq('project_id', id),
-    req.supabase.from('versions').select('*').eq('project_id', id).order('version_number'),
     req.supabase.from('workflow_events').select('*').eq('project_id', id).order('occurred_at'),
     req.supabase.from('memory_entries').select('*').eq('project_id', id),
     req.supabase.from('decision_entries').select('*').eq('project_id', id).order('decided_at')
   ]);
-  const failed = [sections, versions, events, memory, decisions].find(r => r.error);
+  const failed = [sections, events, memory, decisions].find(r => r.error);
   if (failed) return dbError(res, failed.error);
 
   // Fire-and-forget: opening a project marks it most-recently-used.
@@ -125,7 +123,6 @@ app.get('/api/projects/:id', withUser, async (req, res) => {
   res.json({
     project,
     sections: sections.data,
-    versions: versions.data,
     events: events.data,
     memory: memory.data,
     decisions: decisions.data
@@ -156,7 +153,6 @@ app.put('/api/projects/:id/sections', withUser, async (req, res) => {
       section_key: s.key,
       content: typeof s.content === 'string' ? s.content : '',
       status: s.status === 'approved' ? 'approved' : 'pending',
-      last_modified_version: typeof s.lastModifiedVersion === 'string' ? s.lastModifiedVersion : 'v1',
       generation_source: s.generationSource ?? null,
       generated_by: s.generatedBy ?? null,
       validation_scores: s.validationScores ?? null,
@@ -191,41 +187,6 @@ app.post('/api/projects/:id/events', withUser, async (req, res) => {
     .upsert(rows, { onConflict: 'project_id,client_id', ignoreDuplicates: true });
   if (error) return dbError(res, error);
   res.status(201).json({ appended: rows.length });
-});
-
-app.post('/api/projects/:id/versions', withUser, async (req, res) => {
-  const v = req.body || {};
-  const versionNumber = Number(String(v.id || '').replace(/^v/, ''));
-  if (!Number.isInteger(versionNumber) || versionNumber < 1) {
-    return res.status(400).json({ error: 'bad_request', message: 'version id (vN) is required.' });
-  }
-  const { error } = await req.supabase
-    .from('versions')
-    .upsert({
-      project_id: req.params.id,
-      version_number: versionNumber,
-      summary: typeof v.summary === 'string' ? v.summary : '',
-      change_type: v.changeType || 'revision',
-      completion_status: v.completionStatus || 'success',
-      affected_agents: Array.isArray(v.affectedAgents) ? v.affectedAgents : [],
-      affected_sections: Array.isArray(v.affectedSections) ? v.affectedSections : [],
-      approval_state: v.approvalState || {},
-      blueprint_snapshot: v.blueprintSnapshot || {},
-      memory_snapshot: v.memorySnapshot ?? null,
-      provenance_snapshot: v.provenanceSnapshot ?? null,
-      restored_from: v.restoredFrom ?? null,
-      created_at: v.timestamp || new Date().toISOString()
-    }, { onConflict: 'project_id,version_number', ignoreDuplicates: true });
-  if (error) return dbError(res, error);
-  const { data, error: metaError } = await req.supabase
-    .from('projects')
-    .update({ current_version_label: `v${versionNumber}` })
-    .eq('id', req.params.id)
-    .select('id')
-    .maybeSingle();
-  if (metaError) return dbError(res, metaError);
-  if (!data) return res.status(404).json({ error: 'not_found' });
-  res.status(201).json({ versionNumber });
 });
 
 app.put('/api/projects/:id/memory', withUser, async (req, res) => {
@@ -269,7 +230,6 @@ app.post('/api/projects/:id/decisions', withUser, async (req, res) => {
       value: d.value ?? null,
       agent: d.agent ?? null,
       instruction: d.instruction ?? null,
-      version_label: d.version ?? null,
       decided_at: d.timestamp || new Date().toISOString(),
       payload: d
     }));
