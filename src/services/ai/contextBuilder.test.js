@@ -16,7 +16,7 @@ describe('agent context construction', () => {
   it('uses current memory overrides before original project fields', () => {
     useProjectMemoryStore.getState().applyDecision({
       category: 'Business', key: 'targetAudience', value: 'Regional clinics', rationale: 'Pilot focus'
-    }, { agent: 'ceo', instruction: 'Narrow market', version: 'v2' });
+    }, { agent: 'ceo', instruction: 'Narrow market' });
     useProjectMemoryStore.getState().updateMemory('scope', 'budget', '$60k');
     const context = buildContextString('Revise backend only', 'developer');
     expect(context).toContain('Target Audience: Regional clinics');
