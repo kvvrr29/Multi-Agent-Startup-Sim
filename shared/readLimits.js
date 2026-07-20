@@ -1,0 +1,10 @@
+export const PROJECT_PAGE_LIMIT = 50;
+export const MAX_PROJECT_PAGE_LIMIT = 100;
+
+export const EVENT_HISTORY_LIMIT = 100;
+export const MAX_EVENT_HISTORY_LIMIT = 200;
+
+export const DECISION_HISTORY_LIMIT = 12;
+export const MAX_DECISION_HISTORY_LIMIT = 50;
+
+export const MAX_PAGE_OFFSET = 10_000;
