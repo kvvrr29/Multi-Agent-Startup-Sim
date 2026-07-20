@@ -142,7 +142,7 @@ export default function MemoryInspector() {
                   <strong
                     style={{
                       textTransform: "capitalize",
-                      color: "var(--accent-cyan)",
+                      color: "var(--accent-primary)",
                     }}
                   >
                     {category}
