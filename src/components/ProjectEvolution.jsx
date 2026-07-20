@@ -82,7 +82,7 @@ export default function ProjectEvolution() {
       <div
         style={{
           fontSize: "0.75rem",
-          color: "var(--primary-electric)",
+          color: "var(--accent-primary)",
           fontStyle: "italic",
           marginTop: "-1.2rem",
           display: "flex",
@@ -100,8 +100,8 @@ export default function ProjectEvolution() {
           style={{
             padding: "1rem",
             borderRadius: "8px",
-            background: "rgba(67, 56, 202, 0.1)",
-            border: "1px solid var(--primary-electric)",
+            background: "var(--accent-surface)",
+            border: "1px solid var(--accent-secondary)",
           }}
         >
           <div
@@ -110,7 +110,7 @@ export default function ProjectEvolution() {
               alignItems: "center",
               gap: "8px",
               marginBottom: "8px",
-              color: "var(--primary-electric)",
+              color: "var(--accent-primary)",
               fontWeight: "bold",
               fontSize: "0.85rem",
             }}
@@ -155,7 +155,7 @@ export default function ProjectEvolution() {
               <span
                 style={{
                   padding: "2px 6px",
-                  background: "var(--accent-purple)",
+                  background: "var(--accent-secondary)",
                   color: "#fff",
                   borderRadius: "4px",
                   textTransform: "uppercase",
@@ -183,7 +183,7 @@ export default function ProjectEvolution() {
           <Activity
             size={16}
             className="spin-slow"
-            color="var(--primary-electric)"
+            color="var(--accent-primary)"
           />
           <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
             Mediator is analyzing routing...
@@ -242,7 +242,7 @@ export default function ProjectEvolution() {
                       padding: "8px",
                       background: "rgba(0,0,0,0.25)",
                       borderRadius: "6px",
-                      borderLeft: "2px solid var(--accent-purple)",
+                      borderLeft: "2px solid var(--accent-secondary)",
                     }}
                   >
                     <div
@@ -256,7 +256,7 @@ export default function ProjectEvolution() {
                       <span
                         style={{
                           padding: "2px 6px",
-                          background: "var(--accent-purple)",
+                          background: "var(--accent-secondary)",
                           color: "#fff",
                           borderRadius: "4px",
                           textTransform: "uppercase",
