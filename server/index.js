@@ -3,6 +3,15 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 import { BLUEPRINT_SECTION_KEYS } from './blueprintKeys.js';
+import {
+  DECISION_HISTORY_LIMIT,
+  EVENT_HISTORY_LIMIT,
+  MAX_DECISION_HISTORY_LIMIT,
+  MAX_EVENT_HISTORY_LIMIT,
+  MAX_PAGE_OFFSET,
+  MAX_PROJECT_PAGE_LIMIT,
+  PROJECT_PAGE_LIMIT
+} from '../shared/readLimits.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
@@ -43,7 +52,7 @@ app.get('/api/health', (_req, res) => {
 
 // ---------- Projects (Supabase Postgres behind RLS) ----------
 
-const PROJECT_LIST_COLUMNS = 'id, name, created_at, updated_at, last_opened_at';
+const PROJECT_LIST_COLUMNS = 'id, name, updated_at, last_opened_at';
 const BLUEPRINT_SECTION_KEY_SET = new Set(BLUEPRINT_SECTION_KEYS);
 
 // camelCase client field → projects column, for create/patch whitelisting.
@@ -69,14 +78,38 @@ const pickProjectFields = (body = {}) => {
 
 const dbError = (res, error) => res.status(500).json({ error: 'db_error', message: error.message });
 
+const boundedInteger = (value, fallback, maximum, minimum = 0) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, minimum), maximum);
+};
+
+const readPage = (query, req, defaultLimit, maxLimit) => {
+  const limit = boundedInteger(req.query.limit, defaultLimit, maxLimit, 1);
+  const offset = boundedInteger(req.query.offset, 0, MAX_PAGE_OFFSET);
+  // Supabase ranges are inclusive, so this requests one extra row to compute
+  // hasMore without an additional count query.
+  return { query: query.range(offset, offset + limit), limit, offset };
+};
+
+const pageMetadata = (rowCount, limit, offset) => ({
+  limit,
+  offset,
+  hasMore: rowCount > limit && offset < MAX_PAGE_OFFSET,
+  nextOffset: rowCount > limit && offset < MAX_PAGE_OFFSET ? offset + limit : null
+});
+
 app.get('/api/projects', withUser, async (req, res) => {
-  const { data, error } = await req.supabase
+  const baseQuery = req.supabase
     .from('projects')
     .select(PROJECT_LIST_COLUMNS)
     .order('last_opened_at', { ascending: false, nullsFirst: false })
     .order('updated_at', { ascending: false });
+  const { query, limit, offset } = readPage(baseQuery, req, PROJECT_PAGE_LIMIT, MAX_PROJECT_PAGE_LIMIT);
+  const { data, error } = await query;
   if (error) return dbError(res, error);
-  res.json(data);
+  const rows = data || [];
+  res.json({ projects: rows.slice(0, limit), pagination: pageMetadata(rows.length, limit, offset) });
 });
 
 app.post('/api/projects', withUser, async (req, res) => {
@@ -123,19 +156,22 @@ app.get('/api/projects/:id/meta', withUser, async (req, res) => {
 });
 
 app.get('/api/projects/:id/events', withUser, async (req, res) => {
-  const { data, error } = await req.supabase
+  const baseQuery = req.supabase
     .from('workflow_events')
     .select('client_id, occurred_at, payload')
     .eq('project_id', req.params.id)
-    .order('occurred_at', { ascending: true })
-    .order('id', { ascending: true });
+    .order('occurred_at', { ascending: false })
+    .order('id', { ascending: false });
+  const { query, limit, offset } = readPage(baseQuery, req, EVENT_HISTORY_LIMIT, MAX_EVENT_HISTORY_LIMIT);
+  const { data, error } = await query;
   if (error) return dbError(res, error);
-  const events = (data || []).map(row => ({
+  const rows = data || [];
+  const events = rows.slice(0, limit).reverse().map(row => ({
     ...(row.payload || {}),
     id: row.payload?.id ?? row.client_id,
     timestamp: row.payload?.timestamp ?? row.occurred_at
   }));
-  res.json({ events });
+  res.json({ events, pagination: pageMetadata(rows.length, limit, offset) });
 });
 
 app.get('/api/projects/:id/memory', withUser, async (req, res) => {
@@ -150,14 +186,17 @@ app.get('/api/projects/:id/memory', withUser, async (req, res) => {
 });
 
 app.get('/api/projects/:id/decisions', withUser, async (req, res) => {
-  const { data, error } = await req.supabase
+  const baseQuery = req.supabase
     .from('decision_entries')
     .select('client_id, category, key, value, agent, instruction, decided_at, payload')
     .eq('project_id', req.params.id)
-    .order('decided_at', { ascending: true })
-    .order('id', { ascending: true });
+    .order('decided_at', { ascending: false })
+    .order('id', { ascending: false });
+  const { query, limit, offset } = readPage(baseQuery, req, DECISION_HISTORY_LIMIT, MAX_DECISION_HISTORY_LIMIT);
+  const { data, error } = await query;
   if (error) return dbError(res, error);
-  const decisions = (data || []).map(row => ({
+  const rows = data || [];
+  const decisions = rows.slice(0, limit).reverse().map(row => ({
     ...(row.payload || {}),
     id: row.payload?.id ?? row.client_id,
     category: row.payload?.category ?? row.category,
@@ -167,7 +206,7 @@ app.get('/api/projects/:id/decisions', withUser, async (req, res) => {
     instruction: row.payload?.instruction ?? row.instruction,
     timestamp: row.payload?.timestamp ?? row.decided_at
   }));
-  res.json({ decisions });
+  res.json({ decisions, pagination: pageMetadata(rows.length, limit, offset) });
 });
 
 app.patch('/api/projects/:id', withUser, async (req, res) => {
