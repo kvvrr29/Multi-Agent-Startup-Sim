@@ -47,6 +47,9 @@ export const useAuthStore = create((set, get) => ({
 
   setActiveCloudId: (id) => set({ activeCloudId: id }),
   detachCloud: () => set({ activeCloudId: null }),
+  addCloudProject: (project) => set((state) => ({
+    cloudProjects: [project, ...state.cloudProjects.filter(p => p.id !== project.id)]
+  })),
 
   // Returns the project list, or null when the API is unreachable — callers
   // must not treat a failure as "the user has no projects".
