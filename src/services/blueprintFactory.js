@@ -261,8 +261,8 @@ export function generateDynamicBlueprint(projectData) {
   const techBackend = memory.technical?.backend || null;
   const hasMobile = memory.scope?.platforms?.includes('mobile') || (projectData?.platform || '').includes('mobile') || false;
 
-  let domain = memory.scope?.domain || memory.domain || 'general';
-  if (!memory.scope?.domain && !memory.domain) {
+  let domain = memory.scope?.domain || 'general';
+  if (!memory.scope?.domain) {
     if (idea.includes('food') || idea.includes('delivery') || idea.includes('restaurant')) {
       domain = 'food';
     } else if (idea.includes('chess') || idea.includes('coach') || idea.includes('lesson')) {
