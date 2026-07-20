@@ -6,6 +6,7 @@ import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { applyRevisionSimulation } from './simulationEngine';
 import { useProjectStore } from '../store/useProjectStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
+import { useSectionHistoryStore } from '../store/sectionHistoryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 
 const preview = (tasks) => ({ instruction: 'Apply requested changes', confidence: 'High', tasks });
@@ -16,6 +17,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
+  // Revisions record content through the section-history store, which needs an
+  // active project to write into.
+  useSectionHistoryStore.setState({ activeProjectId: null, byProject: {} });
+  useSectionHistoryStore.getState().loadProject('test-project', []);
   useSettingsStore.getState().setAiModeEnabled(true);
   useProjectStore.getState().updateBlueprintSection('businessModel', 'Original business model content');
   useProjectStore.getState().updateBlueprintSection('technologyStack', 'Original technology stack content');
