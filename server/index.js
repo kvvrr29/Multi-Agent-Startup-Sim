@@ -44,6 +44,7 @@ app.get('/api/health', (_req, res) => {
 // ---------- Projects (Supabase Postgres behind RLS) ----------
 
 const PROJECT_LIST_COLUMNS = 'id, name, created_at, updated_at, last_opened_at';
+const BLUEPRINT_SECTION_KEY_SET = new Set(BLUEPRINT_SECTION_KEYS);
 
 // camelCase client field → projects column, for create/patch whitelisting.
 const PROJECT_FIELD_MAP = {
@@ -54,8 +55,7 @@ const PROJECT_FIELD_MAP = {
   timeline: 'timeline',
   platform: 'platform',
   teamSize: 'team_size',
-  priorities: 'priorities',
-  memoryDomain: 'memory_domain'
+  priorities: 'priorities'
 };
 
 const pickProjectFields = (body = {}) => {
@@ -88,45 +88,86 @@ app.post('/api/projects', withUser, async (req, res) => {
     .select(PROJECT_LIST_COLUMNS)
     .single();
   if (error) return dbError(res, error);
-  // Seed one row per blueprint section so section writes are pure upserts.
-  const { error: seedError } = await req.supabase
-    .from('blueprint_sections')
-    .insert(BLUEPRINT_SECTION_KEYS.map(key => ({ project_id: data.id, section_key: key })));
-  if (seedError) return dbError(res, seedError);
   res.status(201).json(data);
 });
 
-// Composed hydration payload: everything needed to open a project in one trip.
-app.get('/api/projects/:id', withUser, async (req, res) => {
-  const id = req.params.id;
-  const { data: project, error } = await req.supabase
+// Blueprint selection is intentionally a single, narrow read. The project name
+// already came from the registry; all other domains are loaded by their panels.
+app.get('/api/projects/:id/blueprint', withUser, async (req, res) => {
+  const { data, error } = await req.supabase
+    .from('blueprint_sections')
+    .select('section_key, content, status, generation_source, generated_by, validation_scores, generated_at, failure_reason, updated_at')
+    .eq('project_id', req.params.id);
+  if (error) return dbError(res, error);
+  res.json({ sections: data || [] });
+});
+
+app.get('/api/projects/:id/meta', withUser, async (req, res) => {
+  const { data, error } = await req.supabase
     .from('projects')
-    .select('*')
-    .eq('id', id)
+    .select('name, idea, target_audience, budget, timeline, platform, team_size, priorities')
+    .eq('id', req.params.id)
     .maybeSingle();
   if (error) return dbError(res, error);
-  if (!project) return res.status(404).json({ error: 'not_found' });
-
-  const [sections, events, memory, decisions] = await Promise.all([
-    req.supabase.from('blueprint_sections').select('*').eq('project_id', id),
-    req.supabase.from('workflow_events').select('*').eq('project_id', id).order('occurred_at'),
-    req.supabase.from('memory_entries').select('*').eq('project_id', id),
-    req.supabase.from('decision_entries').select('*').eq('project_id', id).order('decided_at')
-  ]);
-  const failed = [sections, events, memory, decisions].find(r => r.error);
-  if (failed) return dbError(res, failed.error);
-
-  // Fire-and-forget: opening a project marks it most-recently-used.
-  req.supabase.from('projects').update({ last_opened_at: new Date().toISOString() }).eq('id', id)
-    .then(() => {}, () => {});
-
+  if (!data) return res.status(404).json({ error: 'not_found' });
   res.json({
-    project,
-    sections: sections.data,
-    events: events.data,
-    memory: memory.data,
-    decisions: decisions.data
+    name: data.name,
+    idea: data.idea,
+    targetAudience: data.target_audience,
+    budget: data.budget,
+    timeline: data.timeline,
+    platform: data.platform,
+    teamSize: data.team_size,
+    priorities: data.priorities
   });
+});
+
+app.get('/api/projects/:id/events', withUser, async (req, res) => {
+  const { data, error } = await req.supabase
+    .from('workflow_events')
+    .select('client_id, occurred_at, payload')
+    .eq('project_id', req.params.id)
+    .order('occurred_at', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return dbError(res, error);
+  const events = (data || []).map(row => ({
+    ...(row.payload || {}),
+    id: row.payload?.id ?? row.client_id,
+    timestamp: row.payload?.timestamp ?? row.occurred_at
+  }));
+  res.json({ events });
+});
+
+app.get('/api/projects/:id/memory', withUser, async (req, res) => {
+  const { data, error } = await req.supabase
+    .from('memory_entries')
+    .select('category, key, value')
+    .eq('project_id', req.params.id)
+    .order('category', { ascending: true })
+    .order('key', { ascending: true });
+  if (error) return dbError(res, error);
+  res.json({ entries: data || [] });
+});
+
+app.get('/api/projects/:id/decisions', withUser, async (req, res) => {
+  const { data, error } = await req.supabase
+    .from('decision_entries')
+    .select('client_id, category, key, value, agent, instruction, decided_at, payload')
+    .eq('project_id', req.params.id)
+    .order('decided_at', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return dbError(res, error);
+  const decisions = (data || []).map(row => ({
+    ...(row.payload || {}),
+    id: row.payload?.id ?? row.client_id,
+    category: row.payload?.category ?? row.category,
+    key: row.payload?.key ?? row.key,
+    value: row.payload?.value ?? row.value,
+    agent: row.payload?.agent ?? row.agent,
+    instruction: row.payload?.instruction ?? row.instruction,
+    timestamp: row.payload?.timestamp ?? row.decided_at
+  }));
+  res.json({ decisions });
 });
 
 app.patch('/api/projects/:id', withUser, async (req, res) => {
@@ -147,7 +188,7 @@ app.put('/api/projects/:id/sections', withUser, async (req, res) => {
   const sections = Array.isArray(req.body?.sections) ? req.body.sections : [];
   if (sections.length === 0) return res.status(400).json({ error: 'bad_request', message: 'sections array is required.' });
   const rows = sections
-    .filter(s => typeof s?.key === 'string')
+    .filter(s => typeof s?.key === 'string' && BLUEPRINT_SECTION_KEY_SET.has(s.key))
     .map(s => ({
       project_id: req.params.id,
       section_key: s.key,
@@ -159,6 +200,9 @@ app.put('/api/projects/:id/sections', withUser, async (req, res) => {
       generated_at: s.generatedAt ?? null,
       failure_reason: s.failureReason ?? null
     }));
+  if (rows.length === 0) {
+    return res.status(400).json({ error: 'bad_request', message: 'No valid blueprint sections were provided.' });
+  }
   const { data, error } = await req.supabase
     .from('blueprint_sections')
     .upsert(rows, { onConflict: 'project_id,section_key' })
@@ -191,29 +235,15 @@ app.post('/api/projects/:id/events', withUser, async (req, res) => {
 
 app.put('/api/projects/:id/memory', withUser, async (req, res) => {
   const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
-  const domain = typeof req.body?.domain === 'string' ? req.body.domain : undefined;
-  if (entries.length === 0 && domain === undefined) {
-    return res.status(400).json({ error: 'bad_request', message: 'Nothing to update.' });
-  }
-  if (entries.length > 0) {
-    const rows = entries
-      .filter(e => typeof e?.category === 'string' && typeof e?.key === 'string')
-      .map(e => ({ project_id: req.params.id, category: e.category, key: e.key, value: e.value ?? null }));
-    const { error } = await req.supabase
-      .from('memory_entries')
-      .upsert(rows, { onConflict: 'project_id,category,key' });
-    if (error) return dbError(res, error);
-  }
-  if (domain !== undefined) {
-    const { data, error } = await req.supabase
-      .from('projects')
-      .update({ memory_domain: domain })
-      .eq('id', req.params.id)
-      .select('id')
-      .maybeSingle();
-    if (error) return dbError(res, error);
-    if (!data) return res.status(404).json({ error: 'not_found' });
-  }
+  if (entries.length === 0) return res.status(400).json({ error: 'bad_request', message: 'entries array is required.' });
+  const rows = entries
+    .filter(e => typeof e?.category === 'string' && typeof e?.key === 'string')
+    .map(e => ({ project_id: req.params.id, category: e.category, key: e.key, value: e.value ?? null }));
+  if (rows.length === 0) return res.status(400).json({ error: 'bad_request', message: 'No valid memory entries were provided.' });
+  const { error } = await req.supabase
+    .from('memory_entries')
+    .upsert(rows, { onConflict: 'project_id,category,key' });
+  if (error) return dbError(res, error);
   res.json({ ok: true });
 });
 
