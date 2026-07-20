@@ -42,9 +42,16 @@ test.beforeEach(async ({ page }) => {
     const { data } = await window.__supabase.auth.getSession();
     if (!data.session) return;
     const headers = { Authorization: `Bearer ${data.session.access_token}` };
-    const res = await fetch('/api/projects', { headers });
-    const projects = res.ok ? await res.json() : [];
-    await Promise.all(projects.map(p => fetch(`/api/projects/${p.id}`, { method: 'DELETE', headers })));
+    // Delete one bounded page at a time. Deleting shifts the next page to
+    // offset zero, so this also cleans registries larger than one API page.
+    while (true) {
+      const res = await fetch('/api/projects?limit=100&offset=0', { headers });
+      const payload = res.ok ? await res.json() : [];
+      const projects = Array.isArray(payload) ? payload : (payload.projects || []);
+      if (projects.length === 0) break;
+      await Promise.all(projects.map(p => fetch(`/api/projects/${p.id}`, { method: 'DELETE', headers })));
+      if (Array.isArray(payload) || payload.pagination?.hasMore !== true) break;
+    }
   });
   await page.evaluate(() => sessionStorage.setItem('e2e-api-requests', '[]'));
   await page.reload();
