@@ -36,7 +36,6 @@ export const api = {
   updateProjectMeta: (id, patch) => request(`/api/projects/${id}`, { method: 'PATCH', body: patch }),
   upsertSections: (id, sections) => request(`/api/projects/${id}/sections`, { method: 'PUT', body: { sections } }),
   appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
-  createVersion: (id, version) => request(`/api/projects/${id}/versions`, { method: 'POST', body: version }),
   upsertMemory: (id, body) => request(`/api/projects/${id}/memory`, { method: 'PUT', body }),
   appendDecisions: (id, decisions) => request(`/api/projects/${id}/decisions`, { method: 'POST', body: { decisions } }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
