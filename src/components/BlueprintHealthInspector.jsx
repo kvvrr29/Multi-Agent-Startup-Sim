@@ -40,7 +40,6 @@ export default function BlueprintHealthInspector() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '0.75rem' }}>
                   <span>Status: <span style={{ color: data?.status === 'approved' ? 'var(--success)' : 'var(--warning)' }}>{data?.status || 'missing'}</span></span>
                   <span>Length: <span style={{ color: length === 0 ? 'var(--danger)' : 'var(--text-primary)' }}>{length}</span></span>
-                  <span>Version: <span style={{ color: 'var(--accent-cyan)' }}>{data?.lastModifiedVersion || 'N/A'}</span></span>
                 </div>
               </div>
             );
