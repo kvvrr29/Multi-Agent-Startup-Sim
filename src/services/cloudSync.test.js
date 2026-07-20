@@ -39,7 +39,14 @@ beforeEach(async () => {
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
   useSectionHistoryStore.setState({ activeProjectId: null, byProject: {} });
-  useAuthStore.setState({ session: { user: { id: 'u1' } }, activeCloudId: null, cloudProjects: [] });
+  useAuthStore.setState({
+    session: { user: { id: 'u1' } },
+    activeCloudId: null,
+    cloudProjects: [],
+    projectsHasMore: false,
+    projectsNextOffset: 0,
+    projectsLoadingMore: false
+  });
   // Establishes the sync target and the baseline cursor.
   api.createProject.mockResolvedValue({ id: 'proj-1', name: 'Registry Name' });
   await createCloudProject({ name: 'Test' });
