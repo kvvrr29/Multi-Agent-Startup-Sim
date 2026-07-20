@@ -2,7 +2,6 @@ import React from "react";
 import AgentVisualizer from "./AgentVisualizer";
 import BlueprintViewer from "./BlueprintViewer";
 import ProjectEvolution from "./ProjectEvolution";
-import VersionHistory from "./VersionHistory";
 import MemoryInspector from "./MemoryInspector";
 import AgentTimeline from "./AgentTimeline";
 import { useProjectStore, isAgentBusy } from "../store/useProjectStore";
@@ -21,7 +20,6 @@ import CloudProjectList from "./CloudProjectList";
 import {
   Bot,
   Database,
-  History,
   BarChart2,
   Settings,
   BriefcaseBusiness,
@@ -282,7 +280,6 @@ const PANELS = [
   { id: "project", label: "Your Projects", icon: BriefcaseBusiness },
   { id: "agents", label: "Agent Team", icon: Bot },
   { id: "memory", label: "Project Memory", icon: Database },
-  { id: "versions", label: "Versions", icon: History },
   { id: "approval", label: "Approval", icon: BarChart2 },
 ];
 
@@ -468,7 +465,7 @@ export default function Dashboard() {
               onClick={() => {
                 if (
                   window.confirm(
-                    "Start a new project? This clears the project, blueprint, memory, versions, provenance, and debug data. Your cloud copy is kept.",
+                    "Start a new project? This clears the project, blueprint, memory, and debug data. Your cloud copy is kept.",
                   )
                 ) {
                   // Detach from the cloud row BEFORE clearing stores, otherwise the
@@ -495,12 +492,6 @@ export default function Dashboard() {
         {activePanel === "memory" && (
           <ErrorBoundary componentName="Memory Inspector">
             <MemoryInspector />
-          </ErrorBoundary>
-        )}
-
-        {activePanel === "versions" && (
-          <ErrorBoundary componentName="Version History">
-            <VersionHistory />
           </ErrorBoundary>
         )}
 
