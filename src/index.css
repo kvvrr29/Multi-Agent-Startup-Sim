@@ -182,6 +182,23 @@ a:hover {
     border-color: #34d399;
 }
 
+.btn-purple {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid var(--accent-purple);
+    color: var(--accent-purple);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-purple:hover {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: #c084fc;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
