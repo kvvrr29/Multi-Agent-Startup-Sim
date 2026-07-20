@@ -12,6 +12,9 @@ export default function CloudProjectList({
   onOpen,
 }) {
   const cloudProjects = useAuthStore((state) => state.cloudProjects);
+  const projectsHasMore = useAuthStore((state) => state.projectsHasMore);
+  const projectsLoadingMore = useAuthStore((state) => state.projectsLoadingMore);
+  const loadMoreProjects = useAuthStore((state) => state.loadMoreProjects);
   const deleteCloudProject = useAuthStore((state) => state.deleteCloudProject);
   const [openingId, setOpeningId] = useState(null);
 
@@ -139,6 +142,17 @@ export default function CloudProjectList({
           </div>
         );
       })}
+      {projectsHasMore && (
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={projectsLoadingMore}
+          onClick={loadMoreProjects}
+          style={{ marginTop: "6px", padding: "8px 12px", width: "100%" }}
+        >
+          {projectsLoadingMore ? "Loading…" : "Load more projects"}
+        </button>
+      )}
     </div>
   );
 }
