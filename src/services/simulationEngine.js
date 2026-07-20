@@ -80,8 +80,6 @@ export const runInitialSimulation = async (projectData) => {
   const memoryStore = useProjectMemoryStore.getState();
   const sectionHistory = useSectionHistoryStore.getState();
 
-  console.log("Mediator started");
-  
   // Initialize memory
   memoryStore.clearMemory();
   memoryStore.updateMemory('scope', 'budget', projectData?.budget || 'N/A');
