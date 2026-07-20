@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
@@ -191,7 +191,11 @@ const SourceBadge = ({ sectionData }) => {
 };
 
 // Section block with approval workflow, collapse, and copy
-const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
+// Memoized so navigating one section's versions (which changes only that
+// section's object in the blueprint) re-renders that block alone, not all 18.
+// Props are ref-stable for unchanged sections: updateBlueprintSection replaces
+// only the changed key's object, and onZoomDiagram is a stable setState ref.
+const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
   // Client-side version-history navigation (primitive selectors to avoid
   // re-render churn from returning a fresh object each render).
@@ -472,7 +476,7 @@ const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
       )}
     </div>
   );
-};
+});
 
 // Sticky table of contents with approval markers (doc §10)
 const TableOfContents = ({ sections, onNavigate }) => {
@@ -673,13 +677,19 @@ const DiagramZoomModal = ({ svg, onClose }) => {
 function BlueprintViewerInner() {
   const blueprint = useProjectStore((state) => state.blueprint);
   const project = useProjectStore((state) => state.project);
+  const deferredDataState = useProjectStore((state) => state.deferredDataState);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomedDiagram, setZoomedDiagram] = useState(null);
   const scrollRef = useRef(null);
 
-  // Schema order is preserved by the blueprint object; show only filled sections
-  const sections = Object.values(blueprint || {}).filter(
-    (s) => s && s.content && s.content.trim().length > 0,
+  // Schema order is preserved by the blueprint object; show only filled sections.
+  // Recomputes only when the blueprint changes, not on zoom/fullscreen toggles.
+  const sections = useMemo(
+    () =>
+      Object.values(blueprint || {}).filter(
+        (s) => s && s.content && s.content.trim().length > 0,
+      ),
+    [blueprint],
   );
 
   const handleNavigate = (id) => {
@@ -770,7 +780,11 @@ function BlueprintViewerInner() {
             }}
           >
             <p>The blueprint is currently empty.</p>
-            <p>Wait for the AI agents to begin their analysis...</p>
+            <p>
+              {deferredDataState === "unloaded"
+                ? "This project does not have any saved blueprint sections yet."
+                : "Wait for the AI agents to begin their analysis..."}
+            </p>
           </div>
         ) : (
           <div
