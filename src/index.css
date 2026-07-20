@@ -127,17 +127,6 @@ a:hover {
     transform: translateY(-1px);
 }
 
-.btn-outline {
-    background: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-}
-
-.btn-outline:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: var(--border-hover);
-}
-
 .btn-ghost {
     background: transparent;
     color: var(--text-secondary);
@@ -235,19 +224,12 @@ a:hover {
     align-items: center;
 }
 
-.justify-between {
-    justify-content: space-between;
-}
-
 .justify-center {
     justify-content: center;
 }
 
 .gap-1 {
     gap: 0.25rem;
-}
-.gap-2 {
-    gap: 0.5rem;
 }
 .gap-3 {
     gap: 0.75rem;
