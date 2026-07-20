@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./ai/aiBlueprintFactory', () => ({ generateAgentContent: vi.fn() }));
+vi.mock('./cloudSync', () => ({
+  ensureProjectResources: vi.fn(),
+  resetProjectResourceLoading: vi.fn()
+}));
 
 import { generateAgentContent } from './ai/aiBlueprintFactory';
-import { applyRevisionSimulation } from './simulationEngine';
+import { ensureProjectResources } from './cloudSync';
+import { applyRevisionSimulation, runRevisionSimulation } from './simulationEngine';
 import { useProjectStore } from '../store/useProjectStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 import { useSectionHistoryStore } from '../store/sectionHistoryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { useAuthStore } from '../store/useAuthStore';
 
 const preview = (tasks) => ({ instruction: 'Apply requested changes', confidence: 'High', tasks });
 const result = (content) => ({ content, decisions: [], scores: { overall: 90 }, generationSource: 'Gemini' });
@@ -15,6 +21,8 @@ const result = (content) => ({ content, decisions: [], scores: { overall: 90 }, 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  ensureProjectResources.mockResolvedValue();
+  useAuthStore.setState({ activeCloudId: null });
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
   // Revisions record content through the section-history store, which needs an
@@ -84,12 +92,25 @@ describe('revision workflow outcomes', () => {
     expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Changed business model content');
   });
 
-  it('times out a task without applying its late result', async () => {
-    generateAgentContent.mockReturnValue(new Promise(() => {}));
+  it('leaves the section unchanged when the AI call rejects', async () => {
+    generateAgentContent.mockRejectedValue(new Error('network error'));
     const workflow = await settle(applyRevisionSimulation(preview([
       { agent: 'ceo', sections: ['businessModel'], taskDescription: 'Slow request', reason: '' }
     ])));
     expect(workflow.status).toBe('failed');
     expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Original business model content');
+  });
+
+  it('loads cloud AI context before a revision and leaves the blueprint unchanged when loading fails', async () => {
+    useAuthStore.setState({ activeCloudId: 'cloud-project' });
+    ensureProjectResources.mockRejectedValueOnce(new Error('decisions offline'));
+
+    const workflow = await runRevisionSimulation('Change pricing', '', 'businessModel');
+
+    expect(ensureProjectResources).toHaveBeenCalledWith(['meta', 'memory', 'decisions']);
+    expect(generateAgentContent).not.toHaveBeenCalled();
+    expect(workflow).toMatchObject({ status: 'failed', isError: true });
+    expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Original business model content');
+    expect(useProjectStore.getState().workflow.active).toBe(false);
   });
 });
