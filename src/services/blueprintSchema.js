@@ -9,7 +9,6 @@ export const createBlueprintSchema = () => {
       type: section.type,
       status: 'pending',
       content: '',
-      lastModifiedVersion: 'v1',
       generationSource: null,
       generatedBy: null,
       validationScores: null,
