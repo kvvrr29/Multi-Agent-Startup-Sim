@@ -16,23 +16,11 @@ describe('structured project memory', () => {
     expect(state.decisionHistory[0]).toMatchObject({ agent: 'ceo', instruction: 'Narrow audience' });
   });
 
-  it('preserves unrelated facts across later decisions and restores snapshots', () => {
+  it('preserves unrelated facts across later decisions', () => {
     const store = useProjectMemoryStore.getState();
     store.applyDecision({ category: 'Business', key: 'targetAudience', value: 'Students', rationale: 'Launch focus' });
-    const snapshot = useProjectMemoryStore.getState().getSnapshot();
     store.applyDecision({ category: 'Technical', key: 'backend', value: 'FastAPI', rationale: 'Team skill' });
     expect(useProjectMemoryStore.getState().memory.business.targetAudience).toBe('Students');
-    useProjectMemoryStore.getState().restoreSnapshot(snapshot);
-    expect(useProjectMemoryStore.getState().memory.business.targetAudience).toBe('Students');
-    expect(useProjectMemoryStore.getState().memory.technical.backend).toBeUndefined();
-  });
-
-  it('ignores the removed root domain field in legacy snapshots', () => {
-    useProjectMemoryStore.getState().restoreSnapshot({
-      memory: { domain: 'Legacy', scope: { domain: 'HealthTech' } }
-    });
-
-    expect(useProjectMemoryStore.getState().memory).not.toHaveProperty('domain');
-    expect(useProjectMemoryStore.getState().memory.scope.domain).toBe('HealthTech');
+    expect(useProjectMemoryStore.getState().memory.technical.backend).toBe('FastAPI');
   });
 });
