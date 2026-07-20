@@ -8,12 +8,12 @@ describe('structured project memory', () => {
     const store = useProjectMemoryStore.getState();
     store.applyDecision(
       { category: 'Business', key: 'targetAudience', value: 'Regional clinics', rationale: 'Focused pilot' },
-      { agent: 'ceo', instruction: 'Narrow audience', version: 'v2' }
+      { agent: 'ceo', instruction: 'Narrow audience' }
     );
     const state = useProjectMemoryStore.getState();
     expect(state.memory.business.targetAudience).toBe('Regional clinics');
     expect(state.decisionHistory).toHaveLength(1);
-    expect(state.decisionHistory[0]).toMatchObject({ agent: 'ceo', instruction: 'Narrow audience', version: 'v2' });
+    expect(state.decisionHistory[0]).toMatchObject({ agent: 'ceo', instruction: 'Narrow audience' });
   });
 
   it('preserves unrelated facts across later decisions and restores snapshots', () => {
