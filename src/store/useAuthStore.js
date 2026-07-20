@@ -12,6 +12,9 @@ export const useAuthStore = create((set, get) => ({
   session: undefined,
   user: null,
   cloudProjects: [],
+  projectsHasMore: false,
+  projectsNextOffset: 0,
+  projectsLoadingMore: false,
   activeCloudId: null,
   authMessage: null,
   authError: null,
@@ -22,7 +25,13 @@ export const useAuthStore = create((set, get) => ({
     });
     supabase.auth.onAuthStateChange((_event, session) => {
       set({ session: session ?? null, user: session?.user || null });
-      if (!session) set({ cloudProjects: [], activeCloudId: null });
+      if (!session) set({
+        cloudProjects: [],
+        projectsHasMore: false,
+        projectsNextOffset: 0,
+        projectsLoadingMore: false,
+        activeCloudId: null
+      });
     });
   },
 
@@ -42,13 +51,22 @@ export const useAuthStore = create((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ cloudProjects: [], activeCloudId: null, authMessage: null, authError: null });
+    set({
+      cloudProjects: [],
+      projectsHasMore: false,
+      projectsNextOffset: 0,
+      projectsLoadingMore: false,
+      activeCloudId: null,
+      authMessage: null,
+      authError: null
+    });
   },
 
   setActiveCloudId: (id) => set({ activeCloudId: id }),
   detachCloud: () => set({ activeCloudId: null }),
   addCloudProject: (project) => set((state) => ({
-    cloudProjects: [project, ...state.cloudProjects.filter(p => p.id !== project.id)]
+    cloudProjects: [project, ...state.cloudProjects.filter(p => p.id !== project.id)],
+    projectsNextOffset: state.projectsHasMore ? state.projectsNextOffset + 1 : state.projectsNextOffset
   })),
 
   // Returns the project list, or null when the API is unreachable — callers
@@ -56,12 +74,42 @@ export const useAuthStore = create((set, get) => ({
   refreshProjects: async () => {
     if (!get().session) return [];
     try {
-      const data = await api.listProjects();
-      set({ cloudProjects: data || [] });
-      return data || [];
+      const payload = await api.listProjects();
+      const projects = Array.isArray(payload) ? payload : (payload?.projects || []);
+      set({
+        cloudProjects: projects,
+        projectsHasMore: payload?.pagination?.hasMore === true,
+        projectsNextOffset: payload?.pagination?.nextOffset ?? projects.length,
+        projectsLoadingMore: false
+      });
+      return projects;
     } catch (err) {
       console.error('[Cloud] Failed to list projects:', err.message);
       return null;
+    }
+  },
+
+  loadMoreProjects: async () => {
+    const state = get();
+    if (!state.session || !state.projectsHasMore || state.projectsLoadingMore) return false;
+    set({ projectsLoadingMore: true });
+    try {
+      const payload = await api.listProjects({ offset: state.projectsNextOffset });
+      const projects = Array.isArray(payload) ? payload : (payload?.projects || []);
+      set((current) => ({
+        cloudProjects: [
+          ...current.cloudProjects,
+          ...projects.filter(project => !current.cloudProjects.some(existing => existing.id === project.id))
+        ],
+        projectsHasMore: payload?.pagination?.hasMore === true,
+        projectsNextOffset: payload?.pagination?.nextOffset ?? state.projectsNextOffset + projects.length,
+        projectsLoadingMore: false
+      }));
+      return true;
+    } catch (err) {
+      console.error('[Cloud] Failed to load more projects:', err.message);
+      set({ projectsLoadingMore: false });
+      return false;
     }
   },
 
@@ -75,6 +123,9 @@ export const useAuthStore = create((set, get) => ({
     useSectionHistoryStore.getState().clearProject(id);
     set((state) => ({
       cloudProjects: state.cloudProjects.filter(p => p.id !== id),
+      projectsNextOffset: state.projectsHasMore
+        ? Math.max(0, state.projectsNextOffset - 1)
+        : state.projectsNextOffset,
       activeCloudId: state.activeCloudId === id ? null : state.activeCloudId
     }));
     return true;
