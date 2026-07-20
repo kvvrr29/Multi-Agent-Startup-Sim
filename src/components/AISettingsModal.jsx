@@ -77,7 +77,7 @@ export default function AISettingsModal({ onClose }) {
               fontSize: "1.2rem",
             }}
           >
-            <Settings size={20} color="var(--primary-electric)" /> AI Settings
+            <Settings size={20} color="var(--accent-primary)" /> AI Settings
           </h2>
           <button
             aria-label="Close AI Settings"
@@ -271,14 +271,14 @@ export default function AISettingsModal({ onClose }) {
               padding: "1rem",
               background: "var(--bg-primary)",
               borderRadius: "10px",
-              border: `1px solid ${localDevMode ? "var(--accent-purple)" : "var(--border-color)"}`,
+              border: `1px solid ${localDevMode ? "var(--accent-secondary)" : "var(--border-color)"}`,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <Terminal
                 size={20}
                 color={
-                  localDevMode ? "var(--accent-purple)" : "var(--text-muted)"
+                  localDevMode ? "var(--accent-primary)" : "var(--text-muted)"
                 }
               />
               <div style={{ lineHeight: 1.1 }}>
@@ -353,7 +353,7 @@ export default function AISettingsModal({ onClose }) {
             </button>
             <button
               onClick={handleSave}
-              className="btn-purple"
+              className="btn-accent"
               style={{
                 padding: "10px 12px",
                 fontSize: "0.8rem",
