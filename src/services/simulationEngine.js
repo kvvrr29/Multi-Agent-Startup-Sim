@@ -10,21 +10,16 @@ import { SECTION_OWNERSHIP, AGENT_ROLES } from '../config/sectionOwnership';
 import { SECTION_TITLES } from '../config/blueprintSections';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 import { useAICostStore } from '../store/useAICostStore';
+import { useAuthStore } from '../store/useAuthStore';
+import { ensureProjectResources, resetProjectResourceLoading } from './cloudSync';
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
 
-// Hard cap on any single AI generation so no agent can hang in "Working" (doc §5).
-const AGENT_GENERATION_TIMEOUT_MS = 90000;
-
-const withTimeout = (promiseFn, ms) => {
-  let timeoutId;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Timeout')), ms);
-  });
-  return Promise.race([promiseFn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
-};
+// No artificial client cap on AI calls — the frontend waits for the model's
+// actual response. A genuinely failed request still rejects at the network /
+// server layer and is handled by the try/catch around each call.
 
 const sectionMetadata = ({ source, agent, scores = null, failureReason = null }) => ({
   generationSource: source,
@@ -106,10 +101,7 @@ export const runInitialSimulation = async (projectData) => {
   if (useAI) {
     try {
       store.updateAgentStatus('mediator', AGENT_STATUS.THINKING, 'Classifying Industry Domain');
-      const classification = await withTimeout(
-        () => classifyDomain(projectData?.name || '', projectData?.idea || ''),
-        AGENT_GENERATION_TIMEOUT_MS
-      );
+      const classification = await classifyDomain(projectData?.name || '', projectData?.idea || '');
       
       memoryStore.updateMemory('scope', 'domain', classification.domain);
       memoryStore.updateMemory('scope', 'industry', classification.industry);
@@ -138,13 +130,13 @@ export const runInitialSimulation = async (projectData) => {
   const handleAgentGeneration = async (agentId, fallbackSections) => {
     if (!useAI) return { content: fallbackSections, decisions: [], generationSource: 'Fallback', scores: null };
     try {
-      const result = await withTimeout(() => generateAgentContent(agentId), AGENT_GENERATION_TIMEOUT_MS);
+      const result = await generateAgentContent(agentId);
       if (!useProjectStore.getState().isCurrentWorkflow(runId)) throw new Error('Stale workflow completion ignored');
       result.decisions?.forEach(decision => memoryStore.applyDecision(decision, { agent: agentId, instruction: 'Initial project generation' }));
       store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via Gemini.`, agent: agentId });
       return result;
     } catch (err) {
-      const reason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
+      const reason = err.message || 'Unknown error';
       // ⚠️ Surface the failure visibly — do NOT silently swap with fallback without warning
       store.updateAgentStatus(agentId, AGENT_STATUS.FAILED, reason);
       store.addWorkflowEvent({ type: 'error', message: `⚠️ Gemini FAILED for ${agentId.toUpperCase()}: ${reason}. Using Fallback Factory.`, agent: 'mediator' });
@@ -226,9 +218,21 @@ export const runInitialSimulation = async (projectData) => {
 
 export const previewRevision = async (revisionInstruction, targetSectionId = null, categoryHint = '') => {
   const store = useProjectStore.getState();
+  const { aiModeEnabled } = useSettingsStore.getState();
+  if (aiModeEnabled && useAuthStore.getState().activeCloudId) {
+    try {
+      await ensureProjectResources(['meta', 'memory', 'decisions']);
+    } catch (error) {
+      const message = `Could not load the project context required by Gemini: ${error?.message || 'Unknown error'}`;
+      store.setRecentRevisionResult({ message, isError: true, status: 'failed' });
+      return {
+        tasks: [], affectedSections: [], assignedAgents: [], confidence: 'Rejected',
+        instruction: revisionInstruction, categoryHint, error: message
+      };
+    }
+  }
   const runId = store.beginWorkflow('revision-preview');
   if (!runId) return { tasks: [], affectedSections: [], assignedAgents: [], confidence: 'Rejected', instruction: revisionInstruction, error: 'Another workflow is active.' };
-  const { aiModeEnabled } = useSettingsStore.getState();
 
   let routing;
 
@@ -248,7 +252,7 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
       store.addWorkflowEvent({ type: 'system', message: `Mediator analyzing routing for global change...`, agent: 'mediator' });
       const memoryStore = useProjectMemoryStore.getState();
       const domain = memoryStore.memory?.scope?.domain || 'Unknown';
-      routing = await withTimeout(() => routeAIRevision(revisionInstruction, domain, categoryHint), AGENT_GENERATION_TIMEOUT_MS);
+      routing = await routeAIRevision(revisionInstruction, domain, categoryHint);
     } else {
       // Global Project Evolution (Static Fallback)
       routing = heuristicRouting(revisionInstruction, categoryHint);
@@ -272,6 +276,20 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
 
 export const applyRevisionSimulation = async (previewData) => {
   const store = useProjectStore.getState();
+  const { aiModeEnabled } = useSettingsStore.getState();
+  if (aiModeEnabled && useAuthStore.getState().activeCloudId) {
+    try {
+      await ensureProjectResources(['meta', 'memory', 'decisions']);
+    } catch (error) {
+      const result = {
+        message: `Could not load the project context required by Gemini: ${error?.message || 'Unknown error'}`,
+        isError: true,
+        status: 'failed'
+      };
+      store.setRecentRevisionResult(result);
+      return result;
+    }
+  }
   const runId = store.beginWorkflow('revision-apply');
   if (!runId) {
     const result = { message: 'Another workflow is already active.', isError: true, status: 'failed' };
@@ -280,7 +298,6 @@ export const applyRevisionSimulation = async (previewData) => {
   }
   const memoryStore = useProjectMemoryStore.getState();
   const sectionHistory = useSectionHistoryStore.getState();
-  const { aiModeEnabled } = useSettingsStore.getState();
 
   const { instruction, confidence } = previewData;
   // Legacy previews (no task list) become a single task per agent.
@@ -323,7 +340,7 @@ export const applyRevisionSimulation = async (previewData) => {
 
       if (aiModeEnabled) {
          try {
-           const result = await withTimeout(() => generateAgentContent(targetAgent, taskDescription || instruction), AGENT_GENERATION_TIMEOUT_MS);
+           const result = await generateAgentContent(targetAgent, taskDescription || instruction);
            if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] };
            store.updateAgentStatus(targetAgent, AGENT_STATUS.REVIEWING, 'Reviewing generated changes');
            const changedSections = [];
@@ -349,7 +366,7 @@ export const applyRevisionSimulation = async (previewData) => {
            return { status: changedSections.length ? 'changed' : 'unchanged', agent: targetAgent, changedSections };
          } catch (err) {
            console.warn(`AI Revision failed for ${targetAgent}.`, err);
-           const failReason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
+           const failReason = err.message || 'Unknown error';
            store.updateAgentStatus(targetAgent, AGENT_STATUS.FAILED, failReason);
            store.addWorkflowEvent({ type: 'error', message: `⚠️ AI failed for ${targetAgent.toUpperCase()}: ${failReason}. Section left unchanged.`, agent: 'mediator' });
            await sleep(800);
@@ -422,7 +439,7 @@ export const applyRevisionSimulation = async (previewData) => {
 
   } catch (err) {
     console.error("Revision Error:", err);
-    const msg = err.message === 'Timeout' ? 'Revision Processing Timeout' : `Error: ${err.message}`;
+    const msg = `Error: ${err.message || 'Unknown error'}`;
     store.setRecentRevisionResult({ message: msg, isError: true });
     store.addWorkflowEvent({ type: 'system', message: `Error: ${msg}`, agent: 'mediator' });
     store.updateAgentStatus('mediator', AGENT_STATUS.FAILED, msg);
@@ -438,6 +455,9 @@ export const applyRevisionSimulation = async (previewData) => {
 // Backwards compatibility alias for components that haven't been updated yet
 export const runRevisionSimulation = async (revisionInstruction, category = '', targetSectionId = null) => {
   const preview = await previewRevision(revisionInstruction, targetSectionId, category);
+  if (preview?.error) {
+    return { message: preview.error, isError: true, status: 'failed' };
+  }
   return applyRevisionSimulation(preview);
 };
 
@@ -460,10 +480,15 @@ export const approveSectionWorkflow = (sectionKey) => {
   }
 };
 
-export const resetAllProjectData = () => {
-  useProjectStore.getState().reset();
+export const resetAllProjectData = ({ preserveSectionHistory = false, currentView = 'create' } = {}) => {
+  resetProjectResourceLoading();
+  useProjectStore.getState().clearActiveProject(currentView);
   useProjectMemoryStore.getState().clearMemory();
-  useSectionHistoryStore.getState().reset();
+  if (preserveSectionHistory) {
+    useSectionHistoryStore.getState().deactivateProject();
+  } else {
+    useSectionHistoryStore.getState().reset();
+  }
   useAIDebugStore.getState().reset();
   useAICostStore.getState().reset();
 };
