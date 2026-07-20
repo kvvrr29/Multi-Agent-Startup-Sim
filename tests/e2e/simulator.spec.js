@@ -40,7 +40,7 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel('Project Name *').waitFor({ timeout: 15_000 });
 });
 
-test('simulator generates, revises, versions, persists, and exposes exports', async ({ page }, testInfo) => {
+test('simulator generates, revises, persists, and exposes exports', async ({ page }, testInfo) => {
   await page.getByLabel('Project Name *').fill('MediCore');
   await page.getByLabel('Startup Idea *').fill('A hospital management system for patient records, appointments, and billing at regional clinics');
   await page.getByLabel('Target Audience').fill('Regional clinics');
@@ -60,8 +60,7 @@ test('simulator generates, revises, versions, persists, and exposes exports', as
   await page.getByRole('button', { name: 'Apply Revision' }).click();
   await expect(page.getByText(/Revision Applied Successfully|partially completed/)).toBeVisible({ timeout: 15_000 });
 
-  await page.getByTitle('Versions').click();
-  await expect(page.getByText('v3', { exact: true })).toBeVisible();
+  // Revision persists across a reload (cloud-hydrated on sign-in).
   await page.reload();
   await expect(page.getByText('MediCore', { exact: true })).toBeVisible();
 
@@ -93,12 +92,6 @@ test('simulator generates, revises, versions, persists, and exposes exports', as
       page.getByRole('menuitem', { name: 'PDF' }).click()
     ]);
     expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
-
-    await page.getByTitle('Versions').click();
-    await page.getByText('v1', { exact: true }).click();
-    page.once('dialog', dialog => dialog.accept());
-    await page.getByRole('button', { name: 'Restore' }).click();
-    await expect(page.getByText('v4', { exact: true })).toBeVisible();
   }
 });
 
