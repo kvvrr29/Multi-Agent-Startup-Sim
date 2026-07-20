@@ -8,7 +8,7 @@
 const MIN_SECTION_LENGTH = 50;
 const BANNED_PHRASES = ['lorem ipsum', 'as an ai'];
 const SAAS_BUZZWORDS = ['freemium', 'white-label', 'invite only beta'];
-export const VALIDATION_THRESHOLDS = {
+const VALIDATION_THRESHOLDS = {
   structural: 100,
   agentRelevance: 60,
   domainRelevance: 60,
@@ -16,7 +16,7 @@ export const VALIDATION_THRESHOLDS = {
   overall: 70
 };
 
-export const DECISION_CATEGORIES = ['Business', 'Product', 'Technical', 'Marketing', 'Scope'];
+const DECISION_CATEGORIES = ['Business', 'Product', 'Technical', 'Marketing', 'Scope'];
 const AGENT_DECISION_CATEGORIES = {
   ceo: ['Business', 'Scope'],
   pm: ['Product', 'Scope'],
@@ -27,7 +27,7 @@ const AGENT_DECISION_CATEGORIES = {
 
 // Concept groups per agent (doc §1 Stage 2). Each group is a synonym list;
 // the group counts as matched when any synonym appears in the combined text.
-export const AGENT_CONCEPT_GROUPS = {
+const AGENT_CONCEPT_GROUPS = {
   ceo: [
     ['business model', 'revenue model', 'monetization', 'monetisation'],
     ['revenue', 'income', 'sales'],
@@ -213,7 +213,7 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
   };
 };
 
-export const validateDecisions = (decisions, agentRole) => {
+const validateDecisions = (decisions, agentRole) => {
   if (decisions === undefined) return { decisions: [], issues: [] };
   if (!Array.isArray(decisions)) {
     return { decisions: [], issues: ['Decisions were ignored because they are not an array.'] };
