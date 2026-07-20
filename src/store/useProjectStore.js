@@ -115,20 +115,19 @@ export const useProjectStore = create((set, get) => ({
     }
   })),
 
-  updateBlueprintSection: (sectionKey, content, status = 'pending', lastModifiedVersion = 'v1', metadata = {}) => set((state) => ({
+  updateBlueprintSection: (sectionKey, content, status = 'pending', metadata = {}) => set((state) => ({
     blueprint: {
       ...state.blueprint,
       [sectionKey]: {
         ...state.blueprint[sectionKey],
         content,
         status,
-        lastModifiedVersion,
         ...metadata
       }
     }
   })),
 
-  // Full-blueprint replacement used by version restore (doc §14): restores
+  // Full-blueprint replacement used by cloud hydration: restores
   // content AND approval state, and clears sections absent from the snapshot.
   setBlueprint: (blueprint) => set(() => {
     const restored = createBlueprintSchema();
