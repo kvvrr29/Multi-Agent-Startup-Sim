@@ -15,7 +15,7 @@ import {
 
 const CATEGORIES = ["Business", "Product", "Technical", "Marketing", "Scope"];
 
-export default function ProjectEvolution() {
+export default function ProjectEvolution({ contextReady = true, contextError = "", onRetryContext }) {
   const [customRequest, setCustomRequest] = useState("");
   const [category, setCategory] = useState("");
 
@@ -38,11 +38,11 @@ export default function ProjectEvolution() {
 
   const handleCustomSubmit = async (e) => {
     e.preventDefault();
-    if (!customRequest.trim() || isBusy) return;
+    if (!customRequest.trim() || isBusy || !contextReady) return;
     clearRevisionState();
     setIsPreviewing(true);
     const result = await previewRevision(customRequest, null, category);
-    setPreview(result);
+    setPreview(result?.error ? null : result);
     setIsPreviewing(false);
     setCustomRequest("");
   };
@@ -93,6 +93,15 @@ export default function ProjectEvolution() {
         <AlertTriangle size={12} /> Project-wide changes affecting multiple
         sections.
       </div>
+
+      {!contextReady && (
+        <div role={contextError ? "alert" : "status"} style={{ padding: "0.8rem", borderRadius: "8px", border: `1px solid ${contextError ? "var(--danger)" : "var(--border-color)"}`, color: contextError ? "var(--danger)" : "var(--text-muted)", fontSize: "0.8rem" }}>
+          {contextError ? `Project context could not be loaded: ${contextError}` : "Loading project context before revision actions…"}
+          {contextError && onRetryContext && (
+            <button type="button" className="btn-secondary" onClick={onRetryContext} style={{ marginTop: "8px", padding: "5px 9px", display: "block" }}>Retry</button>
+          )}
+        </div>
+      )}
 
       {/* 1. Active Revision Banner */}
       {isBusy && activeRevision && !isPreviewing && (
@@ -369,8 +378,8 @@ export default function ProjectEvolution() {
       {/* Custom project-wide change */}
       <div
         style={{
-          opacity: isBusy ? 0.5 : 1,
-          pointerEvents: isBusy ? "none" : "auto",
+          opacity: isBusy || !contextReady ? 0.5 : 1,
+          pointerEvents: isBusy || !contextReady ? "none" : "auto",
         }}
       >
         <form onSubmit={handleCustomSubmit} style={{ display: "flex" }}>
@@ -456,7 +465,7 @@ export default function ProjectEvolution() {
             />
             <button
               type="submit"
-              disabled={!customRequest.trim()}
+              disabled={!customRequest.trim() || !contextReady}
               className="btn-secondary"
               aria-label="Apply change"
               title="Apply change"
