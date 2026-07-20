@@ -263,7 +263,7 @@ const ApprovalDashboard = () => {
           <span
             style={{
               fontSize: "1.1rem",
-              color: "var(--primary-electric)",
+              color: "var(--accent-primary)",
               fontWeight: 600,
             }}
           >
@@ -295,10 +295,10 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
       padding: "12px 4px",
       width: "100%",
       cursor: "pointer",
-      background: active ? "rgba(67, 56, 202, 0.25)" : "transparent",
+      background: active ? "var(--accent-surface)" : "transparent",
       border: "none",
-      borderLeft: `2px solid ${active ? "var(--primary-electric)" : "transparent"}`,
-      color: active ? "var(--primary-electric)" : "var(--text-muted)",
+      borderLeft: `2px solid ${active ? "var(--accent-primary)" : "transparent"}`,
+      color: active ? "var(--text-primary)" : "var(--text-muted)",
       fontSize: "0.65rem",
       fontFamily: "inherit",
       transition: "all ease",
