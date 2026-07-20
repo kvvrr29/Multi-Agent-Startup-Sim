@@ -37,8 +37,14 @@ export default function AgentTimeline() {
           gap: '12px'
         }}
       >
+        {events.length === 0 && (
+          <div role="status" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0.75rem 0' }}>
+            No workflow events yet.
+          </div>
+        )}
         {events.map((ev, idx) => {
-          const isError = ev.message.toLowerCase().includes('failed') || ev.message.toLowerCase().includes('error');
+          const message = ev.message || '';
+          const isError = message.toLowerCase().includes('failed') || message.toLowerCase().includes('error');
           return (
             <div key={ev.id || idx} style={{ 
               fontSize: '0.8rem', 
