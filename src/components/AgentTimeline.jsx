@@ -46,7 +46,7 @@ export default function AgentTimeline() {
               padding: '10px 12px',
               background: 'rgba(0,0,0,0.15)',
               borderRadius: '6px',
-              borderLeft: `2px solid ${isError ? 'var(--danger)' : (ev.agent === 'mediator' ? 'var(--primary-electric)' : 'var(--accent-purple)')}`
+              borderLeft: `2px solid ${isError ? 'var(--danger)' : (ev.agent === 'mediator' ? 'var(--accent-primary)' : 'var(--accent-secondary)')}`
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-primary)' }}>
