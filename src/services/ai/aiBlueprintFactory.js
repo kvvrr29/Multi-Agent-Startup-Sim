@@ -2,7 +2,6 @@ import { generateAIContent } from './aiProvider';
 import { AGENT_SYSTEM_PROMPTS } from './agentPrompts';
 import { buildContextString } from './contextBuilder';
 import { validateAIResponse, createResponseSchema, buildRetryFeedback } from './validationLayer';
-import { useProjectStore } from '../../store/useProjectStore';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 import { AGENT_ROLES } from '../../config/sectionOwnership';
@@ -22,7 +21,7 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
   const userPrompt = `${context}\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionsToGenerate.join(', ')}. Ensure the content is highly specific to this exact project and not generic. Do NOT include mermaid syntax unless specifically required by the section. Respond with JSON matching the requested schema.`;
 
   const memoryStore = useProjectMemoryStore.getState();
-  const domain = memoryStore.memory?.scope?.domain || useProjectStore.getState().project?.domain || '';
+  const domain = memoryStore.memory?.scope?.domain || '';
   const industry = memoryStore.memory?.scope?.industry || '';
   const keywordsStr = memoryStore.memory?.scope?.mandatory_entities || '';
   const mandatoryKeywords = keywordsStr.split(',').map(k => k.trim()).filter(k => k);
