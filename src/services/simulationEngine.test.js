@@ -5,7 +5,6 @@ vi.mock('./ai/aiBlueprintFactory', () => ({ generateAgentContent: vi.fn() }));
 import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { applyRevisionSimulation } from './simulationEngine';
 import { useProjectStore } from '../store/useProjectStore';
-import { useVersionStore } from '../store/versionStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 
@@ -16,7 +15,6 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   useProjectStore.getState().reset();
-  useVersionStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
   useSettingsStore.getState().setAiModeEnabled(true);
   useProjectStore.getState().updateBlueprintSection('businessModel', 'Original business model content');
@@ -31,7 +29,7 @@ const settle = async (promise) => {
 };
 
 describe('revision workflow outcomes', () => {
-  it('creates no version and reports a clear error when all tasks fail', async () => {
+  it('reports a clear error and changes nothing when all tasks fail', async () => {
     generateAgentContent.mockRejectedValue(new Error('provider unavailable'));
     const promise = applyRevisionSimulation(preview([
       { agent: 'ceo', sections: ['businessModel'], taskDescription: 'Change pricing', reason: '' },
@@ -39,11 +37,11 @@ describe('revision workflow outcomes', () => {
     ]));
     const workflow = await settle(promise);
     expect(workflow.status).toBe('failed');
-    expect(useVersionStore.getState().versions).toHaveLength(0);
+    expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Original business model content');
     expect(useProjectStore.getState().workflow.active).toBe(false);
   });
 
-  it('creates a partial version only for sections that actually changed', async () => {
+  it('applies changes only for sections that actually changed', async () => {
     generateAgentContent.mockImplementation((agent) => agent === 'ceo'
       ? Promise.resolve(result({ businessModel: 'Changed business model content' }))
       : Promise.reject(new Error('developer failed')));
@@ -54,17 +52,17 @@ describe('revision workflow outcomes', () => {
     const workflow = await settle(promise);
     expect(workflow.status).toBe('partial');
     expect(workflow.taskResults.map(item => item.status)).toEqual(['changed', 'failed']);
-    expect(useVersionStore.getState().versions[0].affectedSections).toEqual(['businessModel']);
-    expect(useVersionStore.getState().versions[0].completionStatus).toBe('partial');
+    expect(workflow.changes).toEqual(['Business Model Updated']);
+    expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Changed business model content');
+    expect(useProjectStore.getState().blueprint.technologyStack.content).toBe('Original technology stack content');
   });
 
-  it('does not create a false-success version for unchanged output', async () => {
+  it('reports "unchanged" for output identical to the current content', async () => {
     generateAgentContent.mockResolvedValue(result({ businessModel: 'Original business model content' }));
     const workflow = await settle(applyRevisionSimulation(preview([
       { agent: 'ceo', sections: ['businessModel'], taskDescription: 'Keep pricing', reason: '' }
     ])));
     expect(workflow.status).toBe('unchanged');
-    expect(useVersionStore.getState().versions).toHaveLength(0);
   });
 
   it('rejects duplicate submission while the shared workflow lock is active', async () => {
@@ -76,8 +74,9 @@ describe('revision workflow outcomes', () => {
       { agent: 'ceo', sections: ['businessModel'], taskDescription: 'Second request', reason: '' }
     ]));
     expect(duplicate.status).toBe('failed');
-    await settle(first);
-    expect(useVersionStore.getState().versions).toHaveLength(1);
+    const workflow = await settle(first);
+    expect(workflow.status).toBe('success');
+    expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Changed business model content');
   });
 
   it('times out a task without applying its late result', async () => {
@@ -87,6 +86,5 @@ describe('revision workflow outcomes', () => {
     ])));
     expect(workflow.status).toBe('failed');
     expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Original business model content');
-    expect(useVersionStore.getState().versions).toHaveLength(0);
   });
 });
