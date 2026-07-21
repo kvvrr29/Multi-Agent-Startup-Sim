@@ -79,10 +79,12 @@ const ApprovalDashboard = () => {
     <div
       className="glass-panel"
       style={{
-        padding: "1.2rem",
+        padding: "1rem",
         display: "flex",
         flexDirection: "column",
         gap: "1rem",
+        borderRadius: "10px",
+        flexShrink: 0,
       }}
     >
       <h3
@@ -336,9 +338,25 @@ const ResourceState = ({ label, state, onRetry }) => {
   }
   if (state?.status === "error") {
     return (
-      <div role="alert" style={{ padding: "1rem", border: "1px solid var(--danger)", borderRadius: "10px", color: "var(--danger)", fontSize: "0.82rem" }}>
-        <div>Could not load {label}: {state.error}</div>
-        <button type="button" className="btn-secondary" onClick={onRetry} style={{ marginTop: "10px", padding: "6px 10px" }}>
+      <div
+        role="alert"
+        style={{
+          padding: "1rem",
+          border: "1px solid var(--danger)",
+          borderRadius: "10px",
+          color: "var(--danger)",
+          fontSize: "0.82rem",
+        }}
+      >
+        <div>
+          Could not load {label}: {state.error}
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={onRetry}
+          style={{ marginTop: "10px", padding: "6px 10px" }}
+        >
           Retry
         </button>
       </div>
@@ -355,9 +373,15 @@ export default function Dashboard() {
   const agents = useProjectStore((state) => state.agents);
   const activeCloudId = useAuthStore((state) => state.activeCloudId);
   const metaState = useProjectResourceStore((state) => state.resources.meta);
-  const eventsState = useProjectResourceStore((state) => state.resources.events);
-  const memoryState = useProjectResourceStore((state) => state.resources.memory);
-  const decisionsState = useProjectResourceStore((state) => state.resources.decisions);
+  const eventsState = useProjectResourceStore(
+    (state) => state.resources.events,
+  );
+  const memoryState = useProjectResourceStore(
+    (state) => state.resources.memory,
+  );
+  const decisionsState = useProjectResourceStore(
+    (state) => state.resources.decisions,
+  );
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
   // Auto-switch to Agent Activity when a simulation starts so the user
@@ -373,13 +397,19 @@ export default function Dashboard() {
     if (activePanel === "memory") {
       ensureProjectResources(["memory"]).catch(() => {});
     } else if (activePanel === "agents") {
-      ensureProjectResources(["meta", "events", "memory", "decisions"]).catch(() => {});
+      ensureProjectResources(["meta", "events", "memory", "decisions"]).catch(
+        () => {},
+      );
     }
   }, [activePanel, activeCloudId]);
 
   const evolutionStates = [metaState, memoryState, decisionsState];
-  const evolutionReady = evolutionStates.every((state) => state.status === "ready");
-  const evolutionErrors = evolutionStates.filter((state) => state.status === "error");
+  const evolutionReady = evolutionStates.every(
+    (state) => state.status === "ready",
+  );
+  const evolutionErrors = evolutionStates.filter(
+    (state) => state.status === "error",
+  );
 
   return (
     <div
@@ -453,7 +483,8 @@ export default function Dashboard() {
           padding: "1.2rem",
           gap: "1.2rem",
           zIndex: 10,
-          overflowY: "auto",
+          minHeight: 0,
+          overflowY: activePanel === "approval" ? "hidden" : "auto",
         }}
       >
         <div
@@ -496,13 +527,27 @@ export default function Dashboard() {
                   <AgentTimeline />
                 </ErrorBoundary>
               ) : (
-                <ResourceState label="agent timeline" state={eventsState} onRetry={() => ensureProjectResources(["events"]).catch(() => {})} />
+                <ResourceState
+                  label="agent timeline"
+                  state={eventsState}
+                  onRetry={() =>
+                    ensureProjectResources(["events"]).catch(() => {})
+                  }
+                />
               )}
               <ErrorBoundary componentName="ProjectEvolution">
                 <ProjectEvolution
                   contextReady={evolutionReady}
-                  contextError={evolutionErrors.map((state) => state.error).join(" ")}
-                  onRetryContext={() => ensureProjectResources(["meta", "memory", "decisions"]).catch(() => {})}
+                  contextError={evolutionErrors
+                    .map((state) => state.error)
+                    .join(" ")}
+                  onRetryContext={() =>
+                    ensureProjectResources([
+                      "meta",
+                      "memory",
+                      "decisions",
+                    ]).catch(() => {})
+                  }
                 />
               </ErrorBoundary>
             </>
@@ -560,7 +605,11 @@ export default function Dashboard() {
               <MemoryInspector />
             </ErrorBoundary>
           ) : (
-            <ResourceState label="project memory" state={memoryState} onRetry={() => ensureProjectResources(["memory"]).catch(() => {})} />
+            <ResourceState
+              label="project memory"
+              state={memoryState}
+              onRetry={() => ensureProjectResources(["memory"]).catch(() => {})}
+            />
           ))}
 
         {activePanel === "approval" &&
