@@ -1,270 +1,310 @@
-import { useState } from 'react';
-import { useProjectStore } from '../store/useProjectStore';
-import { runInitialSimulation } from '../services/simulationEngine';
-import { Sparkles, ArrowRight, Settings, LogOut, ArrowLeft } from 'lucide-react';
-import { AIStatusBanner } from './AIStatusUtils';
-import AISettingsModal from './AISettingsModal';
-import { useAuthStore } from '../store/useAuthStore';
-import { createCloudProject, openCloudProject } from '../services/cloudSync';
-import CloudProjectList from './CloudProjectList';
+import { useState } from "react";
+import { useProjectStore } from "../store/useProjectStore";
+import { runInitialSimulation } from "../services/simulationEngine";
+import {
+  ArrowLeft,
+  ArrowRight,
+  LogOut,
+  Settings,
+  Sparkles,
+} from "lucide-react";
+import { AIStatusBanner } from "./AIStatusUtils";
+import AISettingsModal from "./AISettingsModal";
+import { useAuthStore } from "../store/useAuthStore";
+import { createCloudProject } from "../services/cloudSync";
+
+const STEPS = [
+  ["Describe the idea", "Name it and tell us what you want to build."],
+  ["Agents plan it out", "Scope, stack, and milestones drafted for you."],
+  ["Review the blueprint", "Get a build-ready plan you can iterate on."],
+];
 
 export default function ProjectCreation() {
   const currentProject = useProjectStore((state) => state.project);
   const setCurrentView = useProjectStore((state) => state.setCurrentView);
-  const user = useAuthStore(state => state.user);
-  const signOut = useAuthStore(state => state.signOut);
+  const user = useAuthStore((state) => state.user);
+  const signOut = useAuthStore((state) => state.signOut);
   const [showSettings, setShowSettings] = useState(false);
   const [creating, setCreating] = useState(false);
-  
+  const [error, setError] = useState("");
+
   const [formData, setFormData] = useState({
-    name: '',
-    idea: '',
-    targetAudience: '',
-    budget: '',
-    timeline: '',
-    platform: 'web',
-    teamSize: '',
-    priorities: '',
+    name: "",
+    idea: "",
+    targetAudience: "",
+    budget: "",
+    timeline: "",
+    platform: "web",
+    teamSize: "",
+    priorities: "",
   });
 
-  const inputStyle = {
-    width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-    background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-    color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
-    fontFamily: 'inherit'
-  };
-  const focusHandlers = {
-    onFocus: (e) => e.target.style.borderColor = 'var(--focus-ring)',
-    onBlur: (e) => e.target.style.borderColor = 'var(--border-color)'
-  };
-  const labelStyle = { fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 };
-  
-  const [error, setError] = useState('');
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({ ...previous, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    // Validation Engine
     if (formData.name.trim().length < 3) {
-      setError('Project name must be at least 3 characters long.');
+      setError("Project name must be at least 3 characters long.");
       return;
     }
     if (formData.idea.trim().length < 15) {
-      setError('Startup idea is too short. Please provide a detailed description (min 15 chars).');
+      setError(
+        "Startup idea is too short. Please provide a detailed description (min 15 chars).",
+      );
       return;
     }
     if (!formData.targetAudience.trim() || !formData.budget.trim()) {
-      setError('Please fill out all required fields (Audience, Budget).');
+      setError("Please fill out all required fields (Audience, Budget).");
       return;
     }
 
-    setError('');
+    setError("");
     setCreating(true);
 
-    // The database is the source of truth: without a cloud row there is
-    // nowhere to store the project, so creation failure blocks the flow.
     const cloudId = await createCloudProject(formData);
     setCreating(false);
     if (!cloudId) {
-      setError('Could not save the project to your account. Check your connection and try again.');
+      setError(
+        "Could not save the project to your account. Check your connection and try again.",
+      );
       return;
     }
 
-    // Kick off the agent simulation
     runInitialSimulation(formData);
   };
 
   return (
-    <div className="container flex items-center justify-center" style={{ minHeight: '100vh', padding: '4rem 0' }}>
-      {showSettings && <AISettingsModal onClose={() => setShowSettings(false)} />}
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '2.5rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent-surface)', color: 'var(--accent-primary)', marginBottom: '1rem' }}>
-            <Sparkles size={24} />
-          </div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Start a New Project</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Define your startup vision, and our AI agents will build the blueprint.</p>
-          
-          <AIStatusBanner />
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <button type="button" title="Settings" onClick={() => setShowSettings(true)} className="btn-secondary" style={{ padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <Settings size={14} /> AI Settings
-            </button>
-            <button type="button" title={`Sign out ${user?.email || ''}`} onClick={signOut} className="btn-secondary" style={{ padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              <LogOut size={14} /> Sign Out
-            </button>
-          </div>
+    <main className="project-create-page">
+      {showSettings && (
+        <AISettingsModal onClose={() => setShowSettings(false)} />
+      )}
 
-          {error && (
-            <div style={{ padding: '12px', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.9rem' }}>
-              ⚠️ {error}
-            </div>
-          )}
-        </div>
-
-        {currentProject && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setCurrentView('dashboard')}
-            style={{ marginBottom: '1.5rem', padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <ArrowLeft size={14} /> Back to Dashboard
-          </button>
-        )}
-
-        <CloudProjectList onOpen={openCloudProject} />
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Project Name *</label>
-            <input 
-              type="text" 
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="e.g., Acora"
-              required
-              style={{
-                width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
-                fontFamily: 'inherit'
-              }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label htmlFor="idea" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Startup Idea *</label>
-            <textarea 
-              id="idea"
-              name="idea"
-              value={formData.idea}
-              onChange={handleChange}
-              placeholder="Describe what you want to build..."
-              required
-              rows={4}
-              style={{
-                width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
-                fontFamily: 'inherit', resize: 'vertical'
-              }}
-              onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
-              onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-            />
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="targetAudience" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Target Audience</label>
-              <input 
-                type="text" 
-                id="targetAudience"
-                name="targetAudience"
-                value={formData.targetAudience}
-                onChange={handleChange}
-                placeholder="e.g., College students"
-                style={{
-                  width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                  background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)', outline: 'none', transition: 'border-color 0.2s',
-                  fontFamily: 'inherit'
-                }}
-                onFocus={(e) => e.target.style.borderColor = 'var(--focus-ring)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-              />
-            </div>
-            
-            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="budget" style={labelStyle}>Budget</label>
-              <input
-                type="text"
-                id="budget"
-                name="budget"
-                value={formData.budget}
-                onChange={handleChange}
-                placeholder="e.g., $10k"
-                style={inputStyle}
-                {...focusHandlers}
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="timeline" style={labelStyle}>Timeline</label>
-              <input
-                type="text"
-                id="timeline"
-                name="timeline"
-                value={formData.timeline}
-                onChange={handleChange}
-                placeholder="e.g., 6 months"
-                style={inputStyle}
-                {...focusHandlers}
-              />
+      <section className="project-create-shell">
+        <aside className="project-create-sidebar">
+          <div>
+            <div className="project-create-brand">
+              <span className="project-create-brand-mark">
+                <Sparkles size={18} strokeWidth={2.2} />
+              </span>
+              <span>Blueprint</span>
             </div>
 
-            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="platform" style={labelStyle}>Platform Preference</label>
-              <select
-                id="platform"
-                name="platform"
-                value={formData.platform}
-                onChange={handleChange}
-                style={inputStyle}
-                {...focusHandlers}
+            <div className="project-create-intro">
+              <span className="project-create-kicker">New workspace</span>
+              <h1>
+                Start a<br />
+                new project
+              </h1>
+              <p>
+                Define your startup vision, and our AI agents will turn it into
+                a working blueprint.
+              </p>
+            </div>
+
+            <ol className="project-create-steps">
+              {STEPS.map(([title, description], index) => (
+                <li key={title}>
+                  <span className="project-create-step-number">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <strong>{title}</strong>
+                    <span>{description}</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </aside>
+
+        <div className="project-create-workspace">
+          <header className="project-create-toolbar">
+            {currentProject ? (
+              <button
+                type="button"
+                className="project-create-text-button"
+                onClick={() => setCurrentView("dashboard")}
               >
-                <option value="web">Web</option>
-                <option value="mobile">Mobile</option>
-                <option value="web + mobile">Web + Mobile</option>
-                <option value="desktop">Desktop</option>
-              </select>
+                <ArrowLeft size={15} /> Back to dashboard
+              </button>
+            ) : (
+              <span />
+            )}
+
+            <div className="project-create-actions">
+              <button
+                type="button"
+                title="AI settings"
+                onClick={() => setShowSettings(true)}
+                className="project-create-utility-button"
+              >
+                <Settings size={15} /> AI Settings
+              </button>
+              <button
+                type="button"
+                title={`Sign out ${user?.email || ""}`}
+                onClick={signOut}
+                className="project-create-utility-button"
+              >
+                <LogOut size={15} /> Sign out
+              </button>
+            </div>
+          </header>
+
+          <div className="project-create-form-wrap">
+            <div className="project-create-mobile-heading">
+              <span className="project-create-kicker">New workspace</span>
+              <h1>Start a new project</h1>
+              <p>Tell us what you want to build. We’ll plan the rest.</p>
             </div>
 
-            <div className="flex flex-col gap-1" style={{ flex: 1 }}>
-              <label htmlFor="teamSize" style={labelStyle}>Team Size</label>
-              <input
-                type="text"
-                id="teamSize"
-                name="teamSize"
-                value={formData.teamSize}
-                onChange={handleChange}
-                placeholder="e.g., 4"
-                style={inputStyle}
-                {...focusHandlers}
-              />
-            </div>
-          </div>
+            <AIStatusBanner />
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor="priorities" style={labelStyle}>Project Priorities</label>
-            <input
-              type="text"
-              id="priorities"
-              name="priorities"
-              value={formData.priorities}
-              onChange={handleChange}
-              placeholder="e.g., Fast launch over feature completeness, low running costs"
-              style={inputStyle}
-              {...focusHandlers}
-            />
-          </div>
+            {error && (
+              <div className="project-create-error" role="alert">
+                {error}
+              </div>
+            )}
 
-          <button type="submit" disabled={creating} className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}>
-            {creating ? 'Creating…' : 'Generate Blueprint'} <ArrowRight size={18} />
-          </button>
-        </form>
-      </div>
-    </div>
+            <form onSubmit={handleSubmit} className="project-create-form">
+              <div className="project-create-field">
+                <label htmlFor="name">
+                  Project Name <span>*</span>
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="e.g., Acora"
+                  required
+                />
+              </div>
+
+              <div className="project-create-field">
+                <label htmlFor="idea">
+                  Startup Idea <span>*</span>
+                </label>
+                <textarea
+                  id="idea"
+                  name="idea"
+                  value={formData.idea}
+                  onChange={handleChange}
+                  placeholder="Describe what you want to build — the problem, who it’s for, and what makes it different…"
+                  required
+                  rows={5}
+                />
+              </div>
+
+              <div className="project-create-section-heading">
+                <span>Project details</span>
+                <small>Audience and budget are required</small>
+              </div>
+
+              <div className="project-create-grid project-create-grid-two">
+                <div className="project-create-field">
+                  <label htmlFor="targetAudience">
+                    Target Audience <span>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="targetAudience"
+                    name="targetAudience"
+                    value={formData.targetAudience}
+                    onChange={handleChange}
+                    placeholder="e.g., College students"
+                    required
+                  />
+                </div>
+
+                <div className="project-create-field">
+                  <label htmlFor="budget">
+                    Budget <span>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="budget"
+                    name="budget"
+                    value={formData.budget}
+                    onChange={handleChange}
+                    placeholder="e.g., $10k"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="project-create-grid project-create-grid-three">
+                <div className="project-create-field">
+                  <label htmlFor="timeline">Timeline</label>
+                  <input
+                    type="text"
+                    id="timeline"
+                    name="timeline"
+                    value={formData.timeline}
+                    onChange={handleChange}
+                    placeholder="e.g., 6 months"
+                  />
+                </div>
+
+                <div className="project-create-field">
+                  <label htmlFor="platform">Platform</label>
+                  <select
+                    id="platform"
+                    name="platform"
+                    value={formData.platform}
+                    onChange={handleChange}
+                  >
+                    <option value="web">Web</option>
+                    <option value="mobile">Mobile</option>
+                    <option value="web + mobile">Web + Mobile</option>
+                    <option value="desktop">Desktop</option>
+                  </select>
+                </div>
+
+                <div className="project-create-field">
+                  <label htmlFor="teamSize">Team Size</label>
+                  <input
+                    type="text"
+                    id="teamSize"
+                    name="teamSize"
+                    value={formData.teamSize}
+                    onChange={handleChange}
+                    placeholder="e.g., 4"
+                  />
+                </div>
+              </div>
+
+              <div className="project-create-field">
+                <label htmlFor="priorities">Priorities</label>
+                <input
+                  type="text"
+                  id="priorities"
+                  name="priorities"
+                  value={formData.priorities}
+                  onChange={handleChange}
+                  placeholder="e.g., Fast launch, low running costs"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={creating}
+                className="project-create-submit"
+              >
+                <span>
+                  {creating ? "Creating blueprint…" : "Generate Blueprint"}
+                </span>
+                <ArrowRight size={18} />
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
