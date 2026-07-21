@@ -96,24 +96,24 @@ Rules:
   const userPrompt = `Project Context: ${projectContext}\nCategory Hint: ${categoryHint || 'Auto Detect'}\n\nUser Request: "${revisionInstruction}"`;
 
   const schema = {
-    type: "OBJECT",
+    type: "object",
     properties: {
       tasks: {
-        type: "ARRAY",
+        type: "array",
         description: "One task per responsible agent.",
         items: {
-          type: "OBJECT",
+          type: "object",
           properties: {
-            agent: { type: "STRING", description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
-            sections: { type: "ARRAY", description: "Section keys this task updates.", items: { type: "STRING" } },
-            taskDescription: { type: "STRING", description: "The specific sub-instruction for this agent." },
-            reason: { type: "STRING", description: "One sentence: why this agent was selected." }
+            agent: { type: "string", description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
+            sections: { type: "array", description: "Section keys this task updates.", items: { type: "string" } },
+            taskDescription: { type: "string", description: "The specific sub-instruction for this agent." },
+            reason: { type: "string", description: "One sentence: why this agent was selected." }
           },
           required: ["agent", "sections", "taskDescription", "reason"]
         }
       },
       confidence: {
-        type: "STRING",
+        type: "string",
         description: "High, Medium, or Low"
       }
     },

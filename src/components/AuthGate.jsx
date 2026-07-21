@@ -13,10 +13,13 @@ export default function AuthGate({ children }) {
   const signInWithEmail = useAuthStore(state => state.signInWithEmail);
 
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
   const [sending, setSending] = useState(false);
   const [booted, setBooted] = useState(false);
   const [bootError, setBootError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
+
+  console.log('[AuthGate Render] session:', session, 'booted:', booted, 'bootError:', bootError, 'sending:', sending);
 
   useEffect(() => { init(); }, [init]);
 
@@ -33,13 +36,17 @@ export default function AuthGate({ children }) {
     }
     let cancelled = false;
     (async () => {
+      console.log('[AuthGate] Calling refreshProjects...');
       const projects = await useAuthStore.getState().refreshProjects();
+      console.log('[AuthGate] refreshProjects returned:', projects);
       if (cancelled) return;
       if (projects === null) {
+        console.log('[AuthGate] projects is null, setting bootError');
         setBootError('Could not load your projects. Is the API server running?');
         return;
       }
       if (projects.length > 0) {
+        console.log('[AuthGate] Opening project:', projects[0].id);
         const opened = await openCloudProject(projects[0].id);
         if (cancelled) return;
         if (!opened) {
@@ -47,13 +54,19 @@ export default function AuthGate({ children }) {
           return;
         }
       } else {
+        console.log('[AuthGate] No projects, setting view to create');
         useProjectStore.setState({ currentView: 'create' });
       }
+      console.log('[AuthGate] Booted successfully');
       setBootError(null);
       setBooted(true);
       startSync();
     })();
-    return () => { cancelled = true; stopSync(); };
+    return () => { 
+      console.log('[AuthGate] unmounting / cancelling');
+      cancelled = true; 
+      stopSync(); 
+    };
   }, [session, retryKey]);
 
   // Best effort: push pending changes before the tab closes.
@@ -93,9 +106,11 @@ export default function AuthGate({ children }) {
   if (!session) {
     const handleSubmit = async (e) => {
       e.preventDefault();
-      if (!email.trim() || sending) return;
+      console.log('[AuthGate] form submitted. email:', email, 'name:', name);
+      if (!email.trim() || !name.trim() || sending) return;
       setSending(true);
-      await signInWithEmail(email.trim());
+      const success = await signInWithEmail(email.trim(), name.trim());
+      console.log('[AuthGate] signInWithEmail result:', success);
       setSending(false);
     };
 
@@ -105,40 +120,54 @@ export default function AuthGate({ children }) {
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(67, 56, 202, 0.2)', color: 'var(--primary-electric)', marginBottom: '1rem' }}>
             <LogIn size={24} />
           </div>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In or Sign Up</h1>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Welcome to Startup Simulator</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Enter your email and we&apos;ll send you a magic link — new accounts are created automatically.
-            Your projects are saved to your account.
+            Enter your name and email to get started. Your projects will be saved locally on this device.
           </p>
 
-          {authMessage && (
-            <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--success)', borderRadius: 'var(--radius-md)', color: 'var(--success)', fontSize: '0.85rem' }}>
-              {authMessage}
-            </div>
-          )}
           {authError && (
             <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.85rem' }}>
               ⚠️ {authError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <label htmlFor="auth-email" style={{ position: 'absolute', left: '-9999px' }}>Email address</label>
-            <input
-              id="auth-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              style={{
-                width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit'
-              }}
-            />
-            <button type="submit" disabled={sending} className="btn btn-primary" style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}>
-              <Mail size={16} /> {sending ? 'Sending…' : 'Send Magic Link'}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ textAlign: 'left' }}>
+              <label htmlFor="auth-name" style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Full Name</label>
+              <input
+                id="auth-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Jane Doe"
+                required
+                style={{
+                  width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit'
+                }}
+              />
+            </div>
+            
+            <div style={{ textAlign: 'left' }}>
+              <label htmlFor="auth-email" style={{ display: 'block', marginBottom: '4px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Email Address</label>
+              <input
+                id="auth-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+                style={{
+                  width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit'
+                }}
+              />
+            </div>
+            
+            <button type="submit" disabled={sending} className="btn btn-primary" style={{ width: '100%', padding: '0.75rem', justifyContent: 'center', marginTop: '8px' }}>
+              <LogIn size={16} /> {sending ? 'Signing In…' : 'Enter Simulator'}
             </button>
           </form>
         </div>

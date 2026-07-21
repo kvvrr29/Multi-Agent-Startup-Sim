@@ -1,21 +1,11 @@
-import { supabase } from './supabaseClient';
+import { StorageProvider } from './storage/StorageProvider';
 
-/**
- * All backend traffic goes through the Express server under /api.
- * supabase-js is used in the browser ONLY for the auth handshake (magic link
- * + session); its access token authenticates every API request here.
- */
-const request = async (path, { method = 'GET', body } = {}) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw Object.assign(new Error('Not signed in.'), { status: 401 });
-  }
+// The AI endpoints still bypass the StorageProvider since they are stateless 
+// proxies that don't depend on the database choice.
+const fetchJson = async (path, { method = 'GET', body, headers = {} } = {}) => {
   const res = await fetch(path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`
-    },
+    headers: { 'Content-Type': 'application/json', ...headers },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {})
   });
   if (res.status === 204) return null;
@@ -30,16 +20,14 @@ const request = async (path, { method = 'GET', body } = {}) => {
 };
 
 export const api = {
-  listProjects: () => request('/api/projects'),
-  createProject: (form) => request('/api/projects', { method: 'POST', body: form }),
-  getProject: (id) => request(`/api/projects/${id}`),
-  updateProjectMeta: (id, patch) => request(`/api/projects/${id}`, { method: 'PATCH', body: patch }),
-  upsertSections: (id, sections) => request(`/api/projects/${id}/sections`, { method: 'PUT', body: { sections } }),
-  appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
-  createVersion: (id, version) => request(`/api/projects/${id}/versions`, { method: 'POST', body: version }),
-  upsertMemory: (id, body) => request(`/api/projects/${id}/memory`, { method: 'PUT', body }),
-  appendDecisions: (id, decisions) => request(`/api/projects/${id}/decisions`, { method: 'POST', body: { decisions } }),
-  deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
-  generate: (systemPrompt, userPrompt, jsonSchema) =>
-    request('/api/ai/generate', { method: 'POST', body: { systemPrompt, userPrompt, jsonSchema } })
+  listProjects: () => StorageProvider.listProjects(),
+  createProject: (form) => StorageProvider.createProject(form),
+  getProject: (id) => StorageProvider.getProject(id),
+  updateProjectMeta: (id, patch) => StorageProvider.updateProjectMeta(id, patch),
+  upsertSections: (id, sections) => StorageProvider.upsertSections(id, sections),
+  appendEvents: (id, events) => StorageProvider.appendEvents(id, events),
+  createVersion: (id, version) => StorageProvider.createVersion(id, version),
+  upsertMemory: (id, body) => StorageProvider.upsertMemory(id, body),
+  appendDecisions: (id, decisions) => StorageProvider.appendDecisions(id, decisions),
+  deleteProject: (id) => StorageProvider.deleteProject(id)
 };

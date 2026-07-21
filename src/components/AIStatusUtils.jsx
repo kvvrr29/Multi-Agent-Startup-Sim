@@ -1,6 +1,7 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Server } from 'lucide-react';
 import { useAIMode } from './aiStatusModel';
+import { useSettingsStore } from '../store/useSettingsStore';
 
 const BANNER_MESSAGES = {
   simulator: {
@@ -12,8 +13,10 @@ const BANNER_MESSAGES = {
     body: () => <>The Gemini API is rejecting requests due to rate limits. Recent output may have used <strong>fallback templates</strong>. Wait a moment and try again.</>
   },
   api_error: {
-    title: 'Gemini API Error',
-    body: (reason, lastError) => <>The last Gemini request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check your API key and connection.</>
+    title: (provider) => provider === 'webllm' ? 'Built-in AI Error' : 'Gemini API Error',
+    body: (reason, lastError, provider) => provider === 'webllm'
+      ? <>The Built-in AI request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check browser compatibility or try again.</>
+      : <>The last Gemini request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check your API key and connection.</>
   },
   fallback: {
     title: 'Fallback Content Active',
@@ -26,9 +29,13 @@ const BANNER_MESSAGES = {
  */
 export function AIStatusBanner() {
   const { reason, status, lastError } = useAIMode();
+  const { aiProvider, setAiProvider } = useSettingsStore();
 
   const message = BANNER_MESSAGES[status.key];
   if (!message) return null; // Connected / Generating need no warning banner
+
+  // Determine if we should show the "Switch to Local AI" failover button
+  const isGeminiError = aiProvider === 'gemini' && (status.key === 'simulator' || status.key === 'api_error');
 
   return (
     <div style={{
@@ -38,13 +45,23 @@ export function AIStatusBanner() {
       border: `1px solid ${status.color}66`,
     }}>
       <AlertTriangle size={18} color={status.color} style={{ flexShrink: 0, marginTop: '1px' }} />
-      <div style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
+      <div style={{ fontSize: '0.85rem', lineHeight: 1.5, flex: 1 }}>
         <div style={{ fontWeight: 700, color: status.color, marginBottom: '2px' }}>
-          {message.title}
+          {typeof message.title === 'function' ? message.title(aiProvider) : message.title}
         </div>
         <div style={{ color: 'var(--text-secondary)' }}>
-          {message.body(reason, lastError)}
+          {message.body(reason, lastError, aiProvider)}
         </div>
+        {isGeminiError && (
+          <button 
+            type="button"
+            onClick={() => setAiProvider('local')}
+            className="btn-secondary"
+            style={{ marginTop: '10px', padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--bg-primary)', border: `1px solid ${status.color}88`, color: status.color }}
+          >
+            <Server size={14} /> Switch to Local AI
+          </button>
+        )}
       </div>
     </div>
   );

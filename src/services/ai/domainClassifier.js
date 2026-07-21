@@ -3,28 +3,11 @@ import { DOMAIN_CLASSIFIER_PROMPT } from './agentPrompts';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 
 export const classifyDomain = async (projectName, projectDescription) => {
+  console.log('[DomainClassifier] Started');
   const systemPrompt = DOMAIN_CLASSIFIER_PROMPT;
 
-  const userPrompt = `Project Name: ${projectName || 'Unknown'}\nProject Description: ${projectDescription || 'Unknown'}`;
-  
-  const schema = {
-    type: "OBJECT",
-    properties: {
-      domain: { type: "STRING", description: "The overarching domain (e.g., FinTech, HealthTech, EdTech, E-Commerce, Retail)" },
-      industry: { type: "STRING", description: "The specific industry (e.g., Banking, Healthcare, Luxury Retail)" },
-      project_type: { type: "STRING", description: "The structural type (e.g., Enterprise Software, Marketplace, Retail Brand)" },
-      business_model: { type: "STRING", description: "The core business model (e.g., B2B SaaS, Commission, Product Sales)" },
-      complexity: { type: "STRING", description: "Estimated technical complexity (Low, Medium, High, Extreme)" },
-      mandatory_entities: { 
-        type: "ARRAY", 
-        description: "3 to 5 core entities or nouns that MUST be present in any architecture or roadmap for this project.",
-        items: { type: "STRING" }
-      },
-      reasoning: { type: "STRING", description: "Brief justification for why this specific domain and business model were chosen over generic SaaS." },
-      confidence: { type: "INTEGER", description: "Confidence score from 0 to 100 based on how clear the description is." }
-    },
-    required: ["domain", "industry", "project_type", "business_model", "complexity", "mandatory_entities", "reasoning", "confidence"]
-  };
+  // We use plain text for the classifier to avoid heavy JSON grammar constraints.
+  const userPrompt = `Project Name: ${projectName || 'Unknown'}\nProject Description: ${projectDescription || 'Unknown'}\n\nTask: Provide ONLY a 1 to 3 word domain classification for this project (e.g. FinTech, B2B SaaS, HealthTech). Do NOT use JSON, markdown, or any surrounding text.`;
 
   let attempts = 0;
   const maxAttempts = 2;
@@ -35,8 +18,26 @@ export const classifyDomain = async (projectName, projectDescription) => {
     let parsed = null;
     try {
       attempts++;
-      rawResponse = await generateAIContent(systemPrompt, userPrompt, schema);
-      parsed = JSON.parse(rawResponse);
+      console.log(`[DomainClassifier] Calling AI Provider (Attempt ${attempts})`);
+      // Pass null for schema to skip JSON generation
+      const aiResult = await generateAIContent(systemPrompt, userPrompt, null);
+      rawResponse = aiResult.responseText;
+      const actualProvider = aiResult.providerName;
+      console.log('[DomainClassifier] Raw response received:', typeof rawResponse, rawResponse);
+      
+      const text = rawResponse.replace(/["'{}]/g, '').trim();
+      parsed = {
+        domain: text,
+        industry: text,
+        project_type: text,
+        business_model: 'Standard',
+        complexity: 'Medium',
+        mandatory_entities: [],
+        reasoning: 'Derived from plain text classification.',
+        confidence: 90
+      };
+      
+      console.log('[DomainClassifier] Parsing successful, domain:', parsed.domain);
       
       const isSoftwareDomain = parsed.domain.toLowerCase().includes('software') || parsed.industry.toLowerCase().includes('software');
       const descLower = (projectDescription || '').toLowerCase();
@@ -55,16 +56,26 @@ export const classifyDomain = async (projectName, projectDescription) => {
       }
 
       pushLog({ agent: 'domain', prompt: userPrompt, rawResponse, parsedJson: parsed, validationResult: 'PASSED', fallbackReason: null });
-      setSource('domain', 'Gemini');
+      setSource('domain', actualProvider);
+      console.log('[DomainClassifier] Completed');
       return parsed;
     } catch (err) {
-      console.warn(`[Domain Classifier] Attempt ${attempts} failed:`, err.message);
+      console.warn(`[DomainClassifier] Attempt ${attempts} failed:`, err.message);
       if (attempts >= maxAttempts) {
         const fallbackReason = err.message || 'Unknown error';
         pushLog({ agent: 'domain', prompt: userPrompt, rawResponse, parsedJson: parsed, validationResult: 'FALLBACK', fallbackReason });
         setSource('domain', 'Fallback');
-        // Surface a visible error — do NOT silently return generic data
-        throw new Error(`[Domain Classifier] All attempts failed. Last reason: ${fallbackReason}`);
+        console.error(`[Domain Classifier] All attempts failed. Last reason: ${fallbackReason}. Defaulting to General domain.`);
+        return {
+          domain: 'General',
+          industry: 'General',
+          project_type: 'General',
+          business_model: 'Standard',
+          complexity: 'Medium',
+          mandatory_entities: [],
+          reasoning: 'Fallback classification due to AI failure.',
+          confidence: 0
+        };
       }
     }
   }

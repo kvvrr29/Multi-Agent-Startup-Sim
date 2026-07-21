@@ -3,16 +3,10 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 import { BLUEPRINT_SECTION_KEYS } from './blueprintKeys.js';
-
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
-// The Gemini key lives ONLY here, server-side. Never sent to or read by the browser.
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const PORT = process.env.PORT || 8787;
 
-// Rolling aliases first — they track Google's current models, so retired ids
-// (like gemini-2.5-flash for keys created after mid-2026) can't break us.
-const ALLOWED_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+const PORT = process.env.PORT || 8787;
 
 const app = express();
 app.use(cors());
@@ -24,6 +18,12 @@ app.use(express.json({ limit: '4mb' }));
  * to every query the server makes on the user's behalf.
  */
 const withUser = async (req, res, next) => {
+  if (process.env.DEV_AUTH_BYPASS === 'true') {
+    // Development bypass: allow access without a valid Supabase JWT
+    req.user = { id: 'dev-user', email: req.headers['x-user-email'] || 'dev@local.host' };
+    return next();
+  }
+
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'unauthenticated', message: 'Missing bearer token.' });
   const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -37,8 +37,8 @@ const withUser = async (req, res, next) => {
   next();
 };
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, aiConfigured: !!GEMINI_API_KEY });
+app.get('/api/health', async (_req, res) => {
+  res.json({ ok: true });
 });
 
 // ---------- Projects (Supabase Postgres behind RLS) ----------
@@ -286,58 +286,8 @@ app.delete('/api/projects/:id', withUser, async (req, res) => {
   res.status(204).end();
 });
 
-// ---------- AI proxy (Gemini) ----------
-
-app.post('/api/ai/generate', withUser, async (req, res) => {
-  if (!GEMINI_API_KEY) {
-    return res.status(501).json({ error: 'not_configured', message: 'Server AI is not configured (GEMINI_API_KEY is not set).' });
-  }
-
-  const { systemPrompt, userPrompt, jsonSchema, model } = req.body || {};
-  if (!userPrompt || typeof userPrompt !== 'string') {
-    return res.status(400).json({ error: 'bad_request', message: 'userPrompt (string) is required.' });
-  }
-  const chosenModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
-
-  const payload = {
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      ...(jsonSchema ? { responseMimeType: 'application/json', responseSchema: jsonSchema } : {})
-    }
-  };
-  if (systemPrompt && typeof systemPrompt === 'string') {
-    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-  }
-
-  let upstream;
-  try {
-    upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-        body: JSON.stringify(payload)
-      }
-    );
-  } catch (err) {
-    return res.status(502).json({ error: 'upstream_unreachable', message: String(err) });
-  }
-
-  const data = await upstream.json().catch(() => ({}));
-  if (!upstream.ok) {
-    const message = data?.error?.message || `Gemini returned ${upstream.status}`;
-    if (upstream.status === 429) return res.status(429).json({ error: 'rate_limited', message });
-    return res.status(502).json({ error: 'gemini_error', message, status: upstream.status });
-  }
-
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const text = parts.map(p => p.text || '').join('');
-  if (!text) return res.status(502).json({ error: 'empty_response', message: 'Gemini returned no text.' });
-
-  res.json({ text });
-});
+// Backend no longer proxies AI requests. All AI generation happens in the browser.
 
 app.listen(PORT, () => {
-  console.log(`[server] API listening on http://localhost:${PORT} (AI ${GEMINI_API_KEY ? 'configured' : 'NOT configured'})`);
+  console.log(`[server] API listening on http://localhost:${PORT}`);
 });

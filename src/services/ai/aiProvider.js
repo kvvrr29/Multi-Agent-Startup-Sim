@@ -1,58 +1,45 @@
+import { WebLLMProvider } from './WebLLMProvider';
+import { GeminiProvider } from './GeminiProvider';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAICostStore } from '../../store/useAICostStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
-import { GoogleGenAI } from '@google/genai';
-import { api } from '../apiClient';
+import { useProjectStore } from '../../store/useProjectStore';
+
+class AIProviderFactory {
+  constructor() {
+    this.webllm = new WebLLMProvider();
+    this.gemini = new GeminiProvider();
+  }
+
+  getActiveProvider() {
+    const { aiProvider: globalProvider } = useSettingsStore.getState();
+    const projectProvider = useProjectStore.getState().project?.aiProvider;
+    const providerName = projectProvider || globalProvider || 'webllm';
+    
+    if (providerName === 'gemini') return this.gemini;
+    return this.webllm;
+  }
+}
+
+export const aiProviderFactory = new AIProviderFactory();
 
 // Simple heuristic for tokens
 const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
 
-/**
- * Server-side path: the Express backend holds the Gemini key and forwards the
- * request. The browser never sees or sends a Gemini API key.
- */
-const generateViaProxy = async (systemPrompt, userPrompt, jsonSchema) => {
-  const payload = await api.generate(systemPrompt, userPrompt, jsonSchema);
-  return payload.text;
-};
-
-const generateViaBrowserKey = async (apiKey, systemPrompt, userPrompt, jsonSchema) => {
-  const ai = new GoogleGenAI({ apiKey });
-  const config = {
-    systemInstruction: systemPrompt,
-    temperature: 0.7,
-  };
-  if (jsonSchema) {
-    config.responseMimeType = 'application/json';
-    config.responseSchema = jsonSchema;
-  }
-  const response = await ai.models.generateContent({
-    // Rolling alias: always resolves to the current Flash model, so retired
-    // model ids (e.g. gemini-2.5-flash for new keys) can't break generation.
-    model: 'gemini-flash-latest',
-    contents: userPrompt,
-    config: config
-  });
-  return response.text;
-};
-
-export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null) => {
-  const { apiKey, aiProvider } = useSettingsStore.getState();
+export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null, maxTokens = null) => {
+  const provider = aiProviderFactory.getActiveProvider();
   const { recordUsage } = useAICostStore.getState();
-
-  if (aiProvider !== 'gemini') {
-    throw new Error(`Provider ${aiProvider} is not implemented yet.`);
-  }
-
-  const useBrowserKey = !!apiKey?.trim();
   const { incrementSent, incrementSuccess, incrementFailed, beginGeneration, endGeneration, setLastError, clearLastError, setConnectionStatus } = useAIDebugStore.getState();
 
   try {
     incrementSent();
     beginGeneration();
-    const responseText = useBrowserKey
-      ? await generateViaBrowserKey(apiKey, systemPrompt, userPrompt, jsonSchema)
-      : await generateViaProxy(systemPrompt, userPrompt, jsonSchema);
+    
+    const { aiProvider: globalProvider } = useSettingsStore.getState();
+    const projectProvider = useProjectStore.getState().project?.aiProvider;
+    const providerName = projectProvider || globalProvider || 'webllm';
+    
+    const responseText = await provider.generate({ systemPrompt, userPrompt, jsonSchema, maxTokens });
 
     // Track costs
     const inputTokens = estimateTokens(systemPrompt + userPrompt);
@@ -60,23 +47,14 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     recordUsage(inputTokens, outputTokens);
     incrementSuccess();
     clearLastError();
-    // A configured key is not a connection. Only a successful response earns it.
     setConnectionStatus('connected');
 
-    return responseText;
+    return { responseText, providerName: providerName === 'gemini' ? 'Gemini' : 'WebLLM' };
   } catch (err) {
     incrementFailed();
-    console.error("Gemini API Error:", err);
-    if (err.status === 429) {
-      setLastError('rate_limit', 'Rate limit exceeded.');
-      throw new Error('Rate limit exceeded.');
-    }
-    if (err.status === 501 || err.code === 'not_configured') {
-      setLastError('api_error', 'Server AI is not configured yet.');
-      throw new Error('Server AI is not configured (no Gemini key on the server).');
-    }
+    console.error("[AIProvider] Error:", err);
     setLastError('api_error', err.message || 'Unknown API error');
-    throw new Error(`Gemini API failed: ${err.message}`);
+    throw err;
   } finally {
     endGeneration();
   }

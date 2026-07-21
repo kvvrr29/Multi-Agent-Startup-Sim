@@ -175,6 +175,10 @@ const SourceBadge = ({ sectionData }) => {
 
 // Section block with approval workflow, collapse, and copy
 const SectionBlock = ({ id, label, sectionData, onZoomDiagram }) => {
+  useEffect(() => {
+    console.log(`[Trace] UI - ${id} - UI rendered`);
+  }, [id, sectionData?.content]);
+
   const workflowActive = useProjectStore((state) => state.workflow.active);
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
   const [feedback, setFeedback] = useState("");

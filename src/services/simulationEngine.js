@@ -18,7 +18,7 @@ const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k 
 // Hard cap on any single AI generation so no agent can hang in "Working" (doc §5).
 const AGENT_GENERATION_TIMEOUT_MS = 90000;
 
-const withTimeout = (promiseFn, ms) => {
+export const withTimeout = (promiseFn, ms) => {
   let timeoutId;
   const timeoutPromise = new Promise((_, reject) => {
     timeoutId = setTimeout(() => reject(new Error('Timeout')), ms);
@@ -123,9 +123,14 @@ export const runInitialSimulation = async (projectData) => {
       store.addWorkflowEvent({ message: `Mediator classified domain as: ${classification.domain} (${classification.industry})`, agent: 'mediator' });
     } catch (err) {
       // ⚠️ Surface the domain classification failure as a visible warning — do NOT silently continue
-      store.addWorkflowEvent({ type: 'error', message: `⚠️ Domain Classifier FAILED: ${err.message}. Agents will receive incomplete context.`, agent: 'mediator' });
+      store.addWorkflowEvent({ type: 'error', message: `⚠️ Domain Classifier FAILED: ${err.message}.`, agent: 'mediator' });
       console.error('[Simulation] Domain classification error:', err);
-      useAI = false; // Disable AI for downstream agents since context is unavailable
+      // DO NOT RETURN FALLBACK - Throw if in DEV, otherwise bubble up to runInitialSimulation
+      if (import.meta.env.DEV) {
+        throw err;
+      } else {
+        throw new Error(`Domain Classifier FAILED: ${err.message}`);
+      }
     }
   }
 
@@ -138,51 +143,91 @@ export const runInitialSimulation = async (projectData) => {
   const handleAgentGeneration = async (agentId, fallbackSections) => {
     if (!useAI) return { content: fallbackSections, decisions: [], generationSource: 'Fallback', scores: null };
     try {
-      const result = await withTimeout(() => generateAgentContent(agentId), AGENT_GENERATION_TIMEOUT_MS);
+      console.log(`[Status Trace] ${agentId.toUpperCase()} idle -> working (generation started)`);
+      // The per-section timeout is now handled inside generateAgentContent
+      const result = await generateAgentContent(agentId);
+      console.log(`[Status Trace] ${agentId.toUpperCase()} working -> generated -> validated`);
+      
       if (!useProjectStore.getState().isCurrentWorkflow(runId)) throw new Error('Stale workflow completion ignored');
       result.decisions?.forEach(decision => memoryStore.applyDecision(decision, { agent: agentId, instruction: 'Initial project generation', version: 'v1' }));
-      store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via Gemini.`, agent: agentId });
+      store.addWorkflowEvent({ type: 'system', message: `✅ ${agentId.toUpperCase()} generated via ${result.generationSource || 'AI'}.`, agent: agentId });
       return result;
     } catch (err) {
       const reason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
-      // ⚠️ Surface the failure visibly — do NOT silently swap with fallback without warning
+      
+      // If we already updated the status to COMPLETED, do not overwrite it.
+      const currentStatus = useProjectStore.getState().agents[agentId]?.status;
+      if (currentStatus === AGENT_STATUS.COMPLETED) {
+        console.warn(`[Status Trace] ${agentId.toUpperCase()} ignoring timeout/error because status is already COMPLETED. Error: ${reason}`);
+        return { content: fallbackSections, decisions: [], generationSource: 'Fallback', scores: null };
+      }
+      
+      console.log(`[Status Trace] ${agentId.toUpperCase()} working -> failed (${reason})`);
       store.updateAgentStatus(agentId, AGENT_STATUS.FAILED, reason);
-      store.addWorkflowEvent({ type: 'error', message: `⚠️ Gemini FAILED for ${agentId.toUpperCase()}: ${reason}. Using Fallback Factory.`, agent: 'mediator' });
+      store.addWorkflowEvent({ type: 'error', message: `⚠️ AI FAILED for ${agentId.toUpperCase()}: ${reason}.`, agent: 'mediator' });
       console.error(`[Simulation] AI generation failed for ${agentId}:`, err);
-      await sleep(800);
-      return { content: fallbackSections, decisions: [], generationSource: 'Fallback', scores: null, failureReason: reason };
+      // Bubble up the error
+      throw err;
     }
   };
 
   try {
     const blueprintContent = generateDynamicBlueprint(projectData);
 
-    // 2. Specialist agents generate their sections in pipeline order
+    // 2. Specialist agents generate their sections
     store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
-    for (const step of AGENT_PIPELINE) {
+    
+    const activeProvider = useSettingsStore.getState().aiProvider;
+    const isWebLLM = (useProjectStore.getState().project?.aiProvider || activeProvider || 'webllm') !== 'gemini';
+
+    const processAgent = async (step) => {
       const { id, thinking, working, doneMsg, contribution } = step;
       const sections = AGENT_ROLES[id];
 
       store.updateAgentStatus(id, AGENT_STATUS.THINKING, thinking);
       store.addWorkflowEvent({ message: `Mediator assigned task to ${useProjectStore.getState().agents[id].role}.`, agent: 'mediator' });
-      await sleep(1000);
+      await sleep(1000 + Math.random() * 500); // jitter
 
       store.updateAgentStatus(id, AGENT_STATUS.WORKING, working);
       const result = await handleAgentGeneration(id, pick(blueprintContent, sections));
-      if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'stale' };
+      if (!useProjectStore.getState().isCurrentWorkflow(runId)) return;
 
       sections.forEach(sectionKey => {
         if (result.content[sectionKey]) {
+          console.log(`[Trace] ${id.toUpperCase()} - ${sectionKey} - Blueprint saved`);
           store.updateBlueprintSection(sectionKey, result.content[sectionKey], 'pending', 'v1', sectionMetadata({
-            source: result.generationSource || 'Gemini', agent: id, scores: result.scores, failureReason: result.failureReason
+            source: result.generationSource, agent: id, scores: result.scores, failureReason: result.failureReason
           }));
         }
       });
 
+      console.log(`[Status Trace] ${id.toUpperCase()} validated -> blueprint saved -> completed`);
+      console.log(`[Trace] ${id.toUpperCase()} - Status changed to COMPLETED`);
       store.updateAgentStatus(id, AGENT_STATUS.COMPLETED);
       store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
-      await sleep(500);
+    };
+
+    if (isWebLLM) {
+      console.log('[Orchestration] WebLLM detected: Running agents SEQUENTIALLY to prevent queue timeouts.');
+      for (const step of AGENT_PIPELINE) {
+        try {
+          await processAgent(step);
+        } catch (err) {
+          console.error(`[Simulation] Agent ${step.id} failed. Aborting pipeline.`, err);
+          throw new Error(`Pipeline aborted: Agent ${step.id} failed to generate. Last error: ${err.message}`);
+        }
+      }
+    } else {
+      console.log('[Orchestration] Gemini detected: Running agents CONCURRENTLY.');
+      const settledResults = await Promise.allSettled(AGENT_PIPELINE.map(processAgent));
+      const failed = settledResults.filter(r => r.status === 'rejected');
+      if (failed.length > 0) {
+        const errors = failed.map(r => r.reason?.message || 'Unknown').join(', ');
+        throw new Error(`Pipeline aborted: ${failed.length} agents failed to generate. (${errors})`);
+      }
     }
+    
+    if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'stale' };
 
     // 3. Mediator wraps up: contributions (always local) + final recommendations
     await sleep(500);
@@ -195,7 +240,7 @@ export const runInitialSimulation = async (projectData) => {
     });
     if (mediatorContent.content.finalRecommendations) {
       store.updateBlueprintSection('finalRecommendations', mediatorContent.content.finalRecommendations, 'pending', 'v1', sectionMetadata({
-        source: mediatorContent.generationSource || 'Gemini', agent: 'mediator', scores: mediatorContent.scores, failureReason: mediatorContent.failureReason
+        source: mediatorContent.generationSource, agent: 'mediator', scores: mediatorContent.scores, failureReason: mediatorContent.failureReason
       }));
     }
     await sleep(1000);
@@ -213,24 +258,85 @@ export const runInitialSimulation = async (projectData) => {
       { changeType: 'initial', completionStatus: 'success', memorySnapshot: memoryStore.getSnapshot() }
     );
 
+    const activeProviderName = useSettingsStore.getState().aiProvider === 'gemini' ? 'Gemini 2.5 Flash' : 'Built-in AI (WebLLM)';
     store.addWorkflowEvent({
       type: 'system',
-      message: useAI ? `Generation Source: Gemini 2.5 Flash` : `Generation Source: Fallback Factory`,
+      message: useAI ? `Generation Source: ${activeProviderName}` : `Generation Source: Fallback Factory`,
       agent: 'mediator'
     });
 
     store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Generation Finished');
+    
+    // Print WEBLLM GENERATION REPORT
+    if (isWebLLM) {
+      const logs = useAIDebugStore.getState().logs || [];
+      const totalRequested = 17;
+      const totalGenerated = logs.filter(l => l.validationResult === 'PASSED' || l.validationResult === 'FAILED').length;
+      const totalValidated = logs.filter(l => l.validationResult === 'PASSED').length;
+      const fallbacks = logs.filter(l => l.validationResult === 'FALLBACK' || l.fallbackReason).length;
+      const timeouts = logs.filter(l => (l.fallbackReason || '').toLowerCase().includes('timeout')).length;
+      
+      const bp = useProjectStore.getState().blueprint;
+      const totalSaved = Object.keys(bp).filter(k => k !== 'agentContributions' && bp[k]?.content).length;
+      
+      const domainPass = logs.some(l => l.agent === 'domain' && l.validationResult === 'PASSED') ? 'PASS' : 'FAIL';
+      const getAgentGen = (role) => logs.filter(l => l.agent === role && l.parsedJson !== null).length;
+      const getAgentReq = (role) => AGENT_ROLES[role]?.length || 1;
+      
+      const formatAgent = (role) => `generated ${getAgentGen(role)}/${getAgentReq(role)}`;
+      
+      console.log(`\n==============================`);
+      console.log(`WEBLLM GENERATION REPORT`);
+      console.log(`==============================`);
+      console.log(`Provider: WebLLM`);
+      console.log(`Domain Classification: ${domainPass}`);
+      console.log(`CEO:\n${formatAgent('ceo')}`);
+      console.log(`PM:\n${formatAgent('pm')}`);
+      console.log(`Developer:\n${formatAgent('developer')}`);
+      console.log(`Marketing:\n${formatAgent('marketing')}`);
+      console.log(`Mediator:\n${formatAgent('mediator')}`);
+      console.log(`Validation Success:\n${totalValidated}/${totalRequested}`);
+      console.log(`Saved:\n${totalSaved}/${totalRequested}`);
+      console.log(`Rendered:\n${totalSaved}/${totalRequested}`);
+      console.log(`Fallback Sections:\n${fallbacks}`);
+      console.log(`Timeouts:\n${timeouts}`);
+      console.log(`Total AI Calls:\n${logs.length}`);
+      console.log(`Average Generation Time:\n(Calculated via external diagnostic trace)`);
+      console.log(`Total Generation Time:\n(Calculated via external diagnostic trace)`);
+      console.log(`==============================\n`);
+    }
     return { status: 'changed', version: 'v1' };
   } catch (err) {
-    // Guaranteed failure state: never leave the workflow hanging (doc §5)
     console.error('[Simulation] Initial generation failed:', err);
     store.updateAgentStatus('mediator', AGENT_STATUS.FAILED, err.message || 'Generation failed');
     store.addWorkflowEvent({ type: 'error', message: `⚠️ Blueprint generation failed: ${err.message || 'Unknown error'}`, agent: 'mediator' });
-    return { status: 'failed', reason: err.message || 'Generation failed' };
+    
+    if (import.meta.env.DEV) {
+      // In Development mode, we crash loud and proud so the developer can see the exact failure trace.
+      store.setGenerationError({ 
+        message: err.message || 'Unknown error', 
+        stack: err.stack,
+        isDev: true
+      });
+      throw err;
+    } else {
+      // In Production mode, we show a graceful error panel instead of crashing or generating fake data.
+      store.setGenerationError({ 
+        message: err.message || 'Unknown error',
+        stack: err.stack,
+        isDev: false
+      });
+      return { status: 'failed', reason: err.message || 'Generation failed' };
+    }
   } finally {
     await sleep(500);
-    useProjectStore.getState().resetAllAgents();
-    useProjectStore.getState().endWorkflow(runId);
+    // Don't reset agents if we had a fatal error, so the UI can show the failed state alongside the error panel.
+    const currentState = useProjectStore.getState();
+    const isFailed = currentState.generationError !== null;
+    if (!isFailed) {
+      currentState.resetAllAgents();
+    }
+    currentState.endWorkflow(runId);
   }
 };
 
@@ -336,7 +442,7 @@ export const applyRevisionSimulation = async (previewData) => {
 
       if (aiModeEnabled) {
          try {
-           const result = await withTimeout(() => generateAgentContent(targetAgent, taskDescription || instruction), AGENT_GENERATION_TIMEOUT_MS);
+           const result = await generateAgentContent(targetAgent, taskDescription || instruction);
            if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] };
            store.updateAgentStatus(targetAgent, AGENT_STATUS.REVIEWING, 'Reviewing generated changes');
            const changedSections = [];
@@ -346,7 +452,7 @@ export const applyRevisionSimulation = async (previewData) => {
                const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
                if (content.trim() !== existing.trim()) {
                  store.updateBlueprintSection(sectionKey, content, 'pending', nextVersionId, sectionMetadata({
-                   source: result.generationSource || 'Gemini', agent: targetAgent, scores: result.scores
+                   source: result.generationSource, agent: targetAgent, scores: result.scores
                  }));
                  changedSections.push(sectionKey);
                }

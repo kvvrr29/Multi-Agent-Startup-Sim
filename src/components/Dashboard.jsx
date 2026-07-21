@@ -13,6 +13,7 @@ import AICostDashboard from "./AICostDashboard";
 import PromptInspector from "./PromptInspector";
 import AIDebugPanel from "./AIDebugPanel";
 import { AIModeBadge, AIStatusBanner } from "./AIStatusUtils";
+import GenerationErrorPanel from "./GenerationErrorPanel";
 import { resetAllProjectData } from "../services/simulationEngine";
 import { useAuthStore } from "../store/useAuthStore";
 import { flush, openCloudProject } from "../services/cloudSync";
@@ -318,6 +319,7 @@ export default function Dashboard() {
 
   const developerMode = useSettingsStore((state) => state.developerMode);
   const agents = useProjectStore((state) => state.agents);
+  const generationError = useProjectStore((state) => state.generationError);
   const activeCloudId = useAuthStore((state) => state.activeCloudId);
   const anyBusy = Object.values(agents).some(isAgentBusy);
 
@@ -529,7 +531,7 @@ export default function Dashboard() {
         <div>
           <AIStatusBanner />
         </div>
-        <BlueprintViewer />
+        {generationError ? <GenerationErrorPanel /> : <BlueprintViewer />}
       </div>
     </div>
   );

@@ -58,6 +58,7 @@ export const useProjectStore = create((set, get) => ({
 
   // Project Data
   project: null,
+  generationError: null,
   
   // Agents State
   agents: createInitialAgents(),

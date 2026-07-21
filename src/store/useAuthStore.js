@@ -1,11 +1,8 @@
 import { create } from 'zustand';
-import { supabase } from '../services/supabaseClient';
 import { api } from '../services/apiClient';
 
 /**
- * Auth + cloud project registry.
- * session: undefined = still loading, null = signed out, object = signed in.
- * activeCloudId: the projects-table row the local stores currently sync into.
+ * Auth + cloud project registry (Mocked for Development).
  */
 export const useAuthStore = create((set, get) => ({
   session: undefined,
@@ -16,32 +13,42 @@ export const useAuthStore = create((set, get) => ({
   authError: null,
 
   init: () => {
-    supabase.auth.getSession().then(({ data }) => {
-      set({ session: data.session ?? null, user: data.session?.user || null });
-    });
-    supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session: session ?? null, user: session?.user || null });
-      if (!session) set({ cloudProjects: [], activeCloudId: null });
-    });
+    const saved = localStorage.getItem('dev_session');
+    if (saved) {
+      try {
+        const user = JSON.parse(saved);
+        set({ session: { user }, user });
+      } catch (e) {
+        set({ session: null, user: null });
+      }
+    } else {
+      set({ session: null, user: null });
+    }
   },
 
-  signInWithEmail: async (email) => {
+  signInWithEmail: async (email, name) => {
     set({ authMessage: null, authError: null });
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin }
-    });
-    if (error) {
-      set({ authError: error.message });
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      set({ authError: 'Please enter a valid email address.' });
       return false;
     }
-    set({ authMessage: `Magic link sent to ${email}. Open it in this browser to sign in.` });
+    if (!name || name.trim().length === 0) {
+      set({ authError: 'Please enter your name.' });
+      return false;
+    }
+
+    const user = { email, name: name.trim() };
+    localStorage.setItem('dev_session', JSON.stringify(user));
+    set({ session: { user }, user });
     return true;
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    set({ cloudProjects: [], activeCloudId: null, authMessage: null, authError: null });
+    localStorage.removeItem('dev_session');
+    set({ session: null, user: null, cloudProjects: [], activeCloudId: null, authMessage: null, authError: null });
   },
 
   setActiveCloudId: (id) => set({ activeCloudId: id }),

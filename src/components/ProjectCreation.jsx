@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { runInitialSimulation } from '../services/simulationEngine';
 import { Sparkles, ArrowRight, Settings, LogOut, ArrowLeft } from 'lucide-react';
-import { AIStatusBanner } from './AIStatusUtils';
 import AISettingsModal from './AISettingsModal';
 import { useAuthStore } from '../store/useAuthStore';
 import { createCloudProject, openCloudProject } from '../services/cloudSync';
 import CloudProjectList from './CloudProjectList';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { modelManager } from '../services/ai/ModelManager';
 
 export default function ProjectCreation() {
   const setProject = useProjectStore((state) => state.setProject);
@@ -14,8 +15,23 @@ export default function ProjectCreation() {
   const setCurrentView = useProjectStore((state) => state.setCurrentView);
   const user = useAuthStore(state => state.user);
   const signOut = useAuthStore(state => state.signOut);
+  const { aiProvider: defaultAiProvider } = useSettingsStore();
   const [showSettings, setShowSettings] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [webllmState, setWebllmState] = useState(modelManager.getState());
+  
+  useEffect(() => {
+    return modelManager.subscribe(setWebllmState);
+  }, []);
+  
+  // Check if installed on mount to allow eager initialization if cached
+  useEffect(() => {
+    modelManager.isInstalled().then(installed => {
+      if (installed && webllmState.status === 'uninitialized') {
+        modelManager.initialize().catch(() => {});
+      }
+    });
+  }, []);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -26,6 +42,7 @@ export default function ProjectCreation() {
     platform: 'web',
     teamSize: '',
     priorities: '',
+    aiProvider: defaultAiProvider || 'webllm',
   });
 
   const inputStyle = {
@@ -65,6 +82,18 @@ export default function ProjectCreation() {
     }
 
     setError('');
+
+    if (formData.aiProvider === 'webllm' && webllmState.status !== 'ready') {
+      if (webllmState.status === 'error') {
+        setError('Built-in AI is unavailable on this browser. Switch to Gemini.');
+        return;
+      }
+      modelManager.initialize().catch(err => {
+        setError('Failed to initialize Built-in AI: ' + err.message);
+      });
+      return; // Stop here, the UI will show downloading progress. They must click again after.
+    }
+
     setCreating(true);
 
     // The database is the source of truth: without a cloud row there is
@@ -76,8 +105,8 @@ export default function ProjectCreation() {
       return;
     }
 
-    // Set the project to switch the view to Dashboard
-    setProject(formData);
+    // Set the project to switch the view to Dashboard, injecting the database ID
+    setProject({ ...formData, id: cloudId });
 
     // Kick off the agent simulation
     runInitialSimulation(formData);
@@ -94,7 +123,6 @@ export default function ProjectCreation() {
           <h1 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Start a New Project</h1>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>Define your startup vision, and our AI agents will build the blueprint.</p>
           
-          <AIStatusBanner />
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '1rem' }}>
             <button type="button" title="Settings" onClick={() => setShowSettings(true)} className="btn-secondary" style={{ padding: '7px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               <Settings size={14} /> AI Settings
@@ -125,6 +153,50 @@ export default function ProjectCreation() {
         <CloudProjectList onOpen={openCloudProject} />
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          
+          {/* AI Engine Selection */}
+          <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+            <label style={{ display: 'block', marginBottom: '12px', fontSize: '1rem', fontWeight: 600 }}>AI Engine</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: 'var(--bg-primary)', border: `1px solid ${formData.aiProvider === 'gemini' ? 'var(--primary-electric)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}>
+                <input type="radio" name="aiProvider" value="gemini" checked={formData.aiProvider === 'gemini'} onChange={handleChange} style={{ marginTop: '4px' }} />
+                <div style={{ flex: 1 }}>
+                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'gemini' ? 'var(--primary-electric)' : 'inherit' }}>Gemini API (Recommended)</strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Highest quality responses.<br/>Requires API Key.</span>
+                </div>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: 'var(--bg-primary)', border: `1px solid ${formData.aiProvider === 'webllm' ? 'var(--primary-electric)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}>
+                <input type="radio" name="aiProvider" value="webllm" checked={formData.aiProvider === 'webllm'} onChange={handleChange} style={{ marginTop: '4px' }} />
+                <div style={{ flex: 1 }}>
+                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'webllm' ? 'var(--primary-electric)' : 'inherit' }}>Built-in AI</strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Browser-native inference. No API key required.</span>
+                </div>
+              </label>
+
+              {formData.aiProvider === 'webllm' && (
+                <div style={{ marginTop: '8px', padding: '12px', borderRadius: '8px', fontSize: '0.85rem', background: webllmState.status === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', border: `1px solid ${webllmState.status === 'error' ? 'var(--danger)' : 'var(--success)'}` }}>
+                  {webllmState.status === 'uninitialized' ? (
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <span style={{ color: 'var(--text-primary)' }}>Model not cached. A one-time download (~400MB) is required.</span>
+                       <button type="button" className="btn-secondary" onClick={() => modelManager.initialize()} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>Download Model</button>
+                     </div>
+                  ) : webllmState.status === 'downloading' ? (
+                     <div>
+                       <strong style={{ display: 'block', marginBottom: '4px' }}>Downloading Built-in AI...</strong>
+                       <span style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>{webllmState.progress.text}</span>
+                       <span style={{ display: 'block', color: 'var(--text-muted)' }}>This download only happens once.</span>
+                     </div>
+                  ) : webllmState.status === 'ready' ? (
+                     <span style={{ color: 'var(--success)' }}>Built-in AI is ready.</span>
+                  ) : (
+                     <span style={{ color: 'var(--danger)' }}>Built-in AI is unavailable on this browser.</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="name" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Project Name *</label>
             <input 
@@ -264,7 +336,12 @@ export default function ProjectCreation() {
             />
           </div>
 
-          <button type="submit" disabled={creating} className="btn btn-primary" style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}>
+          <button 
+            type="submit" 
+            disabled={creating || (formData.aiProvider === 'webllm' && webllmState.status === 'downloading')} 
+            className="btn-primary" 
+            style={{ marginTop: '1rem', width: '100%', padding: '0.8rem' }}
+          >
             {creating ? 'Creating…' : 'Generate Blueprint'} <ArrowRight size={18} />
           </button>
         </form>
