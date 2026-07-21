@@ -530,17 +530,12 @@ export default function Dashboard() {
                   useProjectStore.getState().setCurrentView("create");
                   return;
                 }
-                if (
-                  window.confirm(
-                    "Start a new project? This clears the project, blueprint, memory, and debug data. Your cloud copy is kept.",
-                  )
-                ) {
-                  await flush();
-                  // Detach from the cloud row BEFORE clearing stores, otherwise the
-                  // sync would overwrite the saved project with empty state.
-                  useAuthStore.getState().detachCloud();
-                  resetAllProjectData();
-                }
+                await flush();
+                // Detach from the cloud row before clearing the render stores.
+                // Keep this project's browser-local drafts so reopening it can
+                // restore every unapproved section.
+                useAuthStore.getState().detachCloud();
+                resetAllProjectData({ preserveSectionHistory: true });
               }}
               style={{
                 padding: "12px",
