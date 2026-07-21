@@ -54,8 +54,8 @@ export default function AISettingsModal({ onClose }) {
         style={{
           background: "var(--bg-secondary)",
           width: "450px",
-          borderRadius: "12px",
-          padding: "2rem",
+          borderRadius: "15px",
+          padding: "1.5rem",
           border: "1px solid var(--border-color)",
           boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
         }}
@@ -161,7 +161,7 @@ export default function AISettingsModal({ onClose }) {
                     onChange={(e) => setLocalProvider(e.target.value)}
                     style={{
                       width: "100%",
-                      padding: "10px 36px 10px 10px",
+                      padding: "12px 36px 12px 12px",
                       appearance: "none",
                       background: "var(--bg-primary)",
                       color: "var(--text-primary)",
@@ -223,7 +223,7 @@ export default function AISettingsModal({ onClose }) {
                     placeholder="Enter your API Key..."
                     style={{
                       width: "100%",
-                      padding: "10px 10px 10px 34px",
+                      padding: "12px 12px 12px 34px",
                       background: "var(--bg-primary)",
                       color: "var(--text-primary)",
                       border: "1px solid var(--border-color)",
@@ -337,7 +337,7 @@ export default function AISettingsModal({ onClose }) {
               display: "flex",
               justifyContent: "flex-end",
               gap: "6px",
-              marginTop: "1rem",
+              marginTop: "0.5rem",
             }}
           >
             <button
