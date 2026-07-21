@@ -199,8 +199,12 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
   // Client-side version-history navigation (primitive selectors to avoid
   // re-render churn from returning a fresh object each render).
-  const versionCount = useSectionHistoryStore((s) => s.byProject[s.activeProjectId]?.[id]?.versions.length ?? 0);
-  const activeIndex = useSectionHistoryStore((s) => s.byProject[s.activeProjectId]?.[id]?.activeIndex ?? 0);
+  const versionCount = useSectionHistoryStore(
+    (s) => s.byProject[s.activeProjectId]?.[id]?.versions.length ?? 0,
+  );
+  const activeIndex = useSectionHistoryStore(
+    (s) => s.byProject[s.activeProjectId]?.[id]?.activeIndex ?? 0,
+  );
   const isApproved = sectionData.status === "approved";
   const [isRequestingChanges, setIsRequestingChanges] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -293,39 +297,6 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {!isApproved && versionCount > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-              <button
-                onClick={() => useSectionHistoryStore.getState().setActiveIndex(id, activeIndex - 1)}
-                disabled={activeIndex === 0}
-                title="Previous version"
-                style={{
-                  background: "transparent", border: "none", padding: "2px",
-                  color: "var(--text-muted)", display: "flex",
-                  cursor: activeIndex === 0 ? "default" : "pointer",
-                  opacity: activeIndex === 0 ? 0.35 : 1,
-                }}
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", minWidth: "38px", textAlign: "center" }}>
-                v{activeIndex + 1}/{versionCount}
-              </span>
-              <button
-                onClick={() => useSectionHistoryStore.getState().setActiveIndex(id, activeIndex + 1)}
-                disabled={activeIndex === versionCount - 1}
-                title="Next version"
-                style={{
-                  background: "transparent", border: "none", padding: "2px",
-                  color: "var(--text-muted)", display: "flex",
-                  cursor: activeIndex === versionCount - 1 ? "default" : "pointer",
-                  opacity: activeIndex === versionCount - 1 ? 0.35 : 1,
-                }}
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
           <SourceBadge sectionData={sectionData} />
           <button
             onClick={handleCopy}
@@ -361,64 +332,130 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
               paddingTop: "1rem",
               borderTop: "1px solid var(--border-color)",
               display: "flex",
-              justifyContent: "flex-end",
+              alignItems: "center",
+              justifyContent: "space-between",
               gap: "6px",
             }}
           >
-            <button
-              disabled={workflowActive || isApproved}
-              onClick={handleApprove}
-              className="btn-success"
+            {!isApproved && versionCount > 1 && (
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <button
+                  onClick={() =>
+                    useSectionHistoryStore
+                      .getState()
+                      .setActiveIndex(id, activeIndex - 1)
+                  }
+                  disabled={activeIndex === 0}
+                  title="Previous version"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    cursor: activeIndex === 0 ? "default" : "pointer",
+                    opacity: activeIndex === 0 ? 0.35 : 1,
+                  }}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <span
+                  style={{
+                    fontSize: "1.3rem",
+                    color: "var(--text-muted)",
+                    minWidth: "38px",
+                    textAlign: "center",
+                  }}
+                >
+                  v{activeIndex + 1}/{versionCount}
+                </span>
+                <button
+                  onClick={() =>
+                    useSectionHistoryStore
+                      .getState()
+                      .setActiveIndex(id, activeIndex + 1)
+                  }
+                  disabled={activeIndex === versionCount - 1}
+                  title="Next version"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-muted)",
+                    display: "flex",
+                    cursor:
+                      activeIndex === versionCount - 1 ? "default" : "pointer",
+                    opacity: activeIndex === versionCount - 1 ? 0.35 : 1,
+                  }}
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </div>
+            )}
+            <div
               style={{
-                padding: "10px 12px",
-                fontSize: "0.8rem",
-                borderRadius: "8px",
-                opacity: workflowActive ? 0.5 : 1,
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+                gap: "6px",
+                marginLeft: "auto",
               }}
             >
-              {isApproved ? (
+              <button
+                disabled={workflowActive || isApproved}
+                onClick={handleApprove}
+                className="btn-success"
+                style={{
+                  padding: "10px 12px",
+                  fontSize: "0.8rem",
+                  borderRadius: "8px",
+                  opacity: workflowActive ? 0.5 : 1,
+                }}
+              >
+                {isApproved ? (
+                  <>
+                    <Lock size={14} /> Approved
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle size={14} /> Approve
+                  </>
+                )}
+              </button>
+              {/* Approved sections are final and locked — no more edits. */}
+              {!isApproved && (
                 <>
-                  <Lock size={14} /> Approved
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={14} /> Approve
+                  <button
+                    disabled={workflowActive}
+                    onClick={() => setIsRequestingChanges(!isRequestingChanges)}
+                    className="btn-secondary"
+                    style={{
+                      padding: "10px 12px",
+                      fontSize: "0.8rem",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <Edit size={14} />{" "}
+                    {isRequestingChanges ? "Cancel Edit" : "Modify"}
+                  </button>
+                  <button
+                    disabled={workflowActive}
+                    onClick={() =>
+                      runRevisionSimulation(`Regenerate ${label}`, "", id)
+                    }
+                    className="btn-secondary"
+                    style={{
+                      padding: "10px 12px",
+                      fontSize: "0.8rem",
+                      borderRadius: "8px",
+                      opacity: workflowActive ? 0.5 : 0.8,
+                    }}
+                  >
+                    <RefreshCw size={14} /> Regenerate
+                  </button>
                 </>
               )}
-            </button>
-            {/* Approved sections are final and locked — no more edits. */}
-            {!isApproved && (
-              <>
-                <button
-                  disabled={workflowActive}
-                  onClick={() => setIsRequestingChanges(!isRequestingChanges)}
-                  className="btn-secondary"
-                  style={{
-                    padding: "10px 12px",
-                    fontSize: "0.8rem",
-                    borderRadius: "8px",
-                  }}
-                >
-                  <Edit size={14} />{" "}
-                  {isRequestingChanges ? "Cancel Edit" : "Modify"}
-                </button>
-                <button
-                  disabled={workflowActive}
-                  onClick={() =>
-                    runRevisionSimulation(`Regenerate ${label}`, "", id)
-                  }
-                  className="btn-secondary"
-                  style={{
-                    padding: "10px 12px",
-                    fontSize: "0.8rem",
-                    borderRadius: "8px",
-                    opacity: workflowActive ? 0.5 : 0.8,
-                  }}
-                >
-                  <RefreshCw size={14} /> Regenerate
-                </button>
-              </>
-            )}
+            </div>
           </div>
 
           {/* Helper Text */}
