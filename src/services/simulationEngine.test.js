@@ -8,7 +8,7 @@ vi.mock('./cloudSync', () => ({
 
 import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { ensureProjectResources } from './cloudSync';
-import { applyRevisionSimulation, runRevisionSimulation } from './simulationEngine';
+import { applyRevisionSimulation, resetAllProjectData, runRevisionSimulation } from './simulationEngine';
 import { useProjectStore } from '../store/useProjectStore';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 import { useSectionHistoryStore } from '../store/sectionHistoryStore';
@@ -112,5 +112,23 @@ describe('revision workflow outcomes', () => {
     expect(workflow).toMatchObject({ status: 'failed', isError: true });
     expect(useProjectStore.getState().blueprint.businessModel.content).toBe('Original business model content');
     expect(useProjectStore.getState().workflow.active).toBe(false);
+  });
+});
+
+describe('new-project reset', () => {
+  it('clears the active render state without deleting browser-local section drafts', () => {
+    useSectionHistoryStore.getState().addVersion(
+      'executiveSummary',
+      'Unapproved local draft',
+      { generationSource: 'Gemini' }
+    );
+
+    resetAllProjectData({ preserveSectionHistory: true });
+
+    expect(useProjectStore.getState().project).toBeNull();
+    expect(useSectionHistoryStore.getState().activeProjectId).toBeNull();
+    expect(
+      useSectionHistoryStore.getState().byProject['test-project'].executiveSummary.versions[0].content
+    ).toBe('Unapproved local draft');
   });
 });
