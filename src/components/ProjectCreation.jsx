@@ -6,17 +6,26 @@ import {
   ArrowRight,
   LogOut,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import { AIStatusBanner } from "./AIStatusUtils";
 import AISettingsModal from "./AISettingsModal";
 import { useAuthStore } from "../store/useAuthStore";
 import { createCloudProject } from "../services/cloudSync";
+import SplitPanelLayout from "./SplitPanelLayout";
 
 const STEPS = [
-  ["Describe the idea", "Name it and tell us what you want to build."],
-  ["Agents plan it out", "Scope, stack, and milestones drafted for you."],
-  ["Review the blueprint", "Get a build-ready plan you can iterate on."],
+  {
+    title: "Describe the idea",
+    description: "Name it and tell us what you want to build.",
+  },
+  {
+    title: "Agents plan it out",
+    description: "Scope, stack, and milestones drafted for you.",
+  },
+  {
+    title: "Review the blueprint",
+    description: "Get a build-ready plan you can iterate on.",
+  },
 ];
 
 export default function ProjectCreation() {
@@ -78,49 +87,17 @@ export default function ProjectCreation() {
   };
 
   return (
-    <main className="project-create-page">
+    <>
       {showSettings && (
         <AISettingsModal onClose={() => setShowSettings(false)} />
       )}
 
-      <section className="project-create-shell">
-        <aside className="project-create-sidebar">
-          <div>
-            <div className="project-create-brand">
-              <span className="project-create-brand-mark">
-                <Sparkles size={18} strokeWidth={2.2} />
-              </span>
-              <span>Blueprint</span>
-            </div>
-
-            <div className="project-create-intro">
-              <span className="project-create-kicker">New workspace</span>
-              <h1>
-                Start a<br />
-                new project
-              </h1>
-              <p>
-                Define your startup vision, and our AI agents will turn it into
-                a working blueprint.
-              </p>
-            </div>
-
-            <ol className="project-create-steps">
-              {STEPS.map(([title, description], index) => (
-                <li key={title}>
-                  <span className="project-create-step-number">
-                    {index + 1}
-                  </span>
-                  <div>
-                    <strong>{title}</strong>
-                    <span>{description}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </aside>
-
+      <SplitPanelLayout
+        eyebrow="New workspace"
+        title={<>Start a<br />new project</>}
+        description="Define your startup vision, and our AI agents will turn it into a working blueprint."
+        items={STEPS}
+      >
         <div className="project-create-workspace">
           <header className="project-create-toolbar">
             {currentProject ? (
@@ -304,7 +281,7 @@ export default function ProjectCreation() {
             </form>
           </div>
         </div>
-      </section>
-    </main>
+      </SplitPanelLayout>
+    </>
   );
 }
