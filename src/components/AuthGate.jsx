@@ -1,17 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { useAuthStore } from '../store/useAuthStore';
-import { startSync, stopSync, flush } from '../services/cloudSync';
-import { resetAllProjectData } from '../services/simulationEngine';
-import { Mail, LogIn, Loader } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { useAuthStore } from "../store/useAuthStore";
+import { startSync, stopSync, flush } from "../services/cloudSync";
+import { resetAllProjectData } from "../services/simulationEngine";
+import { Mail, Loader } from "lucide-react";
+import SplitPanelLayout from "./SplitPanelLayout";
+
+const AUTH_BENEFITS = [
+  {
+    marker: "✦",
+    title: "No password to remember",
+    description: "We email you a secure magic link to get in.",
+  },
+  {
+    marker: "✦",
+    title: "Accounts made instantly",
+    description: "New here? Your account is created automatically.",
+  },
+  {
+    marker: "✦",
+    title: "Projects stay saved",
+    description: "Every blueprint is tied to your account.",
+  },
+];
 
 export default function AuthGate({ children }) {
-  const session = useAuthStore(state => state.session);
-  const authMessage = useAuthStore(state => state.authMessage);
-  const authError = useAuthStore(state => state.authError);
-  const init = useAuthStore(state => state.init);
-  const signInWithEmail = useAuthStore(state => state.signInWithEmail);
+  const session = useAuthStore((state) => state.session);
+  const authMessage = useAuthStore((state) => state.authMessage);
+  const authError = useAuthStore((state) => state.authError);
+  const init = useAuthStore((state) => state.init);
+  const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [booted, setBooted] = useState(false);
   const [bootError, setBootError] = useState(null);
@@ -23,7 +42,9 @@ export default function AuthGate({ children }) {
   // over un-synced local edits, and cancel the pending push via stopSync.
   const userId = session?.user?.id ?? null;
 
-  useEffect(() => { init(); }, [init]);
+  useEffect(() => {
+    init();
+  }, [init]);
 
   // Bootstrap after sign-in: load the registry only. Project data is fetched
   // explicitly when the user selects a project from the Dashboard.
@@ -39,13 +60,18 @@ export default function AuthGate({ children }) {
     (async () => {
       stopSync();
       useAuthStore.getState().detachCloud();
-      resetAllProjectData({ preserveSectionHistory: true, currentView: 'dashboard' });
+      resetAllProjectData({
+        preserveSectionHistory: true,
+        currentView: "dashboard",
+      });
       setBooted(false);
 
       const projects = await useAuthStore.getState().refreshProjects();
       if (cancelled) return;
       if (projects === null) {
-        setBootError('Could not load your projects. Is the API server running?');
+        setBootError(
+          "Could not load your projects. Is the API server running?",
+        );
         return;
       }
       setBootError(null);
@@ -54,27 +80,57 @@ export default function AuthGate({ children }) {
       // establishes its synchronization cursor before edits can be observed.
       startSync();
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [userId, retryKey]);
 
   // Best effort: push pending changes before the tab closes.
   useEffect(() => {
-    window.addEventListener('beforeunload', flush);
-    return () => window.removeEventListener('beforeunload', flush);
+    window.addEventListener("beforeunload", flush);
+    return () => window.removeEventListener("beforeunload", flush);
   }, []);
 
   if (session && bootError) {
     return (
-      <div className="container flex items-center justify-center" style={{ minHeight: '100vh' }}>
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
-          <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.85rem' }}>
+      <div
+        className="container flex items-center justify-center"
+        style={{ minHeight: "100vh" }}
+      >
+        <div
+          className="glass-panel"
+          style={{
+            width: "100%",
+            maxWidth: "420px",
+            padding: "2.5rem",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px",
+              marginBottom: "1rem",
+              background: "rgba(239, 68, 68, 0.1)",
+              border: "1px solid var(--danger)",
+              borderRadius: "var(--radius-md)",
+              color: "var(--danger)",
+              fontSize: "0.85rem",
+            }}
+          >
             ⚠️ {bootError}
           </div>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => { setBootError(null); setRetryKey(k => k + 1); }}
-            style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}
+            onClick={() => {
+              setBootError(null);
+              setRetryKey((k) => k + 1);
+            }}
+            style={{
+              width: "100%",
+              padding: "0.75rem",
+              justifyContent: "center",
+            }}
           >
             Retry
           </button>
@@ -85,8 +141,16 @@ export default function AuthGate({ children }) {
 
   if (session === undefined || (session && !booted)) {
     return (
-      <div className="flex items-center justify-center" style={{ minHeight: '100vh', gap: '10px', color: 'var(--text-secondary)' }}>
-        <Loader size={18} style={{ animation: 'spin 2s linear infinite' }} /> {session ? 'Loading your projects…' : 'Connecting…'}
+      <div
+        className="flex items-center justify-center"
+        style={{
+          minHeight: "100vh",
+          gap: "10px",
+          color: "var(--text-secondary)",
+        }}
+      >
+        <Loader size={18} style={{ animation: "spin 2s linear infinite" }} />{" "}
+        {session ? "Loading your projects…" : "Connecting…"}
       </div>
     );
   }
@@ -101,49 +165,69 @@ export default function AuthGate({ children }) {
     };
 
     return (
-      <div className="container flex items-center justify-center" style={{ minHeight: '100vh' }}>
-        <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '12px', background: 'var(--accent-surface)', color: 'var(--accent-primary)', marginBottom: '1rem' }}>
-            <LogIn size={24} />
+      <SplitPanelLayout
+        className="auth-layout"
+        title={
+          <>
+            Turn ideas
+            <br />
+            into blueprints
+          </>
+        }
+        description="Sign in with your email — our AI agents are ready to plan your next startup."
+        items={AUTH_BENEFITS}
+      >
+        <div className="auth-workspace">
+          <div className="auth-form-wrap">
+            <h1>Sign in or sign up</h1>
+            <p className="auth-form-description">
+              Enter your email and we&apos;ll send you a magic link.
+            </p>
+
+            {authMessage && (
+              <div
+                className="auth-feedback auth-feedback-success"
+                role="status"
+              >
+                {authMessage}
+              </div>
+            )}
+            {authError && (
+              <div className="auth-feedback auth-feedback-error" role="alert">
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="auth-form">
+              <div className="project-create-field">
+                <label htmlFor="auth-email">Email address</label>
+                <input
+                  id="auth-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="project-create-submit auth-submit"
+              >
+                <Mail size={15} />
+                {sending ? "Sending…" : "Send Magic Link"}
+              </button>
+            </form>
+
+            <p className="auth-legal">
+              By continuing you agree to the Terms and Privacy Policy.
+            </p>
           </div>
-          <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>Sign In or Sign Up</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-            Enter your email and we&apos;ll send you a magic link — new accounts are created automatically.
-            Your projects are saved to your account.
-          </p>
-
-          {authMessage && (
-            <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--success)', borderRadius: 'var(--radius-md)', color: 'var(--success)', fontSize: '0.85rem' }}>
-              {authMessage}
-            </div>
-          )}
-          {authError && (
-            <div style={{ padding: '12px', marginBottom: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', color: 'var(--danger)', fontSize: '0.85rem' }}>
-              ⚠️ {authError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <label htmlFor="auth-email" style={{ position: 'absolute', left: '-9999px' }}>Email address</label>
-            <input
-              id="auth-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              style={{
-                width: '100%', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)',
-                background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit'
-              }}
-            />
-            <button type="submit" disabled={sending} className="btn btn-primary" style={{ width: '100%', padding: '0.75rem', justifyContent: 'center' }}>
-              <Mail size={16} /> {sending ? 'Sending…' : 'Send Magic Link'}
-            </button>
-          </form>
         </div>
-      </div>
+      </SplitPanelLayout>
     );
   }
 
