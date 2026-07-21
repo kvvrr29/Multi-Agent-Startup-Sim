@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { useAIMode } from './aiStatusModel';
 
 const BANNER_MESSAGES = {
@@ -24,21 +24,32 @@ const BANNER_MESSAGES = {
 /**
  * Prominent banner shown whenever real AI is not (fully) active (doc §12).
  */
-export function AIStatusBanner() {
+export function AIStatusBanner({ floating = false, dismissible = false }) {
   const { reason, status, lastError } = useAIMode();
+  const [dismissedNotification, setDismissedNotification] = React.useState(null);
 
   const message = BANNER_MESSAGES[status.key];
-  if (!message) return null; // Connected / Generating need no warning banner
+  const notificationId = `${status.key}:${lastError?.timestamp || ''}`;
+  if (!message || dismissedNotification === notificationId) return null; // Connected / Generating need no warning banner
 
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: '12px',
-      padding: '14px 16px', borderRadius: '10px', marginBottom: '1.5rem',
+      padding: '14px 16px', borderRadius: '10px', marginBottom: floating ? 0 : '1.5rem',
       background: `${status.color}14`,
       border: `1px solid ${status.color}66`,
+      ...(floating ? {
+        position: 'fixed',
+        top: '16px',
+        right: '16px',
+        width: 'min(520px, calc(100vw - 32px))',
+        zIndex: 1000,
+        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
+        backdropFilter: 'blur(14px)',
+      } : {}),
     }}>
       <AlertTriangle size={18} color={status.color} style={{ flexShrink: 0, marginTop: '1px' }} />
-      <div style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
+      <div style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
         <div style={{ fontWeight: 700, color: status.color, marginBottom: '2px' }}>
           {message.title}
         </div>
@@ -46,6 +57,25 @@ export function AIStatusBanner() {
           {message.body(reason, lastError)}
         </div>
       </div>
+      {dismissible && (
+        <button
+          type="button"
+          aria-label="Dismiss notification"
+          title="Dismiss"
+          onClick={() => setDismissedNotification(notificationId)}
+          style={{
+            display: 'flex',
+            flexShrink: 0,
+            padding: '2px',
+            border: 0,
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+          }}
+        >
+          <X size={16} />
+        </button>
+      )}
     </div>
   );
 }

@@ -637,9 +637,7 @@ export default function Dashboard() {
           background: "var(--bg-primary)",
         }}
       >
-        <div>
-          <AIStatusBanner />
-        </div>
+        <AIStatusBanner floating dismissible />
         {activeCloudId ? (
           <BlueprintViewer />
         ) : (
