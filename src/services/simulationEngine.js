@@ -106,10 +106,9 @@ export const runInitialSimulation = async (projectData) => {
   if (useAI) {
     try {
       store.updateAgentStatus('mediator', AGENT_STATUS.THINKING, 'Classifying Industry Domain');
-      const classification = await withTimeout(
-        () => classifyDomain(projectData?.name || '', projectData?.idea || ''),
-        AGENT_GENERATION_TIMEOUT_MS
-      );
+      // NOTE: classifyDomain handles its own retries, fallback, and rate-limit waits internally.
+      // Do NOT wrap it in withTimeout — Gemini may need 60-120s for rate-limit sleep before retrying.
+      const classification = await classifyDomain(projectData?.name || '', projectData?.idea || '');
       
       memoryStore.updateMemory('scope', 'domain', classification.domain);
       memoryStore.updateMemory('scope', 'industry', classification.industry);
@@ -122,15 +121,14 @@ export const runInitialSimulation = async (projectData) => {
       
       store.addWorkflowEvent({ message: `Mediator classified domain as: ${classification.domain} (${classification.industry})`, agent: 'mediator' });
     } catch (err) {
-      // ⚠️ Surface the domain classification failure as a visible warning — do NOT silently continue
-      store.addWorkflowEvent({ type: 'error', message: `⚠️ Domain Classifier FAILED: ${err.message}.`, agent: 'mediator' });
-      console.error('[Simulation] Domain classification error:', err);
-      // DO NOT RETURN FALLBACK - Throw if in DEV, otherwise bubble up to runInitialSimulation
-      if (import.meta.env.DEV) {
-        throw err;
-      } else {
-        throw new Error(`Domain Classifier FAILED: ${err.message}`);
-      }
+      // Domain classification failure is non-fatal — use fallback and continue.
+      // The classifier already returns a 'General' fallback on all error paths;
+      // this catch only fires if classifyDomain itself throws unexpectedly.
+      console.warn('[Simulation] Domain classification unexpected error (using General fallback):', err.message);
+      store.addWorkflowEvent({ type: 'warning', message: `⚠️ Domain Classifier could not complete (${err.message}). Continuing with General domain.`, agent: 'mediator' });
+      memoryStore.updateMemory('scope', 'domain', 'General');
+      memoryStore.updateMemory('scope', 'industry', 'General');
+      memoryStore.updateMemory('scope', 'confidence', '0%');
     }
   }
 
@@ -207,23 +205,15 @@ export const runInitialSimulation = async (projectData) => {
       store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
     };
 
-    if (isWebLLM) {
-      console.log('[Orchestration] WebLLM detected: Running agents SEQUENTIALLY to prevent queue timeouts.');
-      for (const step of AGENT_PIPELINE) {
-        try {
-          await processAgent(step);
-        } catch (err) {
-          console.error(`[Simulation] Agent ${step.id} failed. Aborting pipeline.`, err);
-          throw new Error(`Pipeline aborted: Agent ${step.id} failed to generate. Last error: ${err.message}`);
-        }
-      }
-    } else {
-      console.log('[Orchestration] Gemini detected: Running agents CONCURRENTLY.');
-      const settledResults = await Promise.allSettled(AGENT_PIPELINE.map(processAgent));
-      const failed = settledResults.filter(r => r.status === 'rejected');
-      if (failed.length > 0) {
-        const errors = failed.map(r => r.reason?.message || 'Unknown').join(', ');
-        throw new Error(`Pipeline aborted: ${failed.length} agents failed to generate. (${errors})`);
+    // Run agents SEQUENTIALLY to prevent WebGPU OOM crashes (WebLLM) 
+    // and to prevent 429 Rate Limit Exhaustion (Gemini).
+    console.log('[Orchestration] Running agents SEQUENTIALLY.');
+    for (const step of AGENT_PIPELINE) {
+      try {
+        await processAgent(step);
+      } catch (err) {
+        console.error(`[Simulation] Agent ${step.id} failed. Aborting pipeline.`, err);
+        throw new Error(`Pipeline aborted: Agent ${step.id} failed to generate. Last error: ${err.message}`);
       }
     }
     
@@ -364,7 +354,9 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
       store.addWorkflowEvent({ type: 'system', message: `Mediator analyzing routing for global change...`, agent: 'mediator' });
       const memoryStore = useProjectMemoryStore.getState();
       const domain = memoryStore.memory?.scope?.domain || 'Unknown';
-      routing = await withTimeout(() => routeAIRevision(revisionInstruction, domain, categoryHint), AGENT_GENERATION_TIMEOUT_MS);
+      // NOTE: routeAIRevision already catches its own failures and falls back to heuristics.
+      // Do NOT wrap in withTimeout — Gemini may need time for rate-limit retries.
+      routing = await routeAIRevision(revisionInstruction, domain, categoryHint);
     } else {
       // Global Project Evolution (Static Fallback)
       routing = heuristicRouting(revisionInstruction, categoryHint);
@@ -433,8 +425,9 @@ export const applyRevisionSimulation = async (previewData) => {
 
     store.updateAgentStatus('mediator', AGENT_STATUS.WAITING, 'Waiting for team');
 
-    // Run tasks in parallel (one task per agent)
-    const agentPromises = tasks.map(async (task) => {
+    // Run tasks sequentially (one task per agent)
+    const taskResults = [];
+    for (const task of tasks) {
       const { agent: targetAgent, sections: taskSections, taskDescription, reason } = task;
       store.updateAgentStatus(targetAgent, AGENT_STATUS.ASSIGNED, taskDescription || 'Revision assigned', reason);
       await sleep(150);
@@ -443,7 +436,10 @@ export const applyRevisionSimulation = async (previewData) => {
       if (aiModeEnabled) {
          try {
            const result = await generateAgentContent(targetAgent, taskDescription || instruction);
-           if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] };
+           if (!useProjectStore.getState().isCurrentWorkflow(runId)) {
+             taskResults.push({ status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] });
+             continue;
+           }
            store.updateAgentStatus(targetAgent, AGENT_STATUS.REVIEWING, 'Reviewing generated changes');
            const changedSections = [];
            Object.entries(result.content).forEach(([sectionKey, content]) => {
@@ -464,14 +460,14 @@ export const applyRevisionSimulation = async (previewData) => {
              }));
            }
            store.updateAgentStatus(targetAgent, AGENT_STATUS.COMPLETED, changedSections.length ? 'Task completed' : 'No changes required');
-           return { status: changedSections.length ? 'changed' : 'unchanged', agent: targetAgent, changedSections };
+           taskResults.push({ status: changedSections.length ? 'changed' : 'unchanged', agent: targetAgent, changedSections });
          } catch (err) {
            console.warn(`AI Revision failed for ${targetAgent}.`, err);
            const failReason = err.message === 'Timeout' ? 'Generation timed out' : (err.message || 'Unknown error');
            store.updateAgentStatus(targetAgent, AGENT_STATUS.FAILED, failReason);
            store.addWorkflowEvent({ type: 'error', message: `⚠️ AI failed for ${targetAgent.toUpperCase()}: ${failReason}. Section left unchanged.`, agent: 'mediator' });
            await sleep(800);
-           return { status: 'failed', agent: targetAgent, reason: failReason, changedSections: [] };
+           taskResults.push({ status: 'failed', agent: targetAgent, reason: failReason, changedSections: [] });
          }
       } else {
         // Fallback mock logic
@@ -485,11 +481,9 @@ export const applyRevisionSimulation = async (previewData) => {
            }
         });
         store.updateAgentStatus(targetAgent, AGENT_STATUS.COMPLETED, changedSections.length ? 'Task completed' : 'No changes required');
-        return { status: changedSections.length ? 'changed' : 'unchanged', agent: targetAgent, changedSections };
+        taskResults.push({ status: changedSections.length ? 'changed' : 'unchanged', agent: targetAgent, changedSections });
       }
-    });
-
-    const taskResults = await Promise.all(agentPromises);
+    }
     if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', reason: 'Stale workflow completion ignored' };
 
     // 4. UPDATING

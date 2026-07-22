@@ -34,14 +34,14 @@ export default function ProjectCreation() {
   }, []);
   
   const [formData, setFormData] = useState({
-    name: '',
-    idea: '',
-    targetAudience: '',
-    budget: '',
-    timeline: '',
+    name: 'BudgetWise',
+    idea: 'A personal finance application that tracks expenses, categorizes transactions, predicts future spending, and provides AI-powered savings advice.',
+    targetAudience: 'Young professionals',
+    budget: '$18,000',
+    timeline: '6 months',
     platform: 'web',
-    teamSize: '',
-    priorities: '',
+    teamSize: '5',
+    priorities: 'Speed, Security, UX',
     aiProvider: defaultAiProvider || 'webllm',
   });
 
@@ -62,6 +62,12 @@ export default function ProjectCreation() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    // Sync the global settings store whenever the user switches AI provider.
+    // This ensures aiProvider.js always reads the correct active provider,
+    // even if localStorage had a stale value from a previous session.
+    if (name === 'aiProvider') {
+      useSettingsStore.getState().setAiProvider(value);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -162,16 +168,24 @@ export default function ProjectCreation() {
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: 'var(--bg-primary)', border: `1px solid ${formData.aiProvider === 'gemini' ? 'var(--primary-electric)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <input type="radio" name="aiProvider" value="gemini" checked={formData.aiProvider === 'gemini'} onChange={handleChange} style={{ marginTop: '4px' }} />
                 <div style={{ flex: 1 }}>
-                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'gemini' ? 'var(--primary-electric)' : 'inherit' }}>Gemini API (Recommended)</strong>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Highest quality responses.<br/>Requires API Key.</span>
+                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'gemini' ? 'var(--primary-electric)' : 'inherit' }}>Gemini API</strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cloud model. Higher quality but requires API Key.</span>
                 </div>
               </label>
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: 'var(--bg-primary)', border: `1px solid ${formData.aiProvider === 'webllm' ? 'var(--primary-electric)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <input type="radio" name="aiProvider" value="webllm" checked={formData.aiProvider === 'webllm'} onChange={handleChange} style={{ marginTop: '4px' }} />
                 <div style={{ flex: 1 }}>
-                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'webllm' ? 'var(--primary-electric)' : 'inherit' }}>Built-in AI</strong>
+                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'webllm' ? 'var(--primary-electric)' : 'inherit' }}>🖥️ Built-in AI</strong>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Browser-native inference. No API key required.</span>
+                </div>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px', background: 'var(--bg-primary)', border: `1px solid ${formData.aiProvider === 'openai' ? 'var(--primary-electric)' : 'var(--border-color)'}`, borderRadius: '8px', cursor: 'pointer' }}>
+                <input type="radio" name="aiProvider" value="openai" checked={formData.aiProvider === 'openai'} onChange={handleChange} style={{ marginTop: '4px' }} />
+                <div style={{ flex: 1 }}>
+                  <strong style={{ display: 'block', fontSize: '0.9rem', color: formData.aiProvider === 'openai' ? 'var(--primary-electric)' : 'inherit' }}>🤖 OpenAI — GPT-4o mini</strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>High quality. High rate limits. Requires API key.</span>
                 </div>
               </label>
 

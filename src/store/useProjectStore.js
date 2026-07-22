@@ -76,6 +76,7 @@ export const useProjectStore = create((set, get) => ({
 
   // Actions
   setCurrentView: (view) => set({ currentView: view }),
+  setGenerationError: (err) => set({ generationError: err }),
 
   beginWorkflow: (kind) => {
     if (get().workflow.active) return null;

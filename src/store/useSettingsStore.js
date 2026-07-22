@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export const API_KEY_STORAGE_KEY = 'mass_gemini_api_key';
+export const OPENAI_KEY_STORAGE_KEY = 'mass_openai_api_key';
 
 const readLocalSetting = (key, fallback = '') => {
   if (typeof localStorage === 'undefined') return fallback;
@@ -22,9 +23,10 @@ const writeLocalSetting = (key, value) => {
 };
 
 export const useSettingsStore = create((set) => ({
-  aiProvider: 'gemini', // 'gemini', 'openai', 'claude'
-  // A personal key is browser-local (never synced to Supabase) and survives reloads.
+  aiProvider: 'webllm', // 'webllm' | 'gemini' | 'openai'
+  // API keys are browser-local (never synced to Supabase) and survive reloads.
   apiKey: readLocalSetting(API_KEY_STORAGE_KEY),
+  openaiApiKey: readLocalSetting(OPENAI_KEY_STORAGE_KEY),
   aiModeEnabled: typeof localStorage === 'undefined' ? true : localStorage.getItem('mass_ai_mode') !== 'false',
   developerMode: typeof localStorage === 'undefined' ? false : localStorage.getItem('mass_dev_mode') === 'true',
 
@@ -32,6 +34,12 @@ export const useSettingsStore = create((set) => ({
     const normalizedKey = typeof key === 'string' ? key.trim() : '';
     writeLocalSetting(API_KEY_STORAGE_KEY, normalizedKey);
     set({ apiKey: normalizedKey });
+  },
+
+  setOpenaiApiKey: (key) => {
+    const normalizedKey = typeof key === 'string' ? key.trim() : '';
+    writeLocalSetting(OPENAI_KEY_STORAGE_KEY, normalizedKey);
+    set({ openaiApiKey: normalizedKey });
   },
 
   setAiProvider: (provider) => {

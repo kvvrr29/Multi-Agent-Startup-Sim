@@ -29,5 +29,7 @@ export const api = {
   createVersion: (id, version) => StorageProvider.createVersion(id, version),
   upsertMemory: (id, body) => StorageProvider.upsertMemory(id, body),
   appendDecisions: (id, decisions) => StorageProvider.appendDecisions(id, decisions),
-  deleteProject: (id) => StorageProvider.deleteProject(id)
+  deleteProject: (id) => StorageProvider.deleteProject(id),
+  generate: (systemPrompt, userPrompt, jsonSchema) =>
+    fetchJson('/api/ai/generate', { method: 'POST', body: { systemPrompt, userPrompt, jsonSchema } })
 };

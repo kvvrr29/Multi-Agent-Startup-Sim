@@ -5,6 +5,9 @@ import 'dotenv/config';
 import { BLUEPRINT_SECTION_KEYS } from './blueprintKeys.js';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const ALLOWED_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-flash-latest'];
+
 
 const PORT = process.env.PORT || 8787;
 
@@ -286,8 +289,58 @@ app.delete('/api/projects/:id', withUser, async (req, res) => {
   res.status(204).end();
 });
 
-// Backend no longer proxies AI requests. All AI generation happens in the browser.
+// ---------- AI proxy (Gemini) ----------
+
+app.post('/api/ai/generate', withUser, async (req, res) => {
+  if (!GEMINI_API_KEY) {
+    return res.status(501).json({ error: 'not_configured', message: 'Server AI is not configured (GEMINI_API_KEY is not set).' });
+  }
+
+  const { systemPrompt, userPrompt, jsonSchema, model } = req.body || {};
+  if (!userPrompt || typeof userPrompt !== 'string') {
+    return res.status(400).json({ error: 'bad_request', message: 'userPrompt (string) is required.' });
+  }
+  const chosenModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
+
+  const payload = {
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.7,
+      ...(jsonSchema ? { responseMimeType: 'application/json', responseSchema: jsonSchema } : {})
+    }
+  };
+  if (systemPrompt && typeof systemPrompt === 'string') {
+    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body: JSON.stringify(payload)
+      }
+    );
+  } catch (err) {
+    return res.status(502).json({ error: 'upstream_unreachable', message: String(err) });
+  }
+
+  const data = await upstream.json().catch(() => ({}));
+  if (!upstream.ok) {
+    const message = data?.error?.message || `Gemini returned ${upstream.status}`;
+    if (upstream.status === 429) return res.status(429).json({ error: 'rate_limited', message });
+    return res.status(502).json({ error: 'gemini_error', message, status: upstream.status });
+  }
+
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const text = parts.map(p => p.text || '').join('');
+  if (!text) return res.status(502).json({ error: 'empty_response', message: 'Gemini returned no text.' });
+
+  res.json({ text });
+});
 
 app.listen(PORT, () => {
-  console.log(`[server] API listening on http://localhost:${PORT}`);
+  console.log(`[server] API listening on http://localhost:${PORT} (AI ${GEMINI_API_KEY ? 'configured' : 'NOT configured'})`);
 });

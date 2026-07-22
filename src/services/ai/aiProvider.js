@@ -1,5 +1,6 @@
 import { WebLLMProvider } from './WebLLMProvider';
 import { GeminiProvider } from './GeminiProvider';
+import { OpenAIProvider } from './OpenAIProvider';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAICostStore } from '../../store/useAICostStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
@@ -9,14 +10,16 @@ class AIProviderFactory {
   constructor() {
     this.webllm = new WebLLMProvider();
     this.gemini = new GeminiProvider();
+    this.openai = new OpenAIProvider();
   }
 
   getActiveProvider() {
     const { aiProvider: globalProvider } = useSettingsStore.getState();
     const projectProvider = useProjectStore.getState().project?.aiProvider;
     const providerName = projectProvider || globalProvider || 'webllm';
-    
+
     if (providerName === 'gemini') return this.gemini;
+    if (providerName === 'openai') return this.openai;
     return this.webllm;
   }
 }
@@ -49,7 +52,10 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     clearLastError();
     setConnectionStatus('connected');
 
-    return { responseText, providerName: providerName === 'gemini' ? 'Gemini' : 'WebLLM' };
+    return {
+      responseText,
+      providerName: providerName === 'gemini' ? 'Gemini' : providerName === 'openai' ? 'OpenAI (GPT-4o-mini)' : 'WebLLM'
+    };
   } catch (err) {
     incrementFailed();
     console.error("[AIProvider] Error:", err);

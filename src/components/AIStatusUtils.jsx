@@ -13,10 +13,11 @@ const BANNER_MESSAGES = {
     body: () => <>The Gemini API is rejecting requests due to rate limits. Recent output may have used <strong>fallback templates</strong>. Wait a moment and try again.</>
   },
   api_error: {
-    title: (provider) => provider === 'webllm' ? 'Built-in AI Error' : 'Gemini API Error',
-    body: (reason, lastError, provider) => provider === 'webllm'
-      ? <>The Built-in AI request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check browser compatibility or try again.</>
-      : <>The last Gemini request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check your API key and connection.</>
+    title: (provider) => provider === 'webllm' ? 'Built-in AI Error' : provider === 'openai' ? 'OpenAI Error' : 'Gemini API Error',
+    body: (reason, lastError, provider) => {
+      const name = provider === 'webllm' ? 'Built-in AI' : provider === 'openai' ? 'OpenAI' : 'Gemini';
+      return <>The last {name} request failed{lastError?.message ? <>: <strong>{lastError.message}</strong></> : ''}. Check your API key and connection.</>;
+    }
   },
   fallback: {
     title: 'Fallback Content Active',

@@ -153,7 +153,7 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
 
   for (const sectionKey of sectionsToGenerate) {
     const singleSectionSchema = createResponseSchema([sectionKey]);
-    const maxAttempts = 2;
+    const maxAttempts = 3;
 
     let retryFeedback = null;
     let previousRawResponse = null;
@@ -273,6 +273,10 @@ OUTPUT: Respond with ONLY valid JSON containing exactly the property "${sectionK
       } catch (err) {
         fallbackReason = err.message || 'Unknown error';
         pushLog({ agent: agentRole, prompt: (retryFeedback ? 'RETRY' : 'INITIAL').slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || null, parsedJson: null, scores: null, validationResult: 'FAILED', fallbackReason });
+        // Permanent rate-limit: GeminiProvider already retried 3 times with full sleeps.
+        // Permanent failure: 401 Unauthorized, etc.
+        // Do NOT retry here — it would pile 3 more 60s waits on top for no benefit.
+        if (err.isPermanentRateLimit || err.isPermanentFailure) throw err;
       }
 
       console.warn(`[AI Factory] Attempt ${attempt} failed for ${agentRole} (${sectionKey}): ${fallbackReason}`);
