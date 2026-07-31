@@ -27,39 +27,6 @@ class AIProviderFactory {
 export const aiProviderFactory = new AIProviderFactory();
 
 /**
- * Prompt cache. Identical (systemPrompt, userPrompt, provider) triples are
- * served from localStorage so reruns don't burn free-tier quota.
- */
-const cacheKeyFor = async (systemPrompt, userPrompt, providerName) => {
-  if (typeof crypto === 'undefined' || !crypto.subtle) return null;
-  try {
-    const input = `${systemPrompt}|${userPrompt}|${providerName}`;
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-    return `ai_cache_${Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
-  } catch {
-    return null;
-  }
-};
-
-const readCache = (key) => {
-  if (!key || typeof localStorage === 'undefined') return null;
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-
-const writeCache = (key, value) => {
-  if (!key || typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Storage full or blocked — caching is best-effort, the generation still succeeded.
-  }
-};
-
-/**
  * Generates content through the active provider and returns the raw response
  * text. Callers get a plain string, exactly as before the multi-provider work.
  */
@@ -84,17 +51,8 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     incrementSent();
     beginGeneration();
 
-    const cacheKey = await cacheKeyFor(systemPrompt, userPrompt, providerName);
-    const cached = readCache(cacheKey);
-    if (cached) {
-      console.log('[AI Cache] Reusing a cached response — no quota spent.');
-      // A configured key is not a connection. Only a successful response earns it.
-      setConnectionStatus('connected');
-      return settle(cached);
-    }
-
     const responseText = await provider.generate({ systemPrompt, userPrompt, jsonSchema, maxTokens });
-    writeCache(cacheKey, responseText);
+    // A configured key is not a connection. Only a successful response earns it.
     setConnectionStatus('connected');
     return settle(responseText);
   } catch (err) {

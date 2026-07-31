@@ -29,6 +29,8 @@ export class WebLLMProvider {
       
       // Ensure engine is fully initialized before generating
       const engine = await modelManager.initialize();
+      // Held so cancel()/the timeout can interrupt this exact engine.
+      this._activeEngine = engine;
       const tInit = performance.now();
       const queueWaitTimeMs = Math.round(tInit - t0);
       
@@ -91,10 +93,21 @@ export class WebLLMProvider {
 
       let timeoutId;
       const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Timeout')), timeoutMs);
+        timeoutId = setTimeout(() => {
+          // Rejecting the race only abandons the promise — the decode loop
+          // keeps running on the GPU and would compete with the next section.
+          // interruptGenerate actually stops the work.
+          this._interrupt();
+          reject(new Error(`WebLLM generation timed out after ${timeoutMs / 1000}s.`));
+        }, timeoutMs);
       });
-      
-      await Promise.race([generateWithTimeout(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
+
+      try {
+        await Promise.race([generateWithTimeout(), timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+        this._activeEngine = null;
+      }
       
       const tEnd = performance.now();
       console.log(`Generation end: ${new Date().toISOString()}`);
@@ -133,9 +146,30 @@ export class WebLLMProvider {
     }
   }
 
-  cancel() {}
+  /**
+   * Stops in-flight decoding on the GPU. Safe to call when nothing is running.
+   * interruptGenerate resolves once the engine has actually stopped, but we do
+   * not await it here — callers are already unwinding an error path.
+   */
+  _interrupt() {
+    const engine = this._activeEngine || modelManager.engine;
+    try {
+      const result = engine?.interruptGenerate?.();
+      if (result && typeof result.catch === 'function') {
+        result.catch(err => console.warn('[WebLLMProvider] interruptGenerate failed:', err));
+      }
+    } catch (err) {
+      console.warn('[WebLLMProvider] interruptGenerate threw:', err);
+    }
+  }
+
+  /** Aborts the current generation, e.g. when the user leaves or resets a run. */
+  cancel() {
+    this._interrupt();
+  }
 
   dispose() {
     // We keep WebLLM alive in the singleton modelManager.
+    this._interrupt();
   }
 }

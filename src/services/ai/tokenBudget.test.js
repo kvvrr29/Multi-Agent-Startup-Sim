@@ -109,3 +109,47 @@ describe('section budgets leave headroom', () => {
     }
   });
 });
+
+describe('generation is actually stopped, not just abandoned', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('interrupts the engine when the timeout fires', async () => {
+    vi.useFakeTimers();
+    const interruptGenerate = vi.fn().mockResolvedValue(undefined);
+    // A stream that never yields — the decode loop would otherwise run forever.
+    const engine = {
+      interruptGenerate,
+      chat: { completions: { create: vi.fn().mockResolvedValue({
+        async *[Symbol.asyncIterator]() { await new Promise(() => {}); }
+      }) } }
+    };
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    const provider = new WebLLMProvider();
+    const pending = provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 700 });
+    const assertion = expect(pending).rejects.toThrow(/timed out/);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await assertion;
+
+    expect(interruptGenerate).toHaveBeenCalled();
+  });
+
+  it('cancel() interrupts the running engine', () => {
+    const interruptGenerate = vi.fn();
+    const provider = new WebLLMProvider();
+    provider._activeEngine = { interruptGenerate };
+
+    provider.cancel();
+
+    expect(interruptGenerate).toHaveBeenCalled();
+  });
+
+  it('cancel() is safe when nothing is running', () => {
+    vi.spyOn(modelManager, 'engine', 'get').mockReturnValue(undefined);
+    expect(() => new WebLLMProvider().cancel()).not.toThrow();
+  });
+});
