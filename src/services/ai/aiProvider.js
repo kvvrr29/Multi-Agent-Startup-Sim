@@ -1,19 +1,15 @@
-import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAICostStore } from '../../store/useAICostStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 import { useProjectStore } from '../../store/useProjectStore';
 import { WebLLMProvider } from './WebLLMProvider';
 import { GeminiProvider } from './GeminiProvider';
 import { OpenAIProvider } from './OpenAIProvider';
+import { PROVIDER_LABELS, getActiveProviderName, getActiveProviderLabel } from './activeProvider';
+
+export { getActiveProviderName, getActiveProviderLabel };
 
 // Simple heuristic for tokens
 const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
-
-const PROVIDER_LABELS = {
-  gemini: 'Gemini',
-  openai: 'OpenAI (GPT-4o-mini)',
-  webllm: 'Built-in AI (WebLLM)'
-};
 
 class AIProviderFactory {
   constructor() {
@@ -30,22 +26,6 @@ class AIProviderFactory {
 }
 
 export const aiProviderFactory = new AIProviderFactory();
-
-/**
- * A project can pin its own provider (the graceful fallback below uses this, so
- * a mid-run switch to local AI sticks for the remaining sections). Otherwise
- * the global setting wins.
- */
-export const getActiveProviderName = () => {
-  const { aiProvider } = useSettingsStore.getState();
-  const projectProvider = useProjectStore.getState().project?.aiProvider;
-  return projectProvider || aiProvider || 'gemini';
-};
-
-export const getActiveProviderLabel = () => {
-  const name = getActiveProviderName();
-  return PROVIDER_LABELS[name] || name;
-};
 
 /** The provider that actually served the most recent successful generation. */
 let lastUsedProviderName = null;

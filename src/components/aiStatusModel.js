@@ -1,11 +1,14 @@
 import { AlertTriangle, Cpu, Zap, Activity, WifiOff, Timer } from 'lucide-react';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAIDebugStore } from '../store/useAIDebugStore';
+import { PROVIDER_SOURCE_LABELS, NON_LIVE_SOURCES } from '../services/ai/activeProvider';
 
+// Labels are built per provider so the badge never claims "Gemini" while the
+// built-in local model is doing the work.
 const AI_STATUS = {
   GENERATING: { key: 'generating', label: 'AI Generation Active', color: '#e5e5e5', icon: Activity },
-  CONNECTED: { key: 'connected', label: 'Gemini Connected', color: '#10b981', icon: Zap },
-  CONFIGURED: { key: 'configured', label: 'Gemini Configured', color: '#b8b8b8', icon: Zap },
+  CONNECTED: { key: 'connected', label: 'Connected', color: '#10b981', icon: Zap },
+  CONFIGURED: { key: 'configured', label: 'Configured', color: '#b8b8b8', icon: Zap },
   SIMULATOR: { key: 'simulator', label: 'Simulator Mode', color: '#f59e0b', icon: Cpu },
   RATE_LIMITED: { key: 'rate_limited', label: 'Rate Limited', color: '#ef4444', icon: Timer },
   API_ERROR: { key: 'api_error', label: 'API Error', color: '#ef4444', icon: WifiOff },
@@ -13,21 +16,27 @@ const AI_STATUS = {
 };
 
 export function useAIMode() {
-  const { aiModeEnabled, apiKey } = useSettingsStore();
+  const { aiModeEnabled, apiKey, aiProvider } = useSettingsStore();
   const generationSources = useAIDebugStore(s => s.generationSources);
   const activeGenerations = useAIDebugStore(s => s.activeGenerations);
   const lastError = useAIDebugStore(s => s.lastError);
   const connectionStatus = useAIDebugStore(s => s.connectionStatus);
-  // AI is "configured" when AI Mode is on: a personal key uses Gemini directly,
-  // otherwise requests go through the server-side proxy (key never in browser).
+
+  const providerLabel = PROVIDER_SOURCE_LABELS[aiProvider] || 'Gemini';
+  // AI is "configured" when AI Mode is on. Gemini can additionally run through
+  // the server-side proxy, where the key never reaches the browser; the local
+  // provider needs no key at all.
   const isGeminiConfigured = aiModeEnabled;
-  const usingServerProxy = aiModeEnabled && !apiKey?.trim();
-  const hasLiveOutput = Object.values(generationSources).some(s => s === 'Gemini');
+  const usingServerProxy = aiModeEnabled && !apiKey?.trim() && aiProvider === 'gemini';
+  const isLocalProvider = aiProvider === 'webllm';
+  const hasLiveOutput = Object.values(generationSources).some(s => s && !NON_LIVE_SOURCES.includes(s));
   const hasFallbackOutput = Object.values(generationSources).some(s => s === 'Fallback');
-  const mode = isGeminiConfigured ? 'Gemini' : 'Simulator';
+  const mode = isGeminiConfigured ? providerLabel : 'Simulator';
   const reason = !aiModeEnabled
     ? 'AI Mode is disabled in Settings'
-    : usingServerProxy ? 'Using server-side AI proxy' : null;
+    : usingServerProxy ? 'Using server-side AI proxy'
+    : isLocalProvider ? 'Running the built-in model in your browser'
+    : null;
 
   let status;
   if (!isGeminiConfigured) status = AI_STATUS.SIMULATOR;
@@ -38,5 +47,11 @@ export function useAIMode() {
   else if (connectionStatus === 'connected' || hasLiveOutput) status = AI_STATUS.CONNECTED;
   else status = AI_STATUS.CONFIGURED;
 
-  return { mode, reason, status, lastError, isGeminiConfigured, usingServerProxy, hasLiveOutput, hasFallbackOutput };
+  // Name the actual provider in the two steady states ("Gemini Connected",
+  // "Built-in AI Configured"); the error states stay provider-neutral.
+  if (status === AI_STATUS.CONNECTED || status === AI_STATUS.CONFIGURED) {
+    status = { ...status, label: `${providerLabel} ${status.label}` };
+  }
+
+  return { mode, reason, status, lastError, isGeminiConfigured, usingServerProxy, isLocalProvider, hasLiveOutput, hasFallbackOutput };
 }

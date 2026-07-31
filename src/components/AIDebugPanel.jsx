@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 import { Activity, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { NON_LIVE_SOURCES } from '../services/ai/activeProvider';
 
 const TAB = { METRICS: 'metrics', SOURCES: 'sources', LOGS: 'logs' };
 
 const SOURCE_BADGE = ({ source }) => {
   if (!source) return <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Pending</span>;
-  const isGemini = source === 'Gemini';
+  // Any real provider counts as live output; only Fallback/Simulator are not.
+  const isLive = !NON_LIVE_SOURCES.includes(source);
   return (
     <span style={{
       padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
-      background: isGemini ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-      color: isGemini ? '#10b981' : '#ef4444',
-      border: `1px solid ${isGemini ? '#10b98140' : '#ef444440'}`
+      background: isLive ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+      color: isLive ? '#10b981' : '#ef4444',
+      border: `1px solid ${isLive ? '#10b98140' : '#ef444440'}`
     }}>
-      {isGemini ? '✅ Gemini' : '⚠️ Fallback'}
+      {isLive ? `✅ ${source}` : `⚠️ ${source}`}
     </span>
   );
 };
