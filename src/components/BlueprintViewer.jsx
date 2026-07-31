@@ -6,7 +6,10 @@ import { useProjectStore } from "../store/useProjectStore";
 import { useSectionHistoryStore } from "../store/sectionHistoryStore";
 import ErrorBoundary from "./ErrorBoundary";
 import ExportToolbar from "./ExportToolbar";
-import { NON_LIVE_SOURCES } from "../services/ai/activeProvider";
+import {
+  NON_LIVE_SOURCES,
+  PROVIDER_SOURCE_LABELS,
+} from "../services/ai/activeProvider";
 import {
   CheckCircle,
   Edit,
@@ -14,6 +17,7 @@ import {
   ArrowUp,
   Lock,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   ChevronLeft,
   Copy,
@@ -180,15 +184,265 @@ const SourceBadge = ({ sectionData }) => {
         fontWeight: 700,
         padding: "2px 8px",
         borderRadius: "10px",
-        background: isLive
-          ? "rgba(16,185,129,0.12)"
-          : "rgba(245,158,11,0.12)",
+        background: isLive ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
         border: `1px solid ${isLive ? "rgba(16,185,129,0.35)" : "rgba(245,158,11,0.35)"}`,
         color: isLive ? "#10b981" : "#f59e0b",
       }}
     >
       {source}
     </span>
+  );
+};
+
+// Colour cue for the model behind a version: amber = no live model produced it,
+// blue = the in-browser model, green = a hosted provider.
+const sourceDotColor = (source) => {
+  if (!source) return "var(--text-muted)";
+  if (NON_LIVE_SOURCES.includes(source)) return "var(--warning)";
+  if (source === PROVIDER_SOURCE_LABELS.webllm) return "#60a5fa";
+  return "var(--success)";
+};
+
+const sourceLabel = (source) => source || "Unknown model";
+
+// Stable empty array: a fresh [] from the selector would re-render every tick.
+const NO_VERSIONS = [];
+
+// Version switcher: ‹ › step through a section's drafts, and the pill in the
+// middle opens the full list. Versions carry no wall-clock meaning to the user
+// (they are drafts of one editing session), so each row names only the model.
+const VersionSwitcher = ({ sectionKey, versions, activeIndex }) => {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const count = versions.length;
+  const active = versions[activeIndex];
+  const atOldest = activeIndex === 0;
+  const atNewest = activeIndex === count - 1;
+
+  const go = (index) =>
+    useSectionHistoryStore.getState().setActiveIndex(sectionKey, index);
+
+  // Dismiss the menu on outside click or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const stepButton = (disabled, onClick, title, Icon) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "33px",
+        height: "33px",
+        padding: 0,
+        borderRadius: "8px",
+        background: "transparent",
+        border: "1px solid var(--border-color)",
+        color: "var(--text-secondary)",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.3 : 1,
+        transition: "background 0.15s ease, border-color 0.15s ease",
+      }}
+    >
+      <Icon size={16} />
+    </button>
+  );
+
+  return (
+    <div
+      ref={wrapRef}
+      style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+      }}
+    >
+      {stepButton(
+        atOldest,
+        () => go(activeIndex - 1),
+        "Previous version",
+        ChevronLeft,
+      )}
+
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Show version history"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          borderRadius: "8px",
+          background: open ? "var(--control-active)" : "var(--bg-tertiary)",
+          border: `1px solid ${open ? "var(--border-hover)" : "var(--border-color)"}`,
+          color: "var(--text-primary)",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          cursor: "pointer",
+          transition: "background 0.15s ease, border-color 0.15s ease",
+        }}
+      >
+        <span
+          style={{
+            width: "7px",
+            height: "7px",
+            borderRadius: "50%",
+            background: sourceDotColor(active?.generationSource),
+            flexShrink: 0,
+          }}
+        />
+        Version {activeIndex + 1}
+        <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>
+          · {sourceLabel(active?.generationSource)}
+        </span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {stepButton(
+        atNewest,
+        () => go(activeIndex + 1),
+        "Next version",
+        ChevronRight,
+      )}
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Version history"
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            minWidth: "260px",
+            maxHeight: "300px",
+            overflowY: "auto",
+            padding: "8px",
+            background: "var(--bg-tertiary)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "var(--shadow-panel)",
+            zIndex: 20,
+          }}
+        >
+          <div
+            style={{
+              padding: "4px 8px 8px",
+              fontSize: "0.65rem",
+              fontWeight: 700,
+              letterSpacing: "1px",
+              textTransform: "uppercase",
+              color: "var(--text-muted)",
+            }}
+          >
+            Version History
+          </div>
+
+          {/* Newest first, the way the user thinks about drafts. */}
+          {versions
+            .map((version, index) => ({ version, index }))
+            .reverse()
+            .map(({ version, index }) => {
+              const isActive = index === activeIndex;
+              return (
+                <button
+                  key={index}
+                  role="option"
+                  aria-selected={isActive}
+                  onClick={() => {
+                    go(index);
+                    setOpen(false);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    background: isActive
+                      ? "var(--accent-surface)"
+                      : "transparent",
+                    border: `1px solid ${isActive ? "var(--border-hover)" : "transparent"}`,
+                    color: "var(--text-primary)",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "7px",
+                      height: "7px",
+                      borderRadius: "50%",
+                      background: sourceDotColor(version.generationSource),
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Version {index + 1}
+                      {index === count - 1 && (
+                        <span
+                          style={{
+                            fontSize: "0.6rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.5px",
+                            color: "var(--success)",
+                          }}
+                        >
+                          NEWEST
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "0.75rem",
+                        color: "var(--text-muted)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        marginTop: "4px",
+                      }}
+                    >
+                      {sourceLabel(version.generationSource)}
+                    </span>
+                  </span>
+                  {isActive && <Check size={14} color="var(--text-primary)" />}
+                </button>
+              );
+            })}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -201,8 +455,8 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
   // Client-side version-history navigation (primitive selectors to avoid
   // re-render churn from returning a fresh object each render).
-  const versionCount = useSectionHistoryStore(
-    (s) => s.byProject[s.activeProjectId]?.[id]?.versions.length ?? 0,
+  const versions = useSectionHistoryStore(
+    (s) => s.byProject[s.activeProjectId]?.[id]?.versions ?? NO_VERSIONS,
   );
   const activeIndex = useSectionHistoryStore(
     (s) => s.byProject[s.activeProjectId]?.[id]?.activeIndex ?? 0,
@@ -339,60 +593,12 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
               gap: "6px",
             }}
           >
-            {!isApproved && versionCount > 1 && (
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "8px" }}
-              >
-                <button
-                  onClick={() =>
-                    useSectionHistoryStore
-                      .getState()
-                      .setActiveIndex(id, activeIndex - 1)
-                  }
-                  disabled={activeIndex === 0}
-                  title="Previous version"
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    display: "flex",
-                    cursor: activeIndex === 0 ? "default" : "pointer",
-                    opacity: activeIndex === 0 ? 0.35 : 1,
-                  }}
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <span
-                  style={{
-                    fontSize: "1.3rem",
-                    color: "var(--text-muted)",
-                    minWidth: "38px",
-                    textAlign: "center",
-                  }}
-                >
-                  v{activeIndex + 1}/{versionCount}
-                </span>
-                <button
-                  onClick={() =>
-                    useSectionHistoryStore
-                      .getState()
-                      .setActiveIndex(id, activeIndex + 1)
-                  }
-                  disabled={activeIndex === versionCount - 1}
-                  title="Next version"
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    display: "flex",
-                    cursor:
-                      activeIndex === versionCount - 1 ? "default" : "pointer",
-                    opacity: activeIndex === versionCount - 1 ? 0.35 : 1,
-                  }}
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </div>
+            {!isApproved && versions.length > 1 && (
+              <VersionSwitcher
+                sectionKey={id}
+                versions={versions}
+                activeIndex={activeIndex}
+              />
             )}
             <div
               style={{
