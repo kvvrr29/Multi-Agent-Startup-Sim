@@ -36,7 +36,9 @@ function useLocalModelState(enabled) {
     return () => {
       active = false;
     };
-  }, [enabled, state.status]);
+    // cacheEpoch covers deletes that leave `status` unchanged — removing a
+    // model that was cached on disk but never loaded this session.
+  }, [enabled, state.status, state.cacheEpoch]);
 
   const webgpuSupported = typeof navigator !== "undefined" && !!navigator.gpu;
   return {
@@ -48,7 +50,7 @@ function useLocalModelState(enabled) {
     // null while the cache lookup is still in flight.
     checking: cached === null,
     // Safe to generate: already in VRAM, or on disk so loading is quick.
-    usable: state.status === "ready" || cached === true
+    usable: state.status === "ready" || cached === true,
   };
 }
 
@@ -78,13 +80,10 @@ function LocalModelPanel({ model }) {
           marginBottom: "10px",
         }}
       >
-        <Cpu
-          size={20}
-          color={ready ? "var(--success)" : "var(--text-muted)"}
-        />
+        <Cpu size={20} color={ready ? "var(--success)" : "var(--text-muted)"} />
         <div style={{ lineHeight: 1.1 }}>
           <strong style={{ display: "block", fontSize: "0.9rem" }}>
-            Built-in AI (runs in your browser)
+            Built-in AI
           </strong>
           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
             {state.modelId}
@@ -180,7 +179,7 @@ function LocalModelPanel({ model }) {
         </button>
         {(ready || cached) && (
           <button
-            onClick={() => modelManager.removeModel()}
+            onClick={() => modelManager.removeModel().catch(() => {})}
             disabled={downloading}
             className="btn-secondary"
             style={{
@@ -204,9 +203,7 @@ function LocalModelPanel({ model }) {
           color: "var(--text-muted)",
         }}
       >
-        Downloaded once into your browser cache, then runs offline with no API
-        key and no per-request cost. Generation is slower than the cloud
-        providers.
+        Downloaded once into your browser cache, then runs offline.
       </p>
     </div>
   );
@@ -234,20 +231,30 @@ export default function AISettingsModal({ onClose }) {
   const usingLocal = localEnabled && localProvider === "webllm";
   const localModel = useLocalModelState(usingLocal);
 
+  // Cloud providers have exactly one mode: the user's own key, sent from this
+  // browser. Without it there is nothing to fall back to.
+  const missingCloudKey =
+    localEnabled &&
+    (localProvider === "openai"
+      ? !localOpenaiKey.trim()
+      : localProvider === "gemini" && !localKey.trim());
+
   // Saving a local-model selection that cannot actually run would start a
   // several-hundred-MB download on the first generation, where the progress
   // bar is not visible — the app would simply look frozen.
-  const blockedReason = !usingLocal
-    ? null
-    : !localModel.webgpuSupported
-      ? "This browser has no WebGPU support, so the built-in AI cannot run here."
-      : localModel.downloading
-        ? "Wait for the model download to finish."
-        : localModel.checking
-          ? "Checking for the downloaded model…"
-          : !localModel.usable
-            ? "Download the model first — otherwise generation would stall on a large download with no visible progress."
-            : null;
+  const blockedReason = missingCloudKey
+    ? `Enter your ${localProvider === "openai" ? "OpenAI" : "Gemini"} API key to use this provider.`
+    : !usingLocal
+      ? null
+      : !localModel.webgpuSupported
+        ? "This browser has no WebGPU support, so the built-in AI cannot run here."
+        : localModel.downloading
+          ? "Wait for the model download to finish."
+          : localModel.checking
+            ? "Checking for the downloaded model…"
+            : !localModel.usable
+              ? "Download the model first."
+              : null;
 
   const handleSave = () => {
     if (blockedReason) return;
@@ -401,9 +408,6 @@ export default function AISettingsModal({ onClose }) {
                     <option value="webllm">
                       Built-in AI — runs locally, no key
                     </option>
-                    <option value="claude" disabled>
-                      Anthropic Claude (Coming Soon)
-                    </option>
                   </select>
                   <ChevronDown
                     aria-hidden="true"
@@ -448,7 +452,9 @@ export default function AISettingsModal({ onClose }) {
                     />
                     <input
                       type="password"
-                      value={localProvider === "openai" ? localOpenaiKey : localKey}
+                      value={
+                        localProvider === "openai" ? localOpenaiKey : localKey
+                      }
                       onChange={(e) =>
                         localProvider === "openai"
                           ? setLocalOpenaiKey(e.target.value)
@@ -469,36 +475,20 @@ export default function AISettingsModal({ onClose }) {
                       }}
                     />
                   </div>
-                  {localProvider === "gemini" && !localKey && (
+                  {missingCloudKey && (
                     <p
                       style={{
                         margin: "6px 0 0 0",
                         fontSize: "0.75rem",
-                        color: "var(--text-muted)",
+                        color: "var(--warning)",
                         display: "flex",
                         alignItems: "center",
                         gap: "4px",
                       }}
                     >
-                      <AlertTriangle size={12} /> Leave empty to use the
-                      server-side AI proxy (recommended) — the key stays on the
-                      server.
-                    </p>
-                  )}
-                  {localProvider === "openai" && !localOpenaiKey && (
-                    <p
-                      style={{
-                        margin: "6px 0 0 0",
-                        fontSize: "0.75rem",
-                        color: "var(--text-muted)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <AlertTriangle size={12} /> OpenAI has no server-side
-                      proxy — a key is required, and it is sent from your
-                      browser.
+                      <AlertTriangle size={12} /> A{" "}
+                      {localProvider === "openai" ? "OpenAI" : "Gemini"} API key
+                      is required.
                     </p>
                   )}
                   <p

@@ -16,25 +16,26 @@ const AI_STATUS = {
 };
 
 export function useAIMode() {
-  const { aiModeEnabled, apiKey, aiProvider } = useSettingsStore();
+  const { aiModeEnabled, apiKey, openaiApiKey, aiProvider } = useSettingsStore();
   const generationSources = useAIDebugStore(s => s.generationSources);
   const activeGenerations = useAIDebugStore(s => s.activeGenerations);
   const lastError = useAIDebugStore(s => s.lastError);
   const connectionStatus = useAIDebugStore(s => s.connectionStatus);
 
   const providerLabel = PROVIDER_SOURCE_LABELS[aiProvider] || 'Gemini';
-  // AI is "configured" when AI Mode is on. Gemini can additionally run through
-  // the server-side proxy, where the key never reaches the browser; the local
-  // provider needs no key at all.
-  const isGeminiConfigured = aiModeEnabled;
-  const usingServerProxy = aiModeEnabled && !apiKey?.trim() && aiProvider === 'gemini';
   const isLocalProvider = aiProvider === 'webllm';
+  // Cloud providers run on the user's own key and nothing else, so no key means
+  // no AI. The local provider needs none.
+  const hasProviderKey = isLocalProvider
+    ? true
+    : !!(aiProvider === 'openai' ? openaiApiKey?.trim() : apiKey?.trim());
+  const isGeminiConfigured = aiModeEnabled && hasProviderKey;
   const hasLiveOutput = Object.values(generationSources).some(s => s && !NON_LIVE_SOURCES.includes(s));
   const hasFallbackOutput = Object.values(generationSources).some(s => s === 'Fallback');
   const mode = isGeminiConfigured ? providerLabel : 'Simulator';
   const reason = !aiModeEnabled
     ? 'AI Mode is disabled in Settings'
-    : usingServerProxy ? 'Using server-side AI proxy'
+    : !hasProviderKey ? `No ${providerLabel} API key — add one in AI Settings`
     : isLocalProvider ? 'Running the built-in model in your browser'
     : null;
 
@@ -53,5 +54,5 @@ export function useAIMode() {
     status = { ...status, label: `${providerLabel} ${status.label}` };
   }
 
-  return { mode, reason, status, lastError, isGeminiConfigured, usingServerProxy, isLocalProvider, hasLiveOutput, hasFallbackOutput };
+  return { mode, reason, status, lastError, isGeminiConfigured, isLocalProvider, hasLiveOutput, hasFallbackOutput };
 }
