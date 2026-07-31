@@ -62,7 +62,7 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
 };
 
 /**
- * Hand-written mermaid skeletons. A 0.5B model reliably emits mermaid that
+ * Hand-written mermaid skeletons. A small local model reliably emits mermaid that
  * fails to render, which breaks the whole blueprint view — a correct generic
  * diagram is more useful than a malformed bespoke one.
  */

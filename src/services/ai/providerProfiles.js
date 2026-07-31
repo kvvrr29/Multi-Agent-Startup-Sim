@@ -1,6 +1,6 @@
 // ── Per-provider generation profiles ─────────────────────────────────────────
 //
-// A frontier cloud model and a 0.5B model running in the browser cannot be held
+// A frontier cloud model and a small model running in the browser cannot be held
 // to the same contract. Rather than scattering `if (isWebLLM)` checks through
 // the factory and the validator, every provider-dependent knob lives here:
 //
@@ -22,9 +22,9 @@ export const CLOUD_THRESHOLDS = {
 };
 
 /**
- * Gates tuned for a ~0.5B browser model. Deliberately permissive: at this size
- * the realistic choice is "usable but thin" or "nothing at all". Structural
- * validity is still enforced at 100 — malformed JSON never passes.
+ * Gates tuned for a small (~1.5B) browser model. Deliberately permissive: at
+ * this size the realistic choice is "usable but thin" or "nothing at all".
+ * Structural validity is still enforced at 100 — malformed JSON never passes.
  */
 export const LOCAL_THRESHOLDS = {
   structural: 100,

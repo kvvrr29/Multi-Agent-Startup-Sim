@@ -2,8 +2,13 @@
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// Recommended sub-500MB model for Startup Simulator
-const DEFAULT_MODEL = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+// ~1.6GB of weights, 4096-token context (the same window web-llm configures
+// for every Qwen2.5 size — a bigger model buys capability, not room).
+// 1.5B is where instruction-following stops being the bottleneck: the 0.5B
+// could not reliably hold "write JSON, hit a length target, apply a revision
+// instruction, stay on topic" at the same time, which is what this app asks
+// of it on every section.
+const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
 
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
 // completed, 56 secs elapsed. It can take a while when we first visit this
