@@ -450,7 +450,9 @@ export const applyRevisionSimulation = async (previewData) => {
   }
 };
 
-// Backwards compatibility alias for components that haven't been updated yet
+// Preview + apply in one call. This is the path the blueprint UI uses for
+// "Regenerate section" and inline section feedback, where there is no preview
+// step to show the user.
 export const runRevisionSimulation = async (revisionInstruction, category = '', targetSectionId = null) => {
   const preview = await previewRevision(revisionInstruction, targetSectionId, category);
   if (preview?.error) {

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 export const API_KEY_STORAGE_KEY = 'mass_gemini_api_key';
-export const OPENAI_KEY_STORAGE_KEY = 'mass_openai_api_key';
-export const AI_PROVIDER_STORAGE_KEY = 'mass_ai_provider';
+const OPENAI_KEY_STORAGE_KEY = 'mass_openai_api_key';
+const AI_PROVIDER_STORAGE_KEY = 'mass_ai_provider';
 
 const readLocalSetting = (key, fallback = '') => {
   if (typeof localStorage === 'undefined') return fallback;

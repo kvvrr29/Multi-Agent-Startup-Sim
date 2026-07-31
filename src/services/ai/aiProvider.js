@@ -24,7 +24,7 @@ class AIProviderFactory {
   }
 }
 
-export const aiProviderFactory = new AIProviderFactory();
+const aiProviderFactory = new AIProviderFactory();
 
 /**
  * Generates content through the active provider and returns the raw response

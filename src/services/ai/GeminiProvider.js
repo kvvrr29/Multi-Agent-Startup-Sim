@@ -144,7 +144,10 @@ export class GeminiProvider {
    * Handles rate-limit retries internally so the factory retry loop
    * only deals with validation failures, not quota errors.
    */
-  async generate({ systemPrompt, userPrompt, jsonSchema, maxTokens }) {
+  // maxTokens is accepted for interface parity and deliberately ignored:
+  // Gemini is left uncapped so section length is bounded by the prompt, not by
+  // a client-side ceiling that would truncate mid-JSON.
+  async generate({ systemPrompt, userPrompt, jsonSchema }) {
     await this.initialize();
 
     if (!this.client) {

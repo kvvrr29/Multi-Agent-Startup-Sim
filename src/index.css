@@ -228,14 +228,8 @@ a:hover {
     justify-content: center;
 }
 
-.gap-1 {
-    gap: 0.25rem;
-}
 .gap-3 {
     gap: 0.75rem;
-}
-.gap-4 {
-    gap: 1rem;
 }
 .gap-6 {
     gap: 1.5rem;
@@ -881,10 +875,6 @@ body > div[id^="ddocx-mermaid-"] {
 }
 
 /* Shared split-panel additions and authentication */
-.split-panel-footer {
-    margin-top: auto;
-}
-
 .auth-layout .project-create-shell {
     min-height: min(800px, calc(100vh - 40px));
 }
@@ -904,27 +894,6 @@ body > div[id^="ddocx-mermaid-"] {
 .auth-layout .project-create-step-number {
     color: var(--text-primary);
     font-size: 0.85rem;
-}
-
-.auth-trust-note {
-    width: 100%;
-    padding: 15px 17px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--text-muted);
-    font-size: 0.73rem;
-    line-height: 1.45;
-    border: 1px dashed var(--border-color);
-    border-radius: 10px;
-}
-
-.auth-trust-note > span {
-    width: 7px;
-    height: 7px;
-    flex: 0 0 7px;
-    background: var(--text-muted);
-    border-radius: 50%;
 }
 
 .auth-workspace {
@@ -1002,10 +971,6 @@ body > div[id^="ddocx-mermaid-"] {
 }
 
 @media (max-width: 720px) {
-    .split-panel-footer {
-        display: none;
-    }
-
     .auth-layout .project-create-shell {
         min-height: 0;
     }
