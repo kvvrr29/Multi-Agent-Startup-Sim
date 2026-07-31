@@ -1,7 +1,7 @@
 import { generateAIContent } from './aiProvider';
 import { getActiveProviderName, getProviderSourceLabel } from './activeProvider';
 import { getProviderProfile, getSectionMaxTokens, DIAGRAM_SECTIONS } from './providerProfiles';
-import { AGENT_SYSTEM_PROMPTS, withJsonHardening } from './agentPrompts';
+import { AGENT_SYSTEM_PROMPTS, withJsonHardening, SPECIFICITY_DIRECTIVE, NO_MERMAID_DIRECTIVE } from './agentPrompts';
 import { buildContextString } from './contextBuilder';
 import { validateAIResponse, createResponseSchema, buildRetryFeedback, SECTION_CONCEPT_GROUPS } from './validationLayer';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
@@ -31,11 +31,17 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
   });
 
   const titles = sectionKeys.map(key => SECTION_TITLES[key] || key).join(', ');
-  let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. Ensure the content is highly specific to this exact project and not generic. Do NOT include mermaid syntax unless specifically required by the section. Respond with JSON matching the requested schema.`;
+  let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
   if (compact) {
     // A small model needs the shape spelled out; the schema alone is advisory
     // for it in a way it is not for a cloud API that enforces one.
+    //
+    // The concept list comes from the same groups the relevance validator
+    // scores against. That is deliberate — they are the definition of a
+    // complete section, not a scoring trick — but it does mean a local
+    // relevance score reads as "covered what it was told to cover" rather than
+    // as an independent judgement of quality. Cloud gets no such hint.
     const concepts = sectionKeys
       .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).flat())
       .slice(0, 6).join(', ');
@@ -46,7 +52,8 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
     }
     task += `\n\nRequirements:`;
     task += `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
-    task += `\n- Be specific to this exact project. Do not write generic filler or restate the task.`;
+    task += `\n- ${SPECIFICITY_DIRECTIVE} Do not write filler or restate the task.`;
+    task += `\n- ${NO_MERMAID_DIRECTIVE}`;
     task += `\n- Respond with ONLY valid JSON in this exact shape: {${sectionKeys.map(k => `"${k}": "..."`).join(', ')}}`;
     task += `\n- Put the markdown prose inside the JSON string value. Output no text outside the JSON object.`;
   }

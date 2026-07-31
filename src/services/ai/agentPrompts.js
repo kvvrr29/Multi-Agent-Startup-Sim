@@ -47,3 +47,15 @@ export const JSON_ONLY_DIRECTIVE =
 /** Adds the directive when the provider profile asks for it, otherwise returns the prompt unchanged. */
 export const withJsonHardening = (systemPrompt, profile) =>
   profile?.jsonHardening ? `${systemPrompt}\n${JSON_ONLY_DIRECTIVE}` : systemPrompt;
+
+// ── Directives shared by every generation prompt ─────────────────────────────
+//
+// These say what a good section is, which does not depend on which model writes
+// it. They live here as single strings so the batch and per-section templates
+// cannot drift apart — the two templates differ in layout, not in requirements.
+
+export const SPECIFICITY_DIRECTIVE =
+  'Ensure the content is highly specific to this exact project and not generic.';
+
+export const NO_MERMAID_DIRECTIVE =
+  'Do NOT include mermaid syntax unless specifically required by the section.';

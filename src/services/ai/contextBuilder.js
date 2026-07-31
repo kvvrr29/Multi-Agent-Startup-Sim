@@ -47,22 +47,24 @@ export const buildContextString = (
   context += `Project Description (PRIMARY SOURCE OF TRUTH — weigh this above the project name): ${project?.idea || 'Unknown'}\n`;
   context += `Domain: ${current('scope', 'domain')}\n`;
   context += `Industry: ${current('scope', 'industry')}\n`;
-  if (!compact) {
-    context += `Project Type: ${current('scope', 'project_type')}\n`;
-    context += `Business Model: ${current('scope', 'business_model')}\n`;
-  }
+  // Every scope field is kept in compact mode: together they cost ~40 tokens,
+  // and they are exactly the constraints that stop output being generic. A
+  // roadmap written without knowing "6 months, 4 people" is filler.
+  context += `Project Type: ${current('scope', 'project_type')}\n`;
+  context += `Business Model: ${current('scope', 'business_model')}\n`;
   context += `Budget: ${current('scope', 'budget', project?.budget)}\n`;
   context += `Target Audience: ${current('business', 'targetAudience', project?.targetAudience)}\n`;
-  if (!compact) {
-    context += `Platform Preference: ${current('scope', 'platforms', project?.platform, 'Not specified')}\n`;
-    context += `Timeline: ${current('scope', 'timeline', project?.timeline, 'Not specified')}\n`;
-    context += `Team Size: ${current('scope', 'teamSize', project?.teamSize, 'Not specified')}\n`;
-    context += `Project Priorities: ${current('scope', 'priorities', project?.priorities, 'Not specified')}\n`;
-  }
-  context += `\n`;
+  context += `Platform Preference: ${current('scope', 'platforms', project?.platform, 'Not specified')}\n`;
+  context += `Timeline: ${current('scope', 'timeline', project?.timeline, 'Not specified')}\n`;
+  context += `Team Size: ${current('scope', 'teamSize', project?.teamSize, 'Not specified')}\n`;
+  context += `Project Priorities: ${current('scope', 'priorities', project?.priorities, 'Not specified')}\n\n`;
 
   // Only the memory categories relevant to this agent (doc §13)
   const relevantCategories = AGENT_MEMORY_CATEGORIES[agentRole] || AGENT_MEMORY_CATEGORIES.mediator;
+
+  const relevantDecisionHistory = (memoryStore.decisionHistory || [])
+    .filter(decision => relevantCategories.includes(String(decision.category || '').toLowerCase()))
+    .slice(-12);
 
   if (!compact) {
     const relevantMemory = {};
@@ -76,9 +78,6 @@ export const buildContextString = (
     context += `--- PROJECT MEMORY (Decisions Made — relevant to your role) ---\n`;
     context += JSON.stringify(relevantMemory, null, 2) + `\n\n`;
 
-    const relevantDecisionHistory = (memoryStore.decisionHistory || [])
-      .filter(decision => relevantCategories.includes(String(decision.category || '').toLowerCase()))
-      .slice(-12);
     if (relevantDecisionHistory.length) {
       context += `--- RELEVANT REVISION DECISIONS (append-only log) ---\n`;
       context += JSON.stringify(relevantDecisionHistory, null, 2) + `\n\n`;
@@ -89,6 +88,14 @@ export const buildContextString = (
       context += `--- RECENT REVISION SUMMARIES ---\n`;
       context += recentRevisions.map(event => `- ${event.message}`).join('\n') + `\n\n`;
     }
+  } else if (relevantDecisionHistory.length) {
+    // The same decisions the full context carries as raw JSON, one line each.
+    // Dropping these entirely was a correctness bug, not a size saving: without
+    // them a revision happily contradicts what an earlier revision settled.
+    context += `--- DECISIONS ALREADY SETTLED (do not contradict these) ---\n`;
+    context += relevantDecisionHistory
+      .map(d => `- ${d.key}: ${d.value}${d.rationale ? ` (${d.rationale})` : ''}`)
+      .join('\n') + `\n\n`;
   }
 
   let blueprintState = '';
