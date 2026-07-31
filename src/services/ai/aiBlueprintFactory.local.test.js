@@ -12,7 +12,8 @@ import { useAIDebugStore } from '../../store/useAIDebugStore';
 // Content thin enough that the strict cloud gates would reject it, which is
 // exactly the regime the local model operates in.
 const sectionText = (name) =>
-  `The ${name} covers revenue, pricing and commission for urban delivery customers, with budget, cost and risk mitigation noted.`;
+  `The ${name} covers revenue, pricing and commission for urban delivery customers, with budget, cost and risk mitigation noted. `
+  + `Margins and growth are tracked against the target market so the team can judge viability as the service expands.`;
 
 const respondWithSection = (key) => JSON.stringify({ [key]: sectionText(key) });
 
@@ -57,8 +58,14 @@ describe('per-section generation for the local model', () => {
     const [, prompt, schema, maxTokens] = generateAIContent.mock.calls[0];
     // Slim: nothing like the multi-section batch prompt.
     expect(prompt).not.toMatch(/generate the following blueprint sections/);
-    expect(prompt).toMatch(/Respond ONLY with valid JSON/);
+    expect(prompt).toMatch(/Respond with ONLY valid JSON/);
     expect(maxTokens).toBeGreaterThan(0);
+    // The compact context still carries what the model cannot work without:
+    // the actual project, and an explicit length target.
+    expect(prompt).toMatch(/Urban food delivery/);
+    expect(prompt).toMatch(/at least 200 words/);
+    // …but not the token-heavy blocks the batch prompt carries.
+    expect(prompt).not.toMatch(/PROJECT MEMORY/);
     // Single-section schema, in the dialect a local model understands.
     expect(schema.type).toBe('object');
     expect(Object.keys(schema.properties)).toContain('executiveSummary');
@@ -78,6 +85,22 @@ describe('per-section generation for the local model', () => {
     expect(result.content.architecture).toMatch(/```mermaid/);
     expect(result.content.umlDiagram).toMatch(/```mermaid/);
     expect(result.content.erDiagram).toMatch(/erDiagram/);
+  });
+
+  it('shows the local model the current section text when revising it', async () => {
+    const existing = 'The current go-to-market plan leans on campus ambassadors and paid social.';
+    useProjectStore.getState().updateBlueprintSection('marketingStrategy', existing, 'pending');
+    generateAIContent.mockResolvedValue(JSON.stringify({ marketingStrategy: sectionText('marketingStrategy') }));
+
+    await generateAgentContent('marketing', 'make this section bigger');
+
+    const prompt = generateAIContent.mock.calls[0][1];
+    // Without this, "make this section bigger" has no referent and the model
+    // writes a fresh one-liner instead of expanding anything.
+    expect(prompt).toContain(existing);
+    expect(prompt).toMatch(/Apply this instruction to the current text shown above: make this section bigger/);
+    // The instruction must not also masquerade as the project description.
+    expect(prompt).not.toMatch(/Project Name: make this section bigger/);
   });
 
   it('keeps best-effort content when a section never fully validates', async () => {

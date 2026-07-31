@@ -39,6 +39,10 @@ const CLOUD_PROFILE = {
   schemaDialect: 'gemini',
   thresholds: CLOUD_THRESHOLDS,
   minSectionLength: 50,
+  // Frontier models are verbose by default and the batch prompt already asks
+  // for "detailed" output, so no explicit target is needed.
+  minWords: null,
+  minParagraphs: null,
   // Small models rarely name every mandatory entity verbatim; large ones should.
   enforceDomainCriticals: true,
   templateDiagrams: false,
@@ -52,7 +56,14 @@ const LOCAL_PROFILE = {
   strategy: 'perSection',
   schemaDialect: 'jsonSchema',
   thresholds: LOCAL_THRESHOLDS,
-  minSectionLength: 25,
+  // ~150 characters is roughly 25 words: below that the model has answered in a
+  // sentence and a retry is worth the call. It stays well under the ~200 words
+  // the prompt asks for, so ordinary short-but-real answers are not rejected.
+  minSectionLength: 150,
+  // A small instruct model writes one line unless told otherwise. This is the
+  // only place a length is ever stated to it.
+  minWords: 200,
+  minParagraphs: 3,
   enforceDomainCriticals: false,
   templateDiagrams: true,
   // Nothing enforces JSON here, so the prompt has to ask for it explicitly.

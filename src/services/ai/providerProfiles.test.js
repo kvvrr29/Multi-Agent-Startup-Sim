@@ -82,7 +82,15 @@ describe('extractJson', () => {
 });
 
 const SECTION = 'executiveSummary';
-const thinButReal = 'A delivery platform for urban customers with revenue from commissions.';
+// Long enough to clear the local length floor, but shallow: it names the
+// project and little else, so it misses most of the concept groups the cloud
+// relevance gates require. This is the "usable but thin" case the local
+// profile exists to accept.
+const thinButReal = 'A delivery platform for urban customers with revenue from commissions. '
+  + 'The service connects people in cities with nearby options and takes a small cut of each order placed through it.';
+// What the local gates must still reject: a single sentence that answers the
+// prompt in name only.
+const oneLiner = 'A delivery platform.';
 
 describe('provider-aware validation', () => {
   const build = (text) => JSON.stringify({ [SECTION]: text, decisions: [] });
@@ -108,6 +116,14 @@ describe('provider-aware validation', () => {
     });
     expect(res.passed).toBe(false);
     expect(res.issues[0]).toMatch(/not valid JSON/);
+  });
+
+  it('rejects a one-line answer from the local model so the retry fires', () => {
+    const res = validateAIResponse(build(oneLiner), [SECTION], {
+      agentRole: 'ceo', domain: 'FoodTech', industry: 'Delivery', providerName: 'webllm'
+    });
+    expect(res.passed).toBe(false);
+    expect(res.issues.join(' ')).toMatch(/too short/);
   });
 
   it('still rejects an empty section from the local model', () => {

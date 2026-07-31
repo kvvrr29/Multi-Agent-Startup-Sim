@@ -15,19 +15,43 @@ const AGENT_RESPONSIBILITIES = AGENT_ROLES;
 const MAX_ATTEMPTS = 2;
 
 /**
- * Compact single-section prompt for small local models.
+ * The user prompt for a generation request. Both strategies use this — the only
+ * difference is how many sections are asked for at once, and whether the
+ * context is the full brief or the compact one.
  *
- * The full context builder emits 600-1000+ tokens, which on a 0.5B model with a
- * ~1.5k context leaves almost no room to answer. This trades the rich context
- * for enough headroom to actually produce a section.
+ * `profile.minWords` is what actually fixes short output: nothing else in the
+ * prompt chain ever states a length, so a model that is not verbose by default
+ * has no reason to write more than a sentence.
  */
-const buildSectionPrompt = (sectionKey, sectionTitle, expectedConcepts, projectSummary, instruction) => {
-  let prompt = `Write the "${sectionTitle}" section for a startup blueprint.\n\nProject: ${projectSummary}`;
-  if (expectedConcepts) prompt += `\n\nCover concepts such as: ${expectedConcepts}.`;
-  if (instruction) prompt += `\n\nAdditional instruction: ${instruction}`;
-  prompt += `\n\nRespond ONLY with valid JSON in this exact shape: {"${sectionKey}": "your content here"}`;
-  prompt += `\nThe value must be non-empty markdown prose. Output no text outside the JSON object.`;
-  return prompt;
+const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
+  const compact = profile.strategy === 'perSection';
+  const context = buildContextString(instruction, agentRole, {
+    compact,
+    focusSections: sectionKeys
+  });
+
+  const titles = sectionKeys.map(key => SECTION_TITLES[key] || key).join(', ');
+  let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. Ensure the content is highly specific to this exact project and not generic. Do NOT include mermaid syntax unless specifically required by the section. Respond with JSON matching the requested schema.`;
+
+  if (compact) {
+    // A small model needs the shape spelled out; the schema alone is advisory
+    // for it in a way it is not for a cloud API that enforces one.
+    const concepts = sectionKeys
+      .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).flat())
+      .slice(0, 6).join(', ');
+    task = `\n\nTask: Write the "${titles}" section for this startup, in detailed Markdown.`;
+    if (concepts) task += `\nCover concepts such as: ${concepts}.`;
+    if (instruction) {
+      task += `\nApply this instruction to the current text shown above: ${instruction}`;
+    }
+    task += `\n\nRequirements:`;
+    task += `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
+    task += `\n- Be specific to this exact project. Do not write generic filler or restate the task.`;
+    task += `\n- Respond with ONLY valid JSON in this exact shape: {${sectionKeys.map(k => `"${k}": "..."`).join(', ')}}`;
+    task += `\n- Put the markdown prose inside the JSON string value. Output no text outside the JSON object.`;
+  }
+
+  return `${context}${task}`;
 };
 
 /**
@@ -72,11 +96,9 @@ const buildResult = (content, decisions, scores, stages, source, agentRole) => (
  * retry. This is the original behaviour and remains the path for cloud models.
  */
 const generateBatch = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel) => {
-  const context = buildContextString(instruction, agentRole);
   const sectionsToGenerate = AGENT_RESPONSIBILITIES[agentRole] || [];
   const schema = createResponseSchema(sectionsToGenerate, { dialect: profile.schemaDialect });
-
-  const userPrompt = `${context}\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionsToGenerate.join(', ')}. Ensure the content is highly specific to this exact project and not generic. Do NOT include mermaid syntax unless specifically required by the section. Respond with JSON matching the requested schema.`;
+  const userPrompt = buildUserPrompt(sectionsToGenerate, instruction, agentRole, profile);
 
   const { domain, industry, mandatoryKeywords } = readScope();
   const { setSource, pushLog } = useAIDebugStore.getState();
@@ -131,10 +153,6 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
   const { domain, industry, mandatoryKeywords } = readScope();
   const { setSource, pushLog } = useAIDebugStore.getState();
 
-  const memory = useProjectMemoryStore.getState().memory;
-  const projectSummary = [memory?.scope?.domain, memory?.scope?.industry, instruction]
-    .filter(Boolean).join(' — ') || 'an early-stage startup';
-
   const mergedContent = {};
   const mergedDecisions = [];
   const scoreSamples = [];
@@ -152,11 +170,9 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
       }
     }
 
-    const expectedConcepts = (SECTION_CONCEPT_GROUPS[sectionKey] || [])
-      .flat().slice(0, 6).join(', ');
     const schema = createResponseSchema([sectionKey], { dialect: profile.schemaDialect });
     const maxTokens = getSectionMaxTokens(sectionKey, profile);
-    const basePrompt = buildSectionPrompt(sectionKey, sectionTitle, expectedConcepts, projectSummary, instruction);
+    const basePrompt = buildUserPrompt([sectionKey], instruction, agentRole, profile);
 
     let sectionDone = false;
     let bestEffort = null;
