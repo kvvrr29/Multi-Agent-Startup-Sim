@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 export const API_KEY_STORAGE_KEY = 'mass_gemini_api_key';
+export const OPENAI_KEY_STORAGE_KEY = 'mass_openai_api_key';
+export const AI_PROVIDER_STORAGE_KEY = 'mass_ai_provider';
 
 const readLocalSetting = (key, fallback = '') => {
   if (typeof localStorage === 'undefined') return fallback;
@@ -22,9 +24,12 @@ const writeLocalSetting = (key, value) => {
 };
 
 export const useSettingsStore = create((set) => ({
-  aiProvider: 'gemini', // 'gemini', 'openai', 'claude'
-  // A personal key is browser-local (never synced to Supabase) and survives reloads.
+  // 'gemini' | 'openai' | 'webllm'. Gemini stays the default so existing
+  // installs keep their behaviour; WebLLM runs entirely in the browser.
+  aiProvider: readLocalSetting(AI_PROVIDER_STORAGE_KEY, 'gemini'),
+  // Personal keys are browser-local (never synced to Supabase) and survive reloads.
   apiKey: readLocalSetting(API_KEY_STORAGE_KEY),
+  openaiApiKey: readLocalSetting(OPENAI_KEY_STORAGE_KEY),
   aiModeEnabled: typeof localStorage === 'undefined' ? true : localStorage.getItem('mass_ai_mode') !== 'false',
   developerMode: typeof localStorage === 'undefined' ? false : localStorage.getItem('mass_dev_mode') === 'true',
 
@@ -34,7 +39,14 @@ export const useSettingsStore = create((set) => ({
     set({ apiKey: normalizedKey });
   },
 
+  setOpenaiApiKey: (key) => {
+    const normalizedKey = typeof key === 'string' ? key.trim() : '';
+    writeLocalSetting(OPENAI_KEY_STORAGE_KEY, normalizedKey);
+    set({ openaiApiKey: normalizedKey });
+  },
+
   setAiProvider: (provider) => {
+    writeLocalSetting(AI_PROVIDER_STORAGE_KEY, provider);
     set({ aiProvider: provider });
   },
 

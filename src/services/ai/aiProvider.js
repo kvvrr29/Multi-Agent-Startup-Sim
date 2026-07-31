@@ -1,73 +1,184 @@
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAICostStore } from '../../store/useAICostStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
-import { GoogleGenAI } from '@google/genai';
-import { api } from '../apiClient';
+import { useProjectStore } from '../../store/useProjectStore';
+import { WebLLMProvider } from './WebLLMProvider';
+import { GeminiProvider } from './GeminiProvider';
+import { OpenAIProvider } from './OpenAIProvider';
 
 // Simple heuristic for tokens
 const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
 
+const PROVIDER_LABELS = {
+  gemini: 'Gemini',
+  openai: 'OpenAI (GPT-4o-mini)',
+  webllm: 'Built-in AI (WebLLM)'
+};
+
+class AIProviderFactory {
+  constructor() {
+    this.webllm = new WebLLMProvider();
+    this.gemini = new GeminiProvider();
+    this.openai = new OpenAIProvider();
+  }
+
+  get(name) {
+    if (name === 'webllm') return this.webllm;
+    if (name === 'openai') return this.openai;
+    return this.gemini;
+  }
+}
+
+export const aiProviderFactory = new AIProviderFactory();
+
 /**
- * Server-side path: the Express backend holds the Gemini key and forwards the
- * request. The browser never sees or sends a Gemini API key.
+ * A project can pin its own provider (the graceful fallback below uses this, so
+ * a mid-run switch to local AI sticks for the remaining sections). Otherwise
+ * the global setting wins.
  */
-const generateViaProxy = async (systemPrompt, userPrompt, jsonSchema) => {
-  const payload = await api.generate(systemPrompt, userPrompt, jsonSchema);
-  return payload.text;
+export const getActiveProviderName = () => {
+  const { aiProvider } = useSettingsStore.getState();
+  const projectProvider = useProjectStore.getState().project?.aiProvider;
+  return projectProvider || aiProvider || 'gemini';
 };
 
-const generateViaBrowserKey = async (apiKey, systemPrompt, userPrompt, jsonSchema) => {
-  const ai = new GoogleGenAI({ apiKey });
-  const config = {
-    systemInstruction: systemPrompt,
-    temperature: 0.7,
-  };
-  if (jsonSchema) {
-    config.responseMimeType = 'application/json';
-    config.responseSchema = jsonSchema;
+export const getActiveProviderLabel = () => {
+  const name = getActiveProviderName();
+  return PROVIDER_LABELS[name] || name;
+};
+
+/** The provider that actually served the most recent successful generation. */
+let lastUsedProviderName = null;
+export const getLastUsedProviderLabel = () =>
+  lastUsedProviderName ? (PROVIDER_LABELS[lastUsedProviderName] || lastUsedProviderName) : null;
+
+/**
+ * Prompt cache. Identical (systemPrompt, userPrompt, provider) triples are
+ * served from localStorage so reruns don't burn free-tier quota.
+ */
+const cacheKeyFor = async (systemPrompt, userPrompt, providerName) => {
+  if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+  try {
+    const input = `${systemPrompt}|${userPrompt}|${providerName}`;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    return `ai_cache_${Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+  } catch {
+    return null;
   }
-  const response = await ai.models.generateContent({
-    // Rolling alias: always resolves to the current Flash model, so retired
-    // model ids (e.g. gemini-2.5-flash for new keys) can't break generation.
-    model: 'gemini-flash-latest',
-    contents: userPrompt,
-    config: config
-  });
-  return response.text;
 };
 
-export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null) => {
-  const { apiKey, aiProvider } = useSettingsStore.getState();
+const readCache = (key) => {
+  if (!key || typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeCache = (key, value) => {
+  if (!key || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage full or blocked — caching is best-effort, the generation still succeeded.
+  }
+};
+
+/** Errors that another attempt against the same cloud provider cannot fix. */
+const isExhaustedCloudQuota = (err) =>
+  err?.isPermanentRateLimit ||
+  err?.isPermanentFailure ||
+  err?.status === 429 ||
+  String(err?.message || err).includes('429') ||
+  String(err?.message || err).toLowerCase().includes('rate limit') ||
+  String(err?.message || err).toLowerCase().includes('quota');
+
+/**
+ * Generates content through the active provider and returns the raw response
+ * text. Callers get a plain string, exactly as before the multi-provider work.
+ */
+export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null, maxTokens = null) => {
+  const providerName = getActiveProviderName();
+  const provider = aiProviderFactory.get(providerName);
   const { recordUsage } = useAICostStore.getState();
+  const {
+    incrementSent, incrementSuccess, incrementFailed,
+    beginGeneration, endGeneration,
+    setLastError, clearLastError, setConnectionStatus
+  } = useAIDebugStore.getState();
 
-  if (aiProvider !== 'gemini') {
-    throw new Error(`Provider ${aiProvider} is not implemented yet.`);
-  }
-
-  const useBrowserKey = !!apiKey?.trim();
-  const { incrementSent, incrementSuccess, incrementFailed, beginGeneration, endGeneration, setLastError, clearLastError, setConnectionStatus } = useAIDebugStore.getState();
+  const settle = (responseText, usedProvider) => {
+    recordUsage(estimateTokens(systemPrompt + userPrompt), estimateTokens(responseText));
+    incrementSuccess();
+    clearLastError();
+    lastUsedProviderName = usedProvider;
+    return responseText;
+  };
 
   try {
     incrementSent();
     beginGeneration();
-    const responseText = useBrowserKey
-      ? await generateViaBrowserKey(apiKey, systemPrompt, userPrompt, jsonSchema)
-      : await generateViaProxy(systemPrompt, userPrompt, jsonSchema);
 
-    // Track costs
-    const inputTokens = estimateTokens(systemPrompt + userPrompt);
-    const outputTokens = estimateTokens(responseText);
-    recordUsage(inputTokens, outputTokens);
-    incrementSuccess();
-    clearLastError();
-    // A configured key is not a connection. Only a successful response earns it.
+    const cacheKey = await cacheKeyFor(systemPrompt, userPrompt, providerName);
+    const cached = readCache(cacheKey);
+    if (cached) {
+      console.log('[AI Cache] Reusing a cached response — no quota spent.');
+      // A configured key is not a connection. Only a successful response earns it.
+      setConnectionStatus('connected');
+      return settle(cached, providerName);
+    }
+
+    const responseText = await provider.generate({ systemPrompt, userPrompt, jsonSchema, maxTokens });
+    writeCache(cacheKey, responseText);
     setConnectionStatus('connected');
-
-    return responseText;
+    return settle(responseText, providerName);
   } catch (err) {
+    // Graceful degradation: when a cloud provider is out of quota we can finish
+    // the run locally for free, but only with the user's consent — the local
+    // model may need a multi-hundred-MB download first.
+    if (providerName !== 'webllm' && isExhaustedCloudQuota(err)) {
+      const consent = typeof window !== 'undefined' && window.confirm(
+        'Cloud AI quota exhausted.\n\n' +
+        'Your API key has run out of quota. The simulator can fall back to the ' +
+        'built-in local AI to finish this generation for free.\n\n' +
+        'The first local run downloads the model into your browser cache.\n\n' +
+        'Switch to the local AI and continue?'
+      );
+
+      if (!consent) {
+        incrementFailed();
+        setLastError('rate_limit', err.message || 'Cloud AI quota exhausted and local fallback was declined.');
+        throw err;
+      }
+
+      // Pin the project to WebLLM so the remaining sections don't re-prompt.
+      const currentProject = useProjectStore.getState().project;
+      if (currentProject) {
+        useProjectStore.getState().setProject({ ...currentProject, aiProvider: 'webllm' });
+      }
+
+      console.warn('[AIProvider] Cloud quota exhausted — falling back to the built-in local AI.');
+      setLastError('rate_limit', 'Cloud quota exhausted. Finishing the blueprint on the built-in local AI.');
+      setConnectionStatus('fallback');
+
+      try {
+        const responseText = await aiProviderFactory.webllm.generate({
+          systemPrompt, userPrompt, jsonSchema, maxTokens
+        });
+        writeCache(await cacheKeyFor(systemPrompt, userPrompt, 'webllm'), responseText);
+        return settle(responseText, 'webllm');
+      } catch (fallbackErr) {
+        incrementFailed();
+        setLastError('api_error', `Cloud AI and local fallback both failed: ${fallbackErr.message}`);
+        throw fallbackErr;
+      }
+    }
+
     incrementFailed();
-    console.error("Gemini API Error:", err);
-    if (err.status === 429) {
+    console.error(`[AIProvider] ${providerName} generation failed:`, err);
+
+    if (err.status === 429 || err.isRateLimit) {
       setLastError('rate_limit', 'Rate limit exceeded.');
       throw new Error('Rate limit exceeded.');
     }
@@ -76,7 +187,7 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
       throw new Error('Server AI is not configured (no Gemini key on the server).');
     }
     setLastError('api_error', err.message || 'Unknown API error');
-    throw new Error(`Gemini API failed: ${err.message}`);
+    throw err;
   } finally {
     endGeneration();
   }
