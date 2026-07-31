@@ -14,16 +14,20 @@ import {
   Trash2,
 } from "lucide-react";
 
-/**
- * Local-model panel. The engine lives in a module singleton, so this subscribes
- * to it directly rather than mirroring download state into a store.
- */
-function LocalModelPanel() {
+/** Shared view of the local engine: download progress, cache and VRAM state. */
+function useLocalModelState(enabled) {
   const [state, setState] = useState(() => modelManager.getState());
   const [cached, setCached] = useState(null);
 
-  useEffect(() => modelManager.subscribe(setState), []);
+  // Guarded on `enabled`: isInstalled() dynamically imports web-llm, so running
+  // this for a Gemini user would pull megabytes they never asked for.
   useEffect(() => {
+    if (!enabled) return undefined;
+    return modelManager.subscribe(setState);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
     let active = true;
     modelManager
       .isInstalled()
@@ -32,12 +36,29 @@ function LocalModelPanel() {
     return () => {
       active = false;
     };
-  }, [state.status]);
+  }, [enabled, state.status]);
 
-  const webgpuSupported =
-    typeof navigator !== "undefined" && !!navigator.gpu;
-  const downloading = state.status === "downloading";
-  const ready = state.status === "ready";
+  const webgpuSupported = typeof navigator !== "undefined" && !!navigator.gpu;
+  return {
+    ...state,
+    cached,
+    webgpuSupported,
+    downloading: state.status === "downloading",
+    ready: state.status === "ready",
+    // null while the cache lookup is still in flight.
+    checking: cached === null,
+    // Safe to generate: already in VRAM, or on disk so loading is quick.
+    usable: state.status === "ready" || cached === true
+  };
+}
+
+/**
+ * Local-model panel. The engine lives in a module singleton, so state comes
+ * from the shared hook above rather than being mirrored into a store.
+ */
+function LocalModelPanel({ model }) {
+  const { cached, webgpuSupported, downloading, ready } = model;
+  const state = model;
   const percent = Math.round((state.progress?.progress || 0) * 100);
 
   return (
@@ -210,7 +231,26 @@ export default function AISettingsModal({ onClose }) {
   const [localEnabled, setLocalEnabled] = useState(aiModeEnabled);
   const [localDevMode, setLocalDevMode] = useState(developerMode);
 
+  const usingLocal = localEnabled && localProvider === "webllm";
+  const localModel = useLocalModelState(usingLocal);
+
+  // Saving a local-model selection that cannot actually run would start a
+  // several-hundred-MB download on the first generation, where the progress
+  // bar is not visible — the app would simply look frozen.
+  const blockedReason = !usingLocal
+    ? null
+    : !localModel.webgpuSupported
+      ? "This browser has no WebGPU support, so the built-in AI cannot run here."
+      : localModel.downloading
+        ? "Wait for the model download to finish."
+        : localModel.checking
+          ? "Checking for the downloaded model…"
+          : !localModel.usable
+            ? "Download the model first — otherwise generation would stall on a large download with no visible progress."
+            : null;
+
   const handleSave = () => {
+    if (blockedReason) return;
     setApiKey(localKey);
     setOpenaiApiKey(localOpenaiKey);
     setAiProvider(localProvider);
@@ -382,7 +422,7 @@ export default function AISettingsModal({ onClose }) {
 
               {/* The local model needs no key — it gets a download panel instead. */}
               {localProvider === "webllm" ? (
-                <LocalModelPanel />
+                <LocalModelPanel model={localModel} />
               ) : (
                 /* API Key */
                 <div>
@@ -547,6 +587,21 @@ export default function AISettingsModal({ onClose }) {
             </div>
           )}
 
+          {blockedReason && (
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.75rem",
+                color: "var(--warning)",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <AlertTriangle size={12} /> {blockedReason}
+            </p>
+          )}
+
           <div
             style={{
               display: "flex",
@@ -568,11 +623,15 @@ export default function AISettingsModal({ onClose }) {
             </button>
             <button
               onClick={handleSave}
+              disabled={!!blockedReason}
+              title={blockedReason || undefined}
               className="btn-accent"
               style={{
                 padding: "10px 12px",
                 fontSize: "0.8rem",
                 borderRadius: "8px",
+                opacity: blockedReason ? 0.5 : 1,
+                cursor: blockedReason ? "not-allowed" : "pointer",
               }}
             >
               Save
