@@ -64,18 +64,12 @@ class ModelManager {
     return await hasModelInCache(this.modelId);
   }
   async initialize() {
-    console.log(`[ModelManager] initialize() called. Current status: ${this.status}`);
-    if (this.status === 'ready' && this.engine) {
-      console.log(`[ModelManager] initialize() returning existing engine (status: ready).`);
-      return this.engine;
-    }
+    if (this.status === 'ready' && this.engine) return this.engine;
     if (this.status === 'downloading') {
-      console.log(`[ModelManager] initialize() - already downloading, waiting for promise...`);
       // Wait for existing initialization to finish
       return new Promise((resolve, reject) => {
         const unsubscribe = this.subscribe((state) => {
           if (state.status === 'ready') {
-            console.log(`[ModelManager] initialize() - previous download finished, returning engine.`);
             unsubscribe();
             resolve(this.engine);
           } else if (state.status === 'error') {
@@ -126,9 +120,6 @@ class ModelManager {
           this._notify();
         }
       });
-      this.engine._debug_id = Date.now();
-      console.log(`[ModelManager] CreateMLCEngine returned. Engine identity: ${this.engine._debug_id}`);
-      
       const t1 = performance.now();
       
       if (!hasCached) {

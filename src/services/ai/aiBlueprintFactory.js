@@ -30,7 +30,6 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
     focusSections: sectionKeys
   });
 
-  const titles = sectionKeys.map(key => SECTION_TITLES[key] || key).join(', ');
   let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
   if (compact) {
@@ -45,6 +44,7 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
     const concepts = sectionKeys
       .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).flat())
       .slice(0, 6).join(', ');
+    const titles = sectionKeys.map(key => SECTION_TITLES[key] || key).join(', ');
     task = `\n\nTask: Write the "${titles}" section for this startup, in detailed Markdown.`;
     if (concepts) task += `\nCover concepts such as: ${concepts}.`;
     if (instruction) {

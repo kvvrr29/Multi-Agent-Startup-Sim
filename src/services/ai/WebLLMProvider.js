@@ -25,15 +25,13 @@ export class WebLLMProvider {
   async generate({ systemPrompt, userPrompt, jsonSchema, maxTokens }) {
     try {
       const t0 = performance.now();
-      const callStartIso = new Date().toISOString();
-      
+
       // Ensure engine is fully initialized before generating
       const engine = await modelManager.initialize();
       // Held so cancel()/the timeout can interrupt this exact engine.
       this._activeEngine = engine;
-      const tInit = performance.now();
-      const queueWaitTimeMs = Math.round(tInit - t0);
-      
+      const queueWaitTimeMs = Math.round(performance.now() - t0);
+
       const messages = [];
       if (systemPrompt) {
         messages.push({ role: 'system', content: systemPrompt });
@@ -60,34 +58,25 @@ export class WebLLMProvider {
         };
       }
 
-      const promptTokenEstimate = Math.ceil((systemPrompt?.length + userPrompt?.length) / 4);
-      
-      console.log(`\n=====================================================`);
-      console.log(`[Diagnostic] Prompt token estimate: ${promptTokenEstimate}`);
-      console.log(`[Diagnostic] Requested max_tokens: ${max_tokens}`);
-      console.log(`[Diagnostic] Queue wait time: ${queueWaitTimeMs}ms`);
-      
-      const generationStartTimeIso = new Date().toISOString();
-      console.log(`Generation start: ${generationStartTimeIso}`);
-      
+      logDiagnostic('GENERATION', {
+        'Prompt token estimate': Math.ceil((systemPrompt?.length + userPrompt?.length) / 4),
+        'Requested max_tokens': max_tokens,
+        'Queue wait time (ms)': queueWaitTimeMs
+      });
+
       let text = '';
       let firstTokenMs = null;
-      let actualTokens = 0;
       let finishReason = null;
-      
+
       const timeoutMs = 60000;
-      
+
       // We wrap the active generation in a timeout Promise race
       const generateWithTimeout = async () => {
         const stream = await engine.chat.completions.create(payload);
         for await (const chunk of stream) {
-          if (!firstTokenMs) {
-            firstTokenMs = performance.now();
-            console.log(`First token timestamp: ${new Date().toISOString()}`);
-          }
+          if (!firstTokenMs) firstTokenMs = performance.now();
           text += chunk.choices[0]?.delta?.content || '';
           finishReason = chunk.choices[0]?.finish_reason || finishReason;
-          actualTokens++;
         }
       };
 
@@ -109,14 +98,12 @@ export class WebLLMProvider {
         this._activeEngine = null;
       }
       
-      const tEnd = performance.now();
-      console.log(`Generation end: ${new Date().toISOString()}`);
-      
-      const outputTokensEstimate = Math.ceil(text.length / 4);
-      console.log(`Output token estimate: ${outputTokensEstimate}`);
-      console.log(`=====================================================\n`);
-      
-
+      logDiagnostic('GENERATION COMPLETE', {
+        'Time to first token (ms)': firstTokenMs ? Math.round(firstTokenMs - t0) : 'n/a',
+        'Total time (ms)': Math.round(performance.now() - t0),
+        'Output token estimate': Math.ceil(text.length / 4),
+        'Finish reason': finishReason || 'stop'
+      });
 
       if (!text) throw new Error('WebLLM returned an empty response.');
 

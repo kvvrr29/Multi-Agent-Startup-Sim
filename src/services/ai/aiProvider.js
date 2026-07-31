@@ -3,9 +3,9 @@ import { useAIDebugStore } from '../../store/useAIDebugStore';
 import { WebLLMProvider } from './WebLLMProvider';
 import { GeminiProvider } from './GeminiProvider';
 import { OpenAIProvider } from './OpenAIProvider';
-import { getActiveProviderName, getActiveProviderLabel } from './activeProvider';
+import { getActiveProviderName } from './activeProvider';
 
-export { getActiveProviderName, getActiveProviderLabel };
+export { getActiveProviderName };
 
 // Simple heuristic for tokens
 const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
