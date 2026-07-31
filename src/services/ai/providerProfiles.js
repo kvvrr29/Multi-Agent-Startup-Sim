@@ -42,6 +42,9 @@ const CLOUD_PROFILE = {
   // Small models rarely name every mandatory entity verbatim; large ones should.
   enforceDomainCriticals: true,
   templateDiagrams: false,
+  // Gemini and OpenAI enforce structure through their APIs; the reminder would
+  // just be noise in their prompts.
+  jsonHardening: false,
   maxTokens: null
 };
 
@@ -52,6 +55,8 @@ const LOCAL_PROFILE = {
   minSectionLength: 25,
   enforceDomainCriticals: false,
   templateDiagrams: true,
+  // Nothing enforces JSON here, so the prompt has to ask for it explicitly.
+  jsonHardening: true,
   maxTokens: 1500
 };
 

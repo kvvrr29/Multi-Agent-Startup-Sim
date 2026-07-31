@@ -1,4 +1,8 @@
 import { generateAIContent } from './aiProvider';
+import { getActiveProviderName } from './activeProvider';
+import { getProviderProfile } from './providerProfiles';
+import { withJsonHardening } from './agentPrompts';
+import { extractJson } from './validationLayer';
 import { SECTION_OWNERSHIP } from '../../config/sectionOwnership';
 
 // Derives the flat affectedSections/assignedAgents lists from a task list and
@@ -95,25 +99,36 @@ Rules:
 
   const userPrompt = `Project Context: ${projectContext}\nCategory Hint: ${categoryHint || 'Auto Detect'}\n\nUser Request: "${revisionInstruction}"`;
 
+  // Gemini's responseSchema uses its own uppercase Type enum; OpenAI and the
+  // local model expect standard lowercase JSON Schema. Sending the wrong
+  // casing is silently ignored and the model returns unstructured text.
+  const profile = getProviderProfile(getActiveProviderName());
+  const gemini = profile.schemaDialect === 'gemini';
+  const T = {
+    string: gemini ? 'STRING' : 'string',
+    array: gemini ? 'ARRAY' : 'array',
+    object: gemini ? 'OBJECT' : 'object'
+  };
+
   const schema = {
-    type: "OBJECT",
+    type: T.object,
     properties: {
       tasks: {
-        type: "ARRAY",
+        type: T.array,
         description: "One task per responsible agent.",
         items: {
-          type: "OBJECT",
+          type: T.object,
           properties: {
-            agent: { type: "STRING", description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
-            sections: { type: "ARRAY", description: "Section keys this task updates.", items: { type: "STRING" } },
-            taskDescription: { type: "STRING", description: "The specific sub-instruction for this agent." },
-            reason: { type: "STRING", description: "One sentence: why this agent was selected." }
+            agent: { type: T.string, description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
+            sections: { type: T.array, description: "Section keys this task updates.", items: { type: T.string } },
+            taskDescription: { type: T.string, description: "The specific sub-instruction for this agent." },
+            reason: { type: T.string, description: "One sentence: why this agent was selected." }
           },
           required: ["agent", "sections", "taskDescription", "reason"]
         }
       },
       confidence: {
-        type: "STRING",
+        type: T.string,
         description: "High, Medium, or Low"
       }
     },
@@ -121,8 +136,14 @@ Rules:
   };
 
   try {
-    const rawResponse = await generateAIContent(systemPrompt, userPrompt, schema);
-    const parsed = JSON.parse(rawResponse);
+    const rawResponse = await generateAIContent(
+      withJsonHardening(systemPrompt, profile),
+      userPrompt,
+      schema
+    );
+    // Small models wrap JSON in code fences or add preamble — a formatting
+    // quirk, not a wrong answer.
+    const parsed = extractJson(rawResponse);
     const normalized = normalizeRouting(parsed.tasks, parsed.confidence || 'Medium');
     if (normalized.tasks.length === 0) {
       throw new Error('AI routing returned no valid tasks.');

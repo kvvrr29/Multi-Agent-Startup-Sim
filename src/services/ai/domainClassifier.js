@@ -2,7 +2,7 @@ import { generateAIContent } from './aiProvider';
 import { getActiveProviderName, getProviderSourceLabel } from './activeProvider';
 import { getProviderProfile } from './providerProfiles';
 import { extractJson } from './validationLayer';
-import { DOMAIN_CLASSIFIER_PROMPT } from './agentPrompts';
+import { DOMAIN_CLASSIFIER_PROMPT, withJsonHardening } from './agentPrompts';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 
 export const classifyDomain = async (projectName, projectDescription) => {
@@ -52,7 +52,7 @@ export const classifyDomain = async (projectName, projectDescription) => {
     let parsed = null;
     try {
       attempts++;
-      rawResponse = await generateAIContent(systemPrompt, userPrompt, schema);
+      rawResponse = await generateAIContent(withJsonHardening(systemPrompt, profile), userPrompt, schema);
       parsed = extractJson(rawResponse);
       
       const isSoftwareDomain = parsed.domain.toLowerCase().includes('software') || parsed.industry.toLowerCase().includes('software');

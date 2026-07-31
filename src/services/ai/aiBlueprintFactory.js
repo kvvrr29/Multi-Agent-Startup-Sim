@@ -1,7 +1,7 @@
 import { generateAIContent } from './aiProvider';
 import { getActiveProviderName, getProviderSourceLabel } from './activeProvider';
 import { getProviderProfile, getSectionMaxTokens, DIAGRAM_SECTIONS } from './providerProfiles';
-import { AGENT_SYSTEM_PROMPTS } from './agentPrompts';
+import { AGENT_SYSTEM_PROMPTS, withJsonHardening } from './agentPrompts';
 import { buildContextString } from './contextBuilder';
 import { validateAIResponse, createResponseSchema, buildRetryFeedback, SECTION_CONCEPT_GROUPS } from './validationLayer';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
@@ -233,8 +233,9 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
   const providerName = getActiveProviderName();
   const profile = getProviderProfile(providerName);
   const sourceLabel = getProviderSourceLabel(providerName);
+  const hardenedPrompt = withJsonHardening(systemPrompt, profile);
 
   return profile.strategy === 'perSection'
-    ? generatePerSection(agentRole, instruction, systemPrompt, profile, providerName, sourceLabel)
-    : generateBatch(agentRole, instruction, systemPrompt, profile, providerName, sourceLabel);
+    ? generatePerSection(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel)
+    : generateBatch(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel);
 };
