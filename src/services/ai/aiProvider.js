@@ -68,10 +68,6 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
       setLastError('rate_limit', 'Rate limit exceeded.');
       throw new Error('Rate limit exceeded.');
     }
-    if (err.status === 501 || err.code === 'not_configured') {
-      setLastError('api_error', 'Server AI is not configured yet.');
-      throw new Error('Server AI is not configured (no Gemini key on the server).');
-    }
     setLastError('api_error', err.message || 'Unknown API error');
     throw err;
   } finally {

@@ -5,6 +5,13 @@ const loadWebLLM = () => import('@mlc-ai/web-llm');
 // Recommended sub-500MB model for Startup Simulator
 const DEFAULT_MODEL = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
 
+// web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
+// completed, 56 secs elapsed. It can take a while when we first visit this
+// page…". The percentage already has its own readout and the trailing advice
+// is written for a demo page, so keep only the leading shard/size clause.
+const shortenProgressText = (text = '') =>
+  text.replace(/\s*\d+% completed.*$/s, '').trim();
+
 const logDiagnostic = (section, data) => {
   if (!import.meta.env.DEV) return;
   console.log(`\n==============================\n${section}\n==============================`);
@@ -22,6 +29,11 @@ class ModelManager {
     this.progress = { text: '', progress: 0, loaded: 0, total: 0 };
     this.status = 'uninitialized'; // 'uninitialized', 'downloading', 'ready', 'error'
     this.listeners = new Set();
+    // Bumped whenever the on-disk cache changes. Subscribers key their
+    // hasModelInCache() lookup off this, because a delete can leave `status`
+    // untouched (removing a cached-but-not-loaded model) and would otherwise
+    // leave the UI claiming the model is still installed.
+    this.cacheEpoch = 0;
   }
 
   subscribe(listener) {
@@ -42,6 +54,7 @@ class ModelManager {
       status: this.status,
       progress: this.progress,
       modelId: this.modelId,
+      cacheEpoch: this.cacheEpoch,
       isInstalled: this.status === 'ready'
     };
   }
@@ -106,7 +119,7 @@ class ModelManager {
       });
       this.engine = await CreateMLCEngine(this.modelId, {
         initProgressCallback: (info) => {
-          this.progress = info;
+          this.progress = { ...info, text: shortenProgressText(info.text) };
           if (import.meta.env.DEV && !hasCached) {
             console.log(`[Diagnostic Download] Progress: ${Math.round(info.progress * 100)}% | ${info.text}`);
           }
@@ -150,12 +163,27 @@ class ModelManager {
   async removeModel() {
     try {
       const { deleteModelAllInfoInCache } = await loadWebLLM();
+      // Free the GPU buffers first. Dropping the reference alone leaves the
+      // weights in VRAM until GC gets around to it, so a user who removes the
+      // model after generating keeps paying for it until the page reloads.
+      if (this.engine) {
+        try {
+          await this.engine.unload();
+        } catch (err) {
+          console.warn('[ModelManager] Engine unload failed; continuing with cache delete:', err);
+        }
+      }
+      this.engine = null;
       await deleteModelAllInfoInCache(this.modelId);
       this.status = 'uninitialized';
-      this.engine = null;
+      this.cacheEpoch++;
       this._notify();
     } catch (err) {
       console.error('[ModelManager] Failed to remove model:', err);
+      this.status = 'error';
+      this.progress = { text: `Could not remove the model: ${err.message}`, progress: 0 };
+      this._notify();
+      throw err;
     }
   }
 }

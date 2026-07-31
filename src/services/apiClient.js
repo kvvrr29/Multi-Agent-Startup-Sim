@@ -50,7 +50,5 @@ export const api = {
   appendEvents: (id, events) => request(`/api/projects/${id}/events`, { method: 'POST', body: { events } }),
   upsertMemory: (id, body) => request(`/api/projects/${id}/memory`, { method: 'PUT', body }),
   appendDecisions: (id, decisions) => request(`/api/projects/${id}/decisions`, { method: 'POST', body: { decisions } }),
-  deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
-  generate: (systemPrompt, userPrompt, jsonSchema) =>
-    request('/api/ai/generate', { method: 'POST', body: { systemPrompt, userPrompt, jsonSchema } })
+  deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' })
 };

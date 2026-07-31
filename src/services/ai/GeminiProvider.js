@@ -1,6 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { api } from '../apiClient';
 import { useProjectStore } from '../../store/useProjectStore';
 
 // Gemini Free Tier: 15 requests per minute = 1 every 4s.
@@ -91,17 +90,14 @@ export class GeminiProvider {
 
   async initialize() {
     const { apiKey } = useSettingsStore.getState();
-    if (apiKey?.trim()) {
-      this.client = new GoogleGenAI({ apiKey: apiKey.trim() });
-    } else {
-      this.client = null; // Proxy mode
-    }
+    this.client = apiKey?.trim() ? new GoogleGenAI({ apiKey: apiKey.trim() }) : null;
     return this.client;
   }
 
   isReady() {
-    // Gemini is always ready (direct key OR server proxy)
-    return true;
+    // The user's own key is the only way in — there is no server-side proxy.
+    const { apiKey } = useSettingsStore.getState();
+    return !!apiKey?.trim();
   }
 
   /**
@@ -114,27 +110,20 @@ export class GeminiProvider {
 
     try {
       return await withApiTimeout(async () => {
-        if (this.client) {
-          // Browser Mode: user provided API key
-          const config = {
-            systemInstruction: systemPrompt || undefined,
-            temperature: 0.7,
-          };
-          if (jsonSchema) {
-            config.responseMimeType = 'application/json';
-            config.responseSchema = jsonSchema;
-          }
-          const response = await this.client.models.generateContent({
-            model: 'gemini-flash-latest',
-            contents: userPrompt,
-            config,
-          });
-          return response.text;
-        } else {
-          // Server Proxy Mode: no browser key
-          const payload = await api.generate(systemPrompt, userPrompt, jsonSchema);
-          return payload.text;
+        const config = {
+          systemInstruction: systemPrompt || undefined,
+          temperature: 0.7,
+        };
+        if (jsonSchema) {
+          config.responseMimeType = 'application/json';
+          config.responseSchema = jsonSchema;
         }
+        const response = await this.client.models.generateContent({
+          model: 'gemini-flash-latest',
+          contents: userPrompt,
+          config,
+        });
+        return response.text;
       });
     } catch (err) {
       if (isRateLimitError(err)) {
@@ -145,9 +134,6 @@ export class GeminiProvider {
         rich.isRateLimit = true;
         rich.retryDelayMs = delayMs;
         throw rich;
-      }
-      if (err.status === 501 || err.code === 'not_configured') {
-        throw new Error('Server AI is not configured. Set GEMINI_API_KEY on the server or provide an API key in Settings.');
       }
       throw err;
     }
@@ -160,6 +146,12 @@ export class GeminiProvider {
    */
   async generate({ systemPrompt, userPrompt, jsonSchema, maxTokens }) {
     await this.initialize();
+
+    if (!this.client) {
+      const err = new Error('Gemini API key is not set. Go to Settings and add your key.');
+      err.isPermanentFailure = true;
+      throw err;
+    }
 
     let attempt = 0;
     while (true) {
