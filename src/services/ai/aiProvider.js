@@ -1,10 +1,9 @@
 import { useAICostStore } from '../../store/useAICostStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
-import { useProjectStore } from '../../store/useProjectStore';
 import { WebLLMProvider } from './WebLLMProvider';
 import { GeminiProvider } from './GeminiProvider';
 import { OpenAIProvider } from './OpenAIProvider';
-import { PROVIDER_LABELS, getActiveProviderName, getActiveProviderLabel } from './activeProvider';
+import { getActiveProviderName, getActiveProviderLabel } from './activeProvider';
 
 export { getActiveProviderName, getActiveProviderLabel };
 
@@ -26,11 +25,6 @@ class AIProviderFactory {
 }
 
 export const aiProviderFactory = new AIProviderFactory();
-
-/** The provider that actually served the most recent successful generation. */
-let lastUsedProviderName = null;
-export const getLastUsedProviderLabel = () =>
-  lastUsedProviderName ? (PROVIDER_LABELS[lastUsedProviderName] || lastUsedProviderName) : null;
 
 /**
  * Prompt cache. Identical (systemPrompt, userPrompt, provider) triples are
@@ -65,15 +59,6 @@ const writeCache = (key, value) => {
   }
 };
 
-/** Errors that another attempt against the same cloud provider cannot fix. */
-const isExhaustedCloudQuota = (err) =>
-  err?.isPermanentRateLimit ||
-  err?.isPermanentFailure ||
-  err?.status === 429 ||
-  String(err?.message || err).includes('429') ||
-  String(err?.message || err).toLowerCase().includes('rate limit') ||
-  String(err?.message || err).toLowerCase().includes('quota');
-
 /**
  * Generates content through the active provider and returns the raw response
  * text. Callers get a plain string, exactly as before the multi-provider work.
@@ -88,11 +73,10 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     setLastError, clearLastError, setConnectionStatus
   } = useAIDebugStore.getState();
 
-  const settle = (responseText, usedProvider) => {
+  const settle = (responseText) => {
     recordUsage(estimateTokens(systemPrompt + userPrompt), estimateTokens(responseText));
     incrementSuccess();
     clearLastError();
-    lastUsedProviderName = usedProvider;
     return responseText;
   };
 
@@ -106,55 +90,19 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
       console.log('[AI Cache] Reusing a cached response — no quota spent.');
       // A configured key is not a connection. Only a successful response earns it.
       setConnectionStatus('connected');
-      return settle(cached, providerName);
+      return settle(cached);
     }
 
     const responseText = await provider.generate({ systemPrompt, userPrompt, jsonSchema, maxTokens });
     writeCache(cacheKey, responseText);
     setConnectionStatus('connected');
-    return settle(responseText, providerName);
+    return settle(responseText);
   } catch (err) {
-    // Graceful degradation: when a cloud provider is out of quota we can finish
-    // the run locally for free, but only with the user's consent — the local
-    // model may need a multi-hundred-MB download first.
-    if (providerName !== 'webllm' && isExhaustedCloudQuota(err)) {
-      const consent = typeof window !== 'undefined' && window.confirm(
-        'Cloud AI quota exhausted.\n\n' +
-        'Your API key has run out of quota. The simulator can fall back to the ' +
-        'built-in local AI to finish this generation for free.\n\n' +
-        'The first local run downloads the model into your browser cache.\n\n' +
-        'Switch to the local AI and continue?'
-      );
-
-      if (!consent) {
-        incrementFailed();
-        setLastError('rate_limit', err.message || 'Cloud AI quota exhausted and local fallback was declined.');
-        throw err;
-      }
-
-      // Pin the project to WebLLM so the remaining sections don't re-prompt.
-      const currentProject = useProjectStore.getState().project;
-      if (currentProject) {
-        useProjectStore.getState().setProject({ ...currentProject, aiProvider: 'webllm' });
-      }
-
-      console.warn('[AIProvider] Cloud quota exhausted — falling back to the built-in local AI.');
-      setLastError('rate_limit', 'Cloud quota exhausted. Finishing the blueprint on the built-in local AI.');
-      setConnectionStatus('fallback');
-
-      try {
-        const responseText = await aiProviderFactory.webllm.generate({
-          systemPrompt, userPrompt, jsonSchema, maxTokens
-        });
-        writeCache(await cacheKeyFor(systemPrompt, userPrompt, 'webllm'), responseText);
-        return settle(responseText, 'webllm');
-      } catch (fallbackErr) {
-        incrementFailed();
-        setLastError('api_error', `Cloud AI and local fallback both failed: ${fallbackErr.message}`);
-        throw fallbackErr;
-      }
-    }
-
+    // No cross-provider rescue here. A quota failure propagates to
+    // simulationEngine, which already falls back to the template factory —
+    // a predictable result that needs no download and cannot surprise the
+    // user mid-run. Switching to the local model from this depth would also
+    // hand it a prompt built for a cloud model and grade it on cloud gates.
     incrementFailed();
     console.error(`[AIProvider] ${providerName} generation failed:`, err);
 

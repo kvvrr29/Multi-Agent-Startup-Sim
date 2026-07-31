@@ -65,9 +65,13 @@ export class OpenAIProvider {
     const requestOptions = {
       model: DEFAULT_MODEL,
       messages,
-      max_tokens: maxTokens || 2048,
       temperature: 0.7,
     };
+
+    // Only cap output when a caller explicitly asks. Left unset, the model
+    // stops on its own, matching Gemini. A fixed ceiling here used to truncate
+    // multi-section responses into unparseable JSON.
+    if (maxTokens) requestOptions.max_tokens = maxTokens;
 
     // If JSON schema requested, use structured output response format
     if (jsonSchema) {

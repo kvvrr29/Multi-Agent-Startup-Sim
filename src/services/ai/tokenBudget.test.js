@@ -1,0 +1,111 @@
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { WebLLMProvider } from './WebLLMProvider';
+import { OpenAIProvider } from './OpenAIProvider';
+import { SECTION_MAX_TOKENS, getProviderProfile, getSectionMaxTokens } from './providerProfiles';
+import { modelManager } from './ModelManager';
+import { useSettingsStore } from '../../store/useSettingsStore';
+
+/** Minimal stand-in for the streamed chat completion API. */
+const fakeEngine = (chunks) => ({
+  chat: { completions: { create: vi.fn().mockResolvedValue({
+    async *[Symbol.asyncIterator]() { for (const c of chunks) yield c; }
+  }) } }
+});
+
+const contentChunk = (text, finish = null) => ({
+  choices: [{ delta: { content: text }, finish_reason: finish }]
+});
+
+describe('WebLLM honours the caller token budget', () => {
+  let provider;
+
+  beforeEach(() => {
+    provider = new WebLLMProvider();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes the requested budget through to the engine', async () => {
+    const engine = fakeEngine([contentChunk('{"a":1}', 'stop')]);
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    await provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 800 });
+
+    expect(engine.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ max_tokens: 800 })
+    );
+  });
+
+  it('falls back to the default only when no budget is supplied', async () => {
+    const engine = fakeEngine([contentChunk('{"a":1}', 'stop')]);
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    await provider.generate({ systemPrompt: 's', userPrompt: 'u' });
+
+    expect(engine.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({ max_tokens: 1500 })
+    );
+  });
+
+  it('reports truncation distinctly instead of returning unparseable JSON', async () => {
+    // finish_reason 'length' == the budget cut generation off mid-object.
+    const engine = fakeEngine([contentChunk('{"executiveSummary":"an unterminated str', 'length')]);
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    await expect(
+      provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 20 })
+    ).rejects.toMatchObject({ isTruncated: true });
+  });
+
+  it('does not flag a normally-completed response as truncated', async () => {
+    const engine = fakeEngine([contentChunk('{"a":1}', 'stop')]);
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    await expect(
+      provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 800 })
+    ).resolves.toBe('{"a":1}');
+  });
+});
+
+describe('cloud providers are uncapped', () => {
+  afterEach(() => {
+    useSettingsStore.setState({ openaiApiKey: '' });
+  });
+
+  it('omits max_tokens entirely when no budget is given', async () => {
+    useSettingsStore.setState({ openaiApiKey: 'sk-test' });
+    const provider = new OpenAIProvider();
+    const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: '{"a":1}' } }] });
+    vi.spyOn(provider, 'initialize').mockImplementation(async () => {
+      provider.client = { chat: { completions: { create } } };
+    });
+
+    await provider.generate({ systemPrompt: 's', userPrompt: 'u' });
+
+    expect(create.mock.calls[0][0]).not.toHaveProperty('max_tokens');
+  });
+
+  it('gives cloud profiles no per-section budget at all', () => {
+    const cloud = getProviderProfile('gemini');
+    expect(getSectionMaxTokens('executiveSummary', cloud)).toBeNull();
+    expect(getSectionMaxTokens('architecture', getProviderProfile('openai'))).toBeNull();
+  });
+});
+
+describe('section budgets leave headroom', () => {
+  it('never budgets a section so tightly that truncation is likely', () => {
+    // Truncated JSON is unrecoverable, so every section needs real headroom.
+    for (const [section, budget] of Object.entries(SECTION_MAX_TOKENS)) {
+      expect(budget, `${section} budget is too tight`).toBeGreaterThanOrEqual(700);
+    }
+  });
+
+  it('gives the local model a budget for every section it can be asked for', () => {
+    const local = getProviderProfile('webllm');
+    for (const section of Object.keys(SECTION_MAX_TOKENS)) {
+      expect(getSectionMaxTokens(section, local)).toBe(SECTION_MAX_TOKENS[section]);
+    }
+  });
+});

@@ -1,5 +1,8 @@
 import { modelManager } from './ModelManager';
 
+// Only used when a caller supplies no budget of its own.
+const DEFAULT_MAX_TOKENS = 1500;
+
 const logDiagnostic = (section, data) => {
   if (!import.meta.env.DEV) return;
   console.log(`\n==============================\n${section}\n==============================`);
@@ -19,7 +22,7 @@ export class WebLLMProvider {
     return modelManager.getState().status === 'ready';
   }
 
-  async generate({ systemPrompt, userPrompt, jsonSchema }) {
+  async generate({ systemPrompt, userPrompt, jsonSchema, maxTokens }) {
     try {
       const t0 = performance.now();
       const callStartIso = new Date().toISOString();
@@ -35,8 +38,10 @@ export class WebLLMProvider {
       }
       messages.push({ role: 'user', content: userPrompt });
 
-      const isDomainClassifier = systemPrompt?.includes('domain classifier');
-      const max_tokens = isDomainClassifier ? 150 : 1500;
+      // The caller's per-section budget wins. It bounds worst-case generation
+      // time and stops the model looping, which small models do. The 1500
+      // default only applies when a caller supplies nothing.
+      const max_tokens = maxTokens || DEFAULT_MAX_TOKENS;
 
       const payload = {
         model: modelManager.modelId,
@@ -66,6 +71,7 @@ export class WebLLMProvider {
       let text = '';
       let firstTokenMs = null;
       let actualTokens = 0;
+      let finishReason = null;
       
       const timeoutMs = 60000;
       
@@ -78,6 +84,7 @@ export class WebLLMProvider {
             console.log(`First token timestamp: ${new Date().toISOString()}`);
           }
           text += chunk.choices[0]?.delta?.content || '';
+          finishReason = chunk.choices[0]?.finish_reason || finishReason;
           actualTokens++;
         }
       };
@@ -99,6 +106,20 @@ export class WebLLMProvider {
 
 
       if (!text) throw new Error('WebLLM returned an empty response.');
+
+      // finish_reason 'length' means the budget cut generation off. For JSON
+      // that is unrecoverable — an unterminated string cannot be repaired by
+      // the parser — so surface it as a distinct, retryable condition rather
+      // than letting it fail later as "bad content".
+      if (finishReason === 'length') {
+        const err = new Error(
+          `WebLLM response was truncated at the ${max_tokens}-token budget.`
+        );
+        err.isTruncated = true;
+        err.partialText = text;
+        throw err;
+      }
+
       return text;
     } catch (err) {
       logDiagnostic('ERRORS', {

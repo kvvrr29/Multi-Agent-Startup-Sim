@@ -72,27 +72,30 @@ export const getProviderProfile = (providerName) =>
   PROFILES[providerName] || CLOUD_PROFILE;
 
 /**
- * Output budget per section for the per-section strategy. Prose sections get
- * room to breathe; diagrams are short but must not be truncated mid-syntax.
+ * Output budget per section for the per-section strategy.
+ *
+ * These bound worst-case generation time and stop a small model looping. They
+ * are deliberately generous: hitting the ceiling truncates the JSON mid-string,
+ * which no parser can repair, so an unused token is far cheaper than a retry.
  */
 export const SECTION_MAX_TOKENS = {
-  executiveSummary: 700,
-  targetUsers: 600,
-  businessModel: 700,
-  budgetCostEstimate: 600,
-  risksMitigation: 700,
-  problemStatement: 600,
-  proposedSolution: 700,
-  mvpScope: 700,
-  keyFeatures: 700,
-  productRoadmap: 700,
-  timeline: 600,
-  architecture: 900,
-  technologyStack: 600,
-  umlDiagram: 500,
-  erDiagram: 500,
-  marketingStrategy: 700,
-  finalRecommendations: 700
+  executiveSummary: 800,
+  targetUsers: 700,
+  businessModel: 800,
+  budgetCostEstimate: 700,
+  risksMitigation: 800,
+  problemStatement: 700,
+  proposedSolution: 800,
+  mvpScope: 800,
+  keyFeatures: 900,
+  productRoadmap: 800,
+  timeline: 700,
+  architecture: 1000,
+  technologyStack: 700,
+  umlDiagram: 800,
+  erDiagram: 800,
+  marketingStrategy: 800,
+  finalRecommendations: 800
 };
 
 export const getSectionMaxTokens = (sectionKey, profile) =>

@@ -161,13 +161,18 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
     let sectionDone = false;
     let bestEffort = null;
     let lastReason = null;
+    let wasTruncated = false;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS && !sectionDone; attempt++) {
       let rawResponse = null;
       try {
-        const prompt = attempt === 1
-          ? basePrompt
-          : `${basePrompt}\n\nThe previous attempt was rejected: ${lastReason}\nReturn ONLY {"${sectionKey}": "your content"} with a non-empty value.`;
+        // A truncated attempt ran out of room rather than misunderstanding the
+        // task, so the retry asks for brevity instead of repeating the request.
+        const retryHint = wasTruncated
+          ? `\n\nThe previous attempt ran past the length limit and was cut off. Be significantly more concise — a few short paragraphs at most — and make sure the JSON object is closed.`
+          : `\n\nThe previous attempt was rejected: ${lastReason}\nReturn ONLY {"${sectionKey}": "your content"} with a non-empty value.`;
+
+        const prompt = attempt === 1 ? basePrompt : `${basePrompt}${retryHint}`;
 
         rawResponse = await generateAIContent(systemPrompt, prompt, schema, maxTokens);
         const validation = validateAIResponse(rawResponse, [sectionKey], { agentRole, domain, industry, mandatoryKeywords, providerName });
@@ -181,12 +186,14 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
           break;
         }
 
+        wasTruncated = false;
         if (validation.content?.[sectionKey]) bestEffort = validation.content[sectionKey];
         lastReason = `Validation failed (overall ${validation.scores.overall}%): ${validation.issues.join(' ')}`;
         pushLog({ agent: agentRole, prompt: prompt.slice(0, 400), rawResponse: rawResponse.slice(0, 800), parsedJson: validation.content, scores: validation.scores, validationResult: 'FAILED', fallbackReason: lastReason });
       } catch (err) {
+        wasTruncated = !!err.isTruncated;
         lastReason = err.message || 'Unknown error';
-        pushLog({ agent: agentRole, prompt: basePrompt.slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || null, parsedJson: null, scores: null, validationResult: 'FAILED', fallbackReason: lastReason });
+        pushLog({ agent: agentRole, prompt: basePrompt.slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || err.partialText?.slice(0, 800) || null, parsedJson: null, scores: null, validationResult: 'FAILED', fallbackReason: lastReason });
       }
     }
 

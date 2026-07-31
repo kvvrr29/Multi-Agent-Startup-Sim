@@ -30,7 +30,7 @@ describe('provider profiles', () => {
 
   it('gives cloud providers no token ceiling and the local model a per-section budget', () => {
     expect(getSectionMaxTokens('architecture', getProviderProfile('gemini'))).toBeNull();
-    expect(getSectionMaxTokens('architecture', getProviderProfile('webllm'))).toBe(900);
+    expect(getSectionMaxTokens('architecture', getProviderProfile('webllm'))).toBe(1000);
     // Unknown sections still get the profile default rather than undefined.
     expect(getSectionMaxTokens('madeUpSection', getProviderProfile('webllm'))).toBe(1500);
   });
