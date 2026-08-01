@@ -23,6 +23,23 @@ const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
 const TRIM_STEPS = [1600, 800, 400, 240, 120];
 
 /**
+ * How much of a section an agent sees when it is not the one writing it.
+ *
+ * This was 240 — about 11% of a 350-word section, or its opening sentence cut
+ * mid-word. The pipeline is sequential, so that was the entire view each agent
+ * had of its predecessors' work: the Developer designed an architecture having
+ * seen two of eight key features, and the Mediator wrote recommendations
+ * "synthesized from the whole blueprint" from seventeen truncated openings.
+ *
+ * 240 made sense when the local engine ran a 4096 window and every token was
+ * contested. At 8192 the heaviest call — the Mediator's — uses ~2400 of a 5892
+ * budget, so the allowance was costing quality to save room nothing needed.
+ * 800 puts that call at roughly 4800, still inside budget, and the trim loop
+ * below still claws it back on the blueprints that genuinely do not fit.
+ */
+const NON_FOCUS_LIMIT = 800;
+
+/**
  * Builds the context block every agent request is grounded in.
  *
  * Both providers get the same context. The shape of the brief is a property of
@@ -117,24 +134,33 @@ export const buildContextString = (
   }
 
   // `trimTo` is the ceiling for sections this call is not writing. null means
-  // the original rule: approved sections in full, the rest cut at 240 chars.
+  // the standard rule: approved sections in full, the rest at NON_FOCUS_LIMIT.
   const renderBlueprintState = (trimTo = null) => {
+    // An agent always receives the sections it is writing in full — trimming
+    // those would break the revision it was asked to make. Approved sections
+    // are settled facts and are only trimmed under budget pressure.
+    const limitFor = (section, isFocus) => {
+      if (isFocus) return null;
+      const allowance = section.status === 'approved' ? null : NON_FOCUS_LIMIT;
+      if (trimTo === null) return allowance;
+      // A trim step can only ever tighten. Steps wider than the standard
+      // allowance exist to cut approved sections down from full length; applied
+      // to a pending one they would inflate the context the loop was called on
+      // to shrink, wasting an iteration.
+      return allowance === null ? trimTo : Math.min(trimTo, allowance);
+    };
+
     let state = '';
     Object.keys(blueprint).forEach(key => {
       const section = blueprint[key];
       if (!section || !section.content) return;
       const isFocus = focus ? focus.has(key) : SECTION_OWNERSHIP[key] === agentRole;
       // In compact mode everything outside the focus set is dropped rather than
-      // truncated: 240 characters of an unrelated section is enough to bias a
-      // small model's topic without being enough to inform it.
+      // truncated: a fragment of an unrelated section is enough to bias a small
+      // model's topic without being enough to inform it.
       if (compact && !isFocus) return;
       state += `[${section.title}] (Status: ${section.status})\n`;
-      // An agent always receives the sections it is writing in full — trimming
-      // those would break the revision it was asked to make. Approved sections
-      // are settled facts and are only trimmed under budget pressure.
-      const limit = isFocus
-        ? null
-        : trimTo ?? (section.status === 'approved' ? null : 240);
+      const limit = limitFor(section, isFocus);
       const content = limit === null
         ? section.content
         : `${section.content.substring(0, limit)}${section.content.length > limit ? '…' : ''}`;

@@ -338,7 +338,9 @@ export const applyRevisionSimulation = async (previewData) => {
 
       if (aiModeEnabled) {
          try {
-           const result = await generateAgentContent(targetAgent, taskDescription || instruction);
+           // taskSections, not the agent's whole responsibility list: a
+           // revision routed to one section should cost one section's work.
+           const result = await generateAgentContent(targetAgent, taskDescription || instruction, taskSections);
            if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] };
            store.updateAgentStatus(targetAgent, AGENT_STATUS.REVIEWING, 'Reviewing generated changes');
            const changedSections = [];

@@ -23,7 +23,7 @@ const MAX_ATTEMPTS = 2;
  * prompt chain ever states a length, so a model that is not verbose by default
  * has no reason to write more than a sentence.
  */
-const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null) => {
+const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null, { brevity = false } = {}) => {
   const perSection = profile.strategy === 'perSection';
   // Both providers now get the identical brief. The local model only differs in
   // carrying a budget, which trims the blueprint state if — and only if — the
@@ -33,7 +33,15 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
     maxContextTokens: getMaxContextTokens(profile, sectionMaxTokens)
   });
 
-  let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
+  let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}.`;
+  if (instruction) {
+    // A revision has to say so in the task. Left to the context alone, the
+    // instruction sits under a heading several thousand tokens up and the task
+    // still reads as a request for a fresh write — so the model produces one,
+    // discarding whatever the section already said.
+    task += ` Rewrite each one so it applies this instruction to its current text shown above: ${instruction}. Keep whatever the instruction does not ask you to change.`;
+  }
+  task += ` ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
   if (perSection) {
     // A small model needs the shape spelled out; the schema alone is advisory
@@ -54,7 +62,12 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
       task += `\nApply this instruction to the current text shown above: ${instruction}`;
     }
     task += `\n\nRequirements:`;
-    task += `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
+    // The length target is stated once, here. A truncated attempt needs the
+    // opposite target, so it replaces this line rather than arguing with it
+    // further down the prompt — a small model given both writes neither.
+    task += brevity
+      ? `\n- The previous attempt ran past the length limit and was cut off. Write 2 to 3 compact paragraphs and make sure the JSON object is closed.`
+      : `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
     task += `\n- ${SPECIFICITY_DIRECTIVE} Do not write filler or restate the task.`;
     task += `\n- ${NO_MERMAID_DIRECTIVE}`;
     task += `\n- Respond with ONLY valid JSON in this exact shape: {${sectionKeys.map(k => `"${k}": "..."`).join(', ')}}`;
@@ -81,6 +94,36 @@ const buildTemplateDiagram = (sectionKey, sectionTitle) => {
   return `### ${sectionTitle}\n\nA baseline structure for this project, generated locally as a starting point to refine.\n\n${diagram}`;
 };
 
+/**
+ * Which sections this call actually writes.
+ *
+ * Initial generation passes nothing and gets everything the agent owns. A
+ * revision passes the sections it routed, and gets only those: regenerating
+ * the agent's whole responsibility list and discarding the sections the
+ * revision never asked about costs a batch provider a much larger response
+ * and costs the per-section provider an entire extra call per unused section.
+ *
+ * The requested list is intersected with ownership rather than trusted — the
+ * router's output reaches here, and an agent must never write a section it
+ * does not own. Ordering follows the canonical list, not the routing payload.
+ */
+const resolveSections = (agentRole, targetSections) => {
+  const owned = AGENT_RESPONSIBILITIES[agentRole] || [];
+  if (!targetSections?.length) return owned;
+
+  const requested = owned.filter(key => targetSections.includes(key));
+  if (requested.length === 0) {
+    // normalizeRouting already drops tasks whose sections fail this same
+    // ownership check, so an empty result means the caller built the task by
+    // hand and got it wrong. Falling back to `owned` would silently reinstate
+    // the over-generation this exists to prevent.
+    throw new Error(
+      `No section owned by ${agentRole} in the requested set: ${targetSections.join(', ')}.`
+    );
+  }
+  return requested;
+};
+
 const readScope = () => {
   const memoryStore = useProjectMemoryStore.getState();
   const keywordsStr = memoryStore.memory?.scope?.mandatory_entities || '';
@@ -105,8 +148,7 @@ const buildResult = (content, decisions, scores, stages, source, agentRole) => (
  * Single call covering every section the agent owns, with one feedback-driven
  * retry. This is the original behaviour and remains the path for cloud models.
  */
-const generateBatch = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel) => {
-  const sectionsToGenerate = AGENT_RESPONSIBILITIES[agentRole] || [];
+const generateBatch = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const schema = createResponseSchema(sectionsToGenerate, { dialect: profile.schemaDialect });
   const userPrompt = buildUserPrompt(sectionsToGenerate, instruction, agentRole, profile);
 
@@ -158,8 +200,7 @@ const generateBatch = async (agentRole, instruction, systemPrompt, profile, prov
  * its best parseable attempt rather than failing the whole agent; only a total
  * washout throws.
  */
-const generatePerSection = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel) => {
-  const sectionsToGenerate = AGENT_RESPONSIBILITIES[agentRole] || [];
+const generatePerSection = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const { domain, industry, mandatoryKeywords } = readScope();
   const { setSource, pushLog } = useAIDebugStore.getState();
 
@@ -193,12 +234,15 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
       let rawResponse = null;
       try {
         // A truncated attempt ran out of room rather than misunderstanding the
-        // task, so the retry asks for brevity instead of repeating the request.
-        const retryHint = wasTruncated
-          ? `\n\nThe previous attempt ran past the length limit and was cut off. Be significantly more concise — a few short paragraphs at most — and make sure the JSON object is closed.`
-          : `\n\nThe previous attempt was rejected: ${lastReason}\nReturn ONLY {"${sectionKey}": "your content"} with a non-empty value.`;
-
-        const prompt = attempt === 1 ? basePrompt : `${basePrompt}${retryHint}`;
+        // task, so the retry asks for brevity. That has to replace the length
+        // requirement inside the prompt rather than contradict it from the end
+        // — hence a rebuild instead of an appended hint.
+        let prompt = basePrompt;
+        if (attempt > 1) {
+          prompt = wasTruncated
+            ? buildUserPrompt([sectionKey], instruction, agentRole, profile, maxTokens, { brevity: true })
+            : `${basePrompt}\n\nThe previous attempt was rejected: ${lastReason}\nReturn ONLY {"${sectionKey}": "your content"} with a non-empty value.`;
+        }
 
         rawResponse = await generateAIContent(systemPrompt, prompt, schema, maxTokens);
         const validation = validateAIResponse(rawResponse, [sectionKey], { agentRole, domain, industry, mandatoryKeywords, providerName });
@@ -259,7 +303,13 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
   return buildResult(mergedContent, mergedDecisions, scores, stages, sourceLabel, agentRole);
 };
 
-export const generateAgentContent = async (agentRole, instruction = '') => {
+/**
+ * @param agentRole      which specialist writes this
+ * @param instruction    revision instruction, or '' for initial generation
+ * @param targetSections sections to write; omit to write everything the agent
+ *                       owns. Revisions should always pass the routed set.
+ */
+export const generateAgentContent = async (agentRole, instruction = '', targetSections = null) => {
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRole];
   if (!systemPrompt) throw new Error(`Unknown agent role: ${agentRole}`);
 
@@ -267,8 +317,9 @@ export const generateAgentContent = async (agentRole, instruction = '') => {
   const profile = getProviderProfile(providerName);
   const sourceLabel = getProviderSourceLabel(providerName);
   const hardenedPrompt = withJsonHardening(systemPrompt, profile);
+  const sections = resolveSections(agentRole, targetSections);
 
   return profile.strategy === 'perSection'
-    ? generatePerSection(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel)
-    : generateBatch(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel);
+    ? generatePerSection(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel, sections)
+    : generateBatch(agentRole, instruction, hardenedPrompt, profile, providerName, sourceLabel, sections);
 };

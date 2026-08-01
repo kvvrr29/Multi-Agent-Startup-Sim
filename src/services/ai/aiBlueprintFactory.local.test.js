@@ -131,6 +131,40 @@ describe('per-section generation for the local model', () => {
     expect(useAIDebugStore.getState().generationSources.marketing).toBe('Fallback');
   });
 
+  it('writes only the routed sections on a revision', async () => {
+    generateAIContent.mockResolvedValue(JSON.stringify({ businessModel: sectionText('businessModel') }));
+
+    const result = await generateAgentContent('ceo', 'switch to a commission model', ['businessModel']);
+
+    // One call, not the five the CEO owns. The other four would have been
+    // generated and then discarded by the caller.
+    expect(generateAIContent).toHaveBeenCalledTimes(1);
+    expect(Object.keys(result.content)).toEqual(['businessModel']);
+    expect(generateAIContent.mock.calls[0][1]).toMatch(/switch to a commission model/);
+  });
+
+  it('refuses a routed set the agent does not own', async () => {
+    await expect(generateAgentContent('ceo', 'change the stack', ['technologyStack']))
+      .rejects.toThrow(/No section owned by ceo/);
+    expect(generateAIContent).not.toHaveBeenCalled();
+  });
+
+  it('replaces the length target instead of contradicting it after a truncation', async () => {
+    const truncated = Object.assign(new Error('truncated at budget'), { isTruncated: true, partialText: '{"marketingStrategy": "Ads' });
+    generateAIContent
+      .mockRejectedValueOnce(truncated)
+      .mockResolvedValueOnce(JSON.stringify({ marketingStrategy: sectionText('marketingStrategy') }));
+
+    await generateAgentContent('marketing');
+
+    const [first, second] = generateAIContent.mock.calls.map(call => call[1]);
+    expect(first).toMatch(/at least 350 words/);
+    // The retry must not carry both targets — a small model given "at least
+    // 350 words" and "be brief" in one prompt satisfies neither.
+    expect(second).not.toMatch(/at least 350 words/);
+    expect(second).toMatch(/2 to 3 compact paragraphs/);
+  });
+
   it('leaves the batch strategy untouched for cloud providers', async () => {
     useSettingsStore.setState({ aiProvider: 'gemini' });
     const text = 'Business model and revenue sales use pricing fees for a defined market opportunity. Budget funding controls cost expenses and risk threats while viability, margins, and growth support the target teams. ';
