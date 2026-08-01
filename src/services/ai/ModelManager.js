@@ -4,18 +4,10 @@ import { LOCAL_CONTEXT_WINDOW } from './providerProfiles';
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// ~828 MiB to download once, ~1630MB of VRAM for the weights.
-//
-// f16 and f32 are the same download and the same model: both carry the same
-// 736 MiB of 4-bit weights at the same group size, so the quantization error
-// is identical and neither writes better prose than the other. What differs is
-// only the precision of the arithmetic around them, and f16 wins on every
-// practical axis here — faster compute, and a KV cache at 28 KiB per token
-// instead of 56, which halves the cost of the 8192 window.
-//
-// The one thing f32 buys is reach: f16 requires the WebGPU `shader-f16`
-// extension and throws at load without it. Switch back if a target machine's
-// browser does not expose it.
+// ~828 MiB to download once, ~1630MB of VRAM. Same download and same 4-bit
+// weights as the q4f32 build, so output quality is identical; f16 is faster
+// and halves the KV cache. Switch back if a target browser lacks the WebGPU
+// `shader-f16` extension, which f16 throws without.
 const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
 
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
@@ -166,9 +158,8 @@ class ModelManager {
   async removeModel() {
     try {
       const { deleteModelAllInfoInCache } = await loadWebLLM();
-      // Free the GPU buffers first. Dropping the reference alone leaves the
-      // weights in VRAM until GC gets around to it, so a user who removes the
-      // model after generating keeps paying for it until the page reloads.
+      // Free the GPU buffers first — dropping the reference alone leaves the
+      // weights in VRAM until GC runs.
       if (this.engine) {
         try {
           await this.engine.unload();

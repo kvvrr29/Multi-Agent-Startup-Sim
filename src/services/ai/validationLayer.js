@@ -69,15 +69,12 @@ const AGENT_CONCEPT_GROUPS = {
   ]
 };
 
-// Per-section concept groups, used when a response covers exactly one section
-// (the per-section strategy). Scoring a lone section against the agent's whole
-// responsibility list would fail it for concepts it was never asked to cover.
-//
-// Four groups per section, not one: a single group scores only 0 or 100, which
-// makes every agentRelevance threshold behave identically. Four give it
-// 25-point resolution. The first synonym of each is what the local prompt lists
-// back to the model, so groups are written as the definition of a complete
-// section, not as keyword bait.
+// Used when a response covers exactly one section; scoring it against the
+// agent's whole remit would fail it for concepts it was never asked to cover.
+// Four groups each, not one: a single group scores only 0 or 100, which makes
+// every agentRelevance threshold behave identically. The first synonym of each
+// is what the local prompt lists back, so these are written as the definition
+// of a complete section, not as keyword bait.
 export const SECTION_CONCEPT_GROUPS = {
   executiveSummary: [
     ['problem', 'need', 'gap', 'challenge', 'pain'],

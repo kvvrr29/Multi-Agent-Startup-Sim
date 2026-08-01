@@ -12,10 +12,9 @@ import { SECTION_TITLES } from '../../../shared/blueprintSections.js';
 const MAX_ATTEMPTS = 2;
 
 /**
- * The user prompt for a generation request. Both strategies use this and both
- * get the identical brief; they differ only in how many sections are asked for
- * at once and how explicitly the task is spelled out. `profile.minWords` is
- * what fixes short output — nothing else in the prompt chain states a length.
+ * Both strategies share this and get the identical brief, differing only in how
+ * many sections are asked for and how explicitly. `profile.minWords` is what
+ * fixes short output — nothing else in the chain states a length.
  */
 const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null, { brevity = false } = {}) => {
   const perSection = profile.strategy === 'perSection';
@@ -82,12 +81,10 @@ const buildTemplateDiagram = (sectionKey, sectionTitle) => {
 };
 
 /**
- * Which sections this call actually writes. Initial generation passes nothing
- * and gets everything the agent owns; a revision gets only what it routed,
- * since regenerating unused sections costs the per-section provider an entire
- * extra call each. The requested list is intersected with ownership rather
- * than trusted — the router's output reaches here, and an agent must never
- * write a section it does not own. Ordering follows the canonical list.
+ * Which sections this call writes: everything the agent owns, or just the set a
+ * revision routed — regenerating the rest costs a whole extra call each.
+ * Intersected with ownership rather than trusted, since the router's output
+ * reaches here and an agent must never write a section it does not own.
  */
 const resolveSections = (agentRole, targetSections) => {
   const owned = AGENT_SECTIONS[agentRole] || [];

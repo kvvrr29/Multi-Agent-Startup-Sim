@@ -19,13 +19,10 @@ export const CLOUD_THRESHOLDS = {
 };
 
 /**
- * Gates for the browser model, matching cloud wherever the scoring maths makes
- * that reachable: a failed gate here only costs a retry (the per-section loop
- * keeps the best-effort text either way), where cloud throws to the template
- * factory. developerDomainRelevance is the exception — it weights entities at
- * 80% and terminology at 20%, so a Technology Stack section naming React and
- * Postgres but no project entity caps out at 20. 30 is the lowest value that
- * still demands at least one entity.
+ * Matched to cloud wherever the scoring maths allows: a failed gate here costs
+ * only a retry, since the per-section loop keeps the best-effort text anyway.
+ * developerDomainRelevance is the exception — entities weigh 80%, so a tech
+ * stack section naming no project entity caps at 20; 30 demands one.
  */
 export const LOCAL_THRESHOLDS = {
   structural: 100,
@@ -57,12 +54,10 @@ const LOCAL_PROFILE = {
   strategy: 'perSection',
   schemaDialect: 'jsonSchema',
   thresholds: LOCAL_THRESHOLDS,
-  // ~600 characters is roughly 100 words — well under the 350 the prompt asks
-  // for, so a merely brisk answer is not rejected, but far enough above a
-  // paragraph that anything failing it is genuinely thin and worth one retry.
+  // ~100 words: well under the 350 asked for, so a brisk answer survives, but
+  // anything failing it is thin enough to be worth a retry.
   minSectionLength: 600,
-  // A small instruct model writes one line unless told otherwise. This is the
-  // only place a length is ever stated to it.
+  // A small instruct model writes one line unless told otherwise.
   minWords: 350,
   minParagraphs: 4,
   enforceDomainCriticals: false,
@@ -103,12 +98,9 @@ export const getMaxContextTokens = (profile, sectionMaxTokens) =>
     : LOCAL_CONTEXT_WINDOW - (sectionMaxTokens || profile.maxTokens) - PROMPT_OVERHEAD_TOKENS;
 
 /**
- * Output budget per section for the per-section strategy. These bound
- * worst-case generation time and stop a small model looping, and are
- * deliberately generous — hitting the ceiling truncates the JSON mid-string,
- * which no parser can repair, so an unused token beats a retry. A 350-word
- * section is ~470 tokens before markdown and JSON escaping, hence roughly
- * three times the target.
+ * Per-section output budget. Generous on purpose: hitting the ceiling truncates
+ * the JSON mid-string, which no parser can repair, so an unused token beats a
+ * retry. A 350-word section is ~470 tokens before markdown and escaping.
  */
 export const SECTION_MAX_TOKENS = {
   executiveSummary: 1300,

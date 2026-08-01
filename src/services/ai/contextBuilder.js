@@ -13,31 +13,23 @@ const AGENT_MEMORY_CATEGORIES = {
   mediator: ['scope', 'business', 'product', 'technical', 'marketing']
 };
 
-// How far non-focus sections get trimmed back when the context does not fit,
-// tried in order. The first length that fits wins, so a blueprint only loses
-// as much detail as the window actually demands.
+// Tried in order when the context overflows; first fit wins.
 const TRIM_STEPS = [1600, 800, 400, 240, 120];
 
-// How much of a section an agent sees when it is not the one writing it. The
-// pipeline is sequential, so this is each agent's whole view of its
-// predecessors' work — too tight and it writes against sentence fragments.
+// An agent's whole view of a section it is not writing — the pipeline is
+// sequential, so too tight and it writes against sentence fragments.
 const NON_FOCUS_LIMIT = 800;
 
 /**
- * Builds the context block every agent request is grounded in. Both providers
- * get the same brief; its shape is a property of the project, not the model.
+ * The context block every agent request is grounded in. Both providers get the
+ * same brief.
  *
- * `focusSections` names the sections this call produces. Their current text is
- * always included in full — "make this longer" is meaningless without it.
- *
- * `maxContextTokens` bounds the result for the local engine (cloud passes
- * nothing and is never trimmed). Approved sections are otherwise never
- * truncated, so without a budget seventeen of them build an ~11,700-token
- * brief and overflow the 8192 window outright.
- *
- * `compact` is the older, blunter answer to the same problem: drop non-focus
- * sections and memory entirely rather than trim. Unused now the budget exists,
- * kept as the fallback if full context proves too slow to prefill.
+ * focusSections   sections this call produces; always included in full, since
+ *                 "make this longer" is meaningless without them
+ * maxContextTokens  local only — approved sections are otherwise never
+ *                 truncated, and seventeen of them overflow 8192 outright
+ * compact         older, blunter alternative: drop rather than trim. Unused,
+ *                 kept as the fallback if full context prefills too slowly.
  */
 export const buildContextString = (
   customInstruction = '',
@@ -58,9 +50,8 @@ export const buildContextString = (
   context += `Project Description (PRIMARY SOURCE OF TRUTH — weigh this above the project name): ${project?.idea || 'Unknown'}\n`;
   context += `Domain: ${current('scope', 'domain')}\n`;
   context += `Industry: ${current('scope', 'industry')}\n`;
-  // Every scope field is kept in compact mode: together they cost ~40 tokens,
-  // and they are exactly the constraints that stop output being generic. A
-  // roadmap written without knowing "6 months, 4 people" is filler.
+  // ~40 tokens for all of them, and they are what stops output being generic:
+  // a roadmap written without "6 months, 4 people" is filler.
   context += `Project Type: ${current('scope', 'project_type')}\n`;
   context += `Business Model: ${current('scope', 'business_model')}\n`;
   context += `Budget: ${current('scope', 'budget', project?.budget)}\n`;
@@ -100,27 +91,23 @@ export const buildContextString = (
       context += recentRevisions.map(event => `- ${event.message}`).join('\n') + `\n\n`;
     }
   } else if (relevantDecisionHistory.length) {
-    // The same decisions the full context carries as raw JSON, one line each.
-    // Dropping these entirely was a correctness bug, not a size saving: without
-    // them a revision happily contradicts what an earlier revision settled.
+    // One line each. Dropping them was a correctness bug: without them a
+    // revision contradicts what an earlier one settled.
     context += `--- DECISIONS ALREADY SETTLED (do not contradict these) ---\n`;
     context += relevantDecisionHistory
       .map(d => `- ${d.key}: ${d.value}${d.rationale ? ` (${d.rationale})` : ''}`)
       .join('\n') + `\n\n`;
   }
 
-  // `trimTo` is the ceiling for sections this call is not writing. null means
-  // the standard rule: approved sections in full, the rest at NON_FOCUS_LIMIT.
+  // trimTo overrides the standard rule: approved in full, the rest capped.
   const renderBlueprintState = (trimTo = null) => {
-    // An agent always receives the sections it is writing in full — trimming
-    // those would break the revision it was asked to make. Approved sections
-    // are settled facts and are only trimmed under budget pressure.
+    // Sections being written are never trimmed; that would break the revision.
     const limitFor = (section, isFocus) => {
       if (isFocus) return null;
       const allowance = section.status === 'approved' ? null : NON_FOCUS_LIMIT;
       if (trimTo === null) return allowance;
-      // A trim step can only tighten. Wide steps exist to cut approved sections
-      // down; applied to a pending one they would grow the context instead.
+      // A step can only tighten — widening a pending section would grow the
+      // context the loop was called on to shrink.
       return allowance === null ? trimTo : Math.min(trimTo, allowance);
     };
 
@@ -129,9 +116,8 @@ export const buildContextString = (
       const section = blueprint[key];
       if (!section || !section.content) return;
       const isFocus = focus ? focus.has(key) : SECTION_OWNERSHIP[key] === agentRole;
-      // In compact mode everything outside the focus set is dropped rather than
-      // truncated: a fragment of an unrelated section is enough to bias a small
-      // model's topic without being enough to inform it.
+      // Compact drops rather than truncates: a fragment of an unrelated
+      // section biases the topic without informing it.
       if (compact && !isFocus) return;
       state += `[${section.title}] (Status: ${section.status})\n`;
       const limit = limitFor(section, isFocus);
@@ -146,9 +132,7 @@ export const buildContextString = (
   let blueprintState = renderBlueprintState();
 
   if (maxContextTokens) {
-    // Everything except the blueprint state is already committed, so the state
-    // is what has to give. Each step trims the sections this call is not
-    // writing harder; the first one that fits is used.
+    // Everything else is committed, so the blueprint state is what gives.
     const fixedTokens = estimateTokens(context) + estimateTokens(customInstruction);
     for (const step of TRIM_STEPS) {
       if (fixedTokens + estimateTokens(blueprintState) <= maxContextTokens) break;

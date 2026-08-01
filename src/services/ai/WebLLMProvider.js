@@ -2,9 +2,8 @@ import { modelManager } from './ModelManager';
 import { getProviderProfile } from './providerProfiles';
 import { estimateTokens } from './tokenEstimate';
 
-// Only used when a caller supplies no budget of its own — the classifier and
-// the router, which both ask for a few lines of JSON. Read from the profile so
-// there is one number rather than two that can drift apart.
+// For callers with no budget of their own (the classifier, the router). From
+// the profile so there is one number, not two that drift.
 const DEFAULT_MAX_TOKENS = getProviderProfile('webllm').maxTokens;
 
 // How long before a generation counts as stuck. Scales with the budget, since
@@ -49,9 +48,8 @@ export class WebLLMProvider {
       }
       messages.push({ role: 'user', content: userPrompt });
 
-      // The caller's per-section budget wins. It bounds worst-case generation
-      // time and stops the model looping, which small models do. The 1500
-      // default only applies when a caller supplies nothing.
+      // The caller's per-section budget wins; it bounds worst-case generation
+      // time and stops the model looping.
       const max_tokens = maxTokens || DEFAULT_MAX_TOKENS;
 
       const payload = {
