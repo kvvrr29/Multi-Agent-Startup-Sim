@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { createBlueprintSchema } from '../services/blueprintSchema';
 
-export const AGENT_ROLES = {
+// Display names for each agent. Not to be confused with AGENT_SECTIONS in
+// config/sectionOwnership.js, which maps an agent to the sections it writes.
+const AGENT_ROLE_LABELS = {
   MEDIATOR: 'Mediator',
   CEO: 'CEO',
   PM: 'Product Manager',
@@ -39,11 +41,11 @@ const BUSY_STATUSES = [
 export const isAgentBusy = (agent) => BUSY_STATUSES.includes(agent?.status);
 
 const initialAgents = {
-  mediator: { id: 'mediator', name: 'Alex', role: AGENT_ROLES.MEDIATOR, status: AGENT_STATUS.IDLE, currentTask: null },
-  ceo: { id: 'ceo', name: 'Sarah', role: AGENT_ROLES.CEO, status: AGENT_STATUS.IDLE, currentTask: null },
-  pm: { id: 'pm', name: 'David', role: AGENT_ROLES.PM, status: AGENT_STATUS.IDLE, currentTask: null },
-  developer: { id: 'developer', name: 'Elena', role: AGENT_ROLES.DEVELOPER, status: AGENT_STATUS.IDLE, currentTask: null },
-  marketing: { id: 'marketing', name: 'Marcus', role: AGENT_ROLES.MARKETING, status: AGENT_STATUS.IDLE, currentTask: null },
+  mediator: { id: 'mediator', name: 'Alex', role: AGENT_ROLE_LABELS.MEDIATOR, status: AGENT_STATUS.IDLE, currentTask: null },
+  ceo: { id: 'ceo', name: 'Sarah', role: AGENT_ROLE_LABELS.CEO, status: AGENT_STATUS.IDLE, currentTask: null },
+  pm: { id: 'pm', name: 'David', role: AGENT_ROLE_LABELS.PM, status: AGENT_STATUS.IDLE, currentTask: null },
+  developer: { id: 'developer', name: 'Elena', role: AGENT_ROLE_LABELS.DEVELOPER, status: AGENT_STATUS.IDLE, currentTask: null },
+  marketing: { id: 'marketing', name: 'Marcus', role: AGENT_ROLE_LABELS.MARKETING, status: AGENT_STATUS.IDLE, currentTask: null },
 };
 
 const createInitialAgents = () => Object.fromEntries(

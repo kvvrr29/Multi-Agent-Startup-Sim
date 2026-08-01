@@ -29,7 +29,7 @@ import {
   LogOut,
 } from "lucide-react";
 
-import { BLUEPRINT_SECTIONS } from "../config/blueprintSections";
+import { BLUEPRINT_SECTIONS } from "../../shared/blueprintSections.js";
 import BlueprintHealthInspector from "./BlueprintHealthInspector";
 
 const ApprovalDashboard = () => {
@@ -556,7 +556,6 @@ export default function Dashboard() {
         {activePanel === "project" && (
           <>
             <CloudProjectList
-              compact
               activeId={activeCloudId}
               onOpen={async (id) => {
                 if (anyBusy) {

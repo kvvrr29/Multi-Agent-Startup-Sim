@@ -4,21 +4,15 @@ import { getBrowserStorage } from './persistence';
 import { useProjectStore } from './useProjectStore';
 
 /**
- * Per-section version history, kept CLIENT-SIDE ONLY (persisted to localStorage,
- * keyed by project id). Each content change during prep appends a version; the
- * user scrolls versions with the ‹ › arrows. Approving a section is the only
- * thing that writes it to the database (via the cloudSync approved-only gate);
- * the moment it is approved its client-side drafts are DELETED — the approved
- * content now lives in the DB, so the history store only ever holds unapproved
- * sections.
+ * Per-section version history, CLIENT-SIDE ONLY (localStorage, keyed by project
+ * id). Each content change during prep appends a version, scrolled with the ‹ ›
+ * arrows. Approving is the only thing that writes to the database, and it
+ * DELETES the section's local drafts — so this store only ever holds unapproved
+ * sections, and an approved one stays frozen with no history entry at all.
  *
- * Approval is locked off the blueprint's status ('approved'), which is what the
- * DB hydrates on reload — so an approved section stays frozen with no local
- * history entry at all.
- *
- * useProjectStore.blueprint remains the render surface: this store projects the
- * active version's content into it through updateBlueprintSection (a plain
- * display setter that records no history, so there is no circular recording).
+ * useProjectStore.blueprint stays the render surface: the active version is
+ * projected into it via updateBlueprintSection, a plain display setter that
+ * records no history (hence no circular recording).
  */
 
 const emptyEntry = () => ({ versions: [], activeIndex: 0 });
@@ -66,18 +60,6 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
   activeProjectId: null,
   byProject: {},
 
-  // Read helpers ------------------------------------------------------------
-  getEntry: (sectionKey) => {
-    const { activeProjectId, byProject } = get();
-    return byProject[activeProjectId]?.[sectionKey] || null;
-  },
-  versionInfo: (sectionKey) => {
-    const entry = get().getEntry(sectionKey);
-    if (!entry) return { index: 0, count: 0 };
-    return { index: entry.activeIndex, count: entry.versions.length };
-  },
-
-  // Mutations ---------------------------------------------------------------
   addVersion: (sectionKey, content, metadata = {}) => {
     const { activeProjectId, byProject } = get();
     if (!activeProjectId || isLocked(sectionKey)) return false; // approved = frozen

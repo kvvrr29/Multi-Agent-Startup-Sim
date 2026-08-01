@@ -99,12 +99,10 @@ describe('extractJson', () => {
 });
 
 const SECTION = 'executiveSummary';
-// A complete Executive Summary and nothing more: it covers all four of that
-// section's concept groups but says nothing about pricing, budget, cost or
-// risk. The local model is asked for one section at a time and scored against
-// that section, so this passes; the cloud model is asked for all five CEO
-// sections at once and scored against the CEO's whole remit, so it fails.
-// The gates are now identical — the difference is what they are pointed at.
+// A complete Executive Summary and nothing more: all four of that section's
+// concept groups, nothing on pricing, budget, cost or risk. Local is scored
+// against the one section it was asked for and passes; cloud is scored against
+// the CEO's whole remit and fails. Same gates, different targets.
 const oneGoodSection =
   'Urban customers in dense cities face a persistent problem: ordering food from nearby restaurants is slow, '
   + 'and the gap between placing an order and receiving it is where the frustration lives. '

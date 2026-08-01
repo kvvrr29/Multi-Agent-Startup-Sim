@@ -8,9 +8,8 @@ import { createBlueprintSchema } from './blueprintSchema';
 import { useProjectResourceStore, PROJECT_RESOURCES } from '../store/useProjectResourceStore';
 
 // This module owns long-lived singleton state (store subscriptions + the sync
-// cursor). A hot-swap would strand the old subscriptions and leave the new
-// module unsubscribed, so edits would silently stop syncing until a full
-// reload. Force a full reload on any change to this file instead.
+// cursor). A hot-swap would strand the old subscriptions and silently stop
+// syncing until a full reload, so force one on any change to this file.
 if (import.meta.hot) import.meta.hot.decline();
 
 const SYNC_DEBOUNCE_MS = 1500;
@@ -23,10 +22,8 @@ let suspended = false;
 // and double-advance the cursor.
 let inFlight = null;
 
-/**
- * Last-pushed cursor for the open project. pushNow() diffs the stores against
- * this and only sends what changed, instead of the old whole-blob PUT.
- */
+// Last-pushed cursor for the open project. pushNow() diffs the stores against
+// it and sends only what changed.
 let cursor = null;
 let resourceEpoch = 0;
 const pendingResources = new Map();
@@ -252,11 +249,9 @@ const buildBlueprint = (sectionRows = []) => {
   return blueprint;
 };
 
-/**
- * Select a registry project and hydrate its blueprint only. The outgoing
- * project's pending writes are flushed first; the active stores are not
- * changed unless the incoming blueprint request succeeds.
- */
+// Select a registry project and hydrate its blueprint only. The outgoing
+// project's pending writes flush first, and the active stores are untouched
+// unless the incoming blueprint request succeeds.
 export const openCloudProject = async (id) => {
   const registryProject = useAuthStore.getState().cloudProjects.find(project => project.id === id);
   if (!registryProject) {
@@ -431,11 +426,9 @@ const ensureOneResource = (projectId, resource, epoch) => {
   return request;
 };
 
-/**
- * Lazily hydrate independent project resources. Fulfilled resources are kept
- * even when a sibling fails; callers receive one aggregate failure so AI
- * workflows can stop before using incomplete context.
- */
+// Lazily hydrate independent project resources. Fulfilled ones are kept when a
+// sibling fails; callers get one aggregate failure so AI workflows can stop
+// before using incomplete context.
 export const ensureProjectResources = async (resourceNames) => {
   const projectId = useAuthStore.getState().activeCloudId;
   if (!projectId) throw new Error('Open a project before loading its data.');

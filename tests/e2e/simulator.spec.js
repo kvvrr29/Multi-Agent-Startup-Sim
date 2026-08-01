@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-// The app is gated behind Supabase magic-link auth. E2E runs sign in with a
-// seeded test user via env credentials; without them the suite skips instead
-// of failing (create a user in Supabase Auth and export these to enable):
-//   E2E_SUPABASE_EMAIL / E2E_SUPABASE_PASSWORD
+// The app is gated behind Supabase magic-link auth, so E2E signs in with a
+// seeded test user. Without E2E_SUPABASE_EMAIL / E2E_SUPABASE_PASSWORD the
+// suite skips rather than fails.
 const E2E_EMAIL = process.env.E2E_SUPABASE_EMAIL;
 const E2E_PASSWORD = process.env.E2E_SUPABASE_PASSWORD;
 

@@ -21,7 +21,7 @@ export const SECTION_OWNERSHIP = {
 
 // Sections each agent generates via AI. agentContributions is excluded:
 // it is always composed locally by the Mediator, never AI-generated.
-export const AGENT_ROLES = {
+export const AGENT_SECTIONS = {
   ceo: ['executiveSummary', 'targetUsers', 'businessModel', 'budgetCostEstimate', 'risksMitigation'],
   pm: ['problemStatement', 'proposedSolution', 'mvpScope', 'keyFeatures', 'productRoadmap', 'timeline'],
   developer: ['architecture', 'technologyStack', 'umlDiagram', 'erDiagram'],

@@ -4,32 +4,16 @@ import { LOCAL_CONTEXT_WINDOW } from './providerProfiles';
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// ~828 MiB to download once, ~1889MB of VRAM for the weights.
-//
-// The q4f32 build costs no more to download than the q4f16 one — the weights
-// are the same packed 4-bit values and only the scales differ in dtype, which
-// the shard sizes work out identical for. What it does cost is VRAM (1889MB
-// against 1630MB) and what it buys is reach: the f16 builds require the WebGPU
-// `shader-f16` extension and refuse to load without it, so q4f32 runs on
-// machines where q4f16 fails outright.
-//
-// Against 4GB of dedicated VRAM that leaves roughly 2GB of headroom for the
-// browser's own GPU allocations. The 3B q4f16 build would also fit at 2504MB,
-// but it is twice the download (~1656 MiB) for a margin half the size.
+// ~828 MiB to download once, ~1889MB of VRAM for the weights, leaving ~2GB
+// headroom on a 4GB card. q4f32 over the cheaper-on-VRAM q4f16 build (1630MB)
+// buys reach: f16 requires the WebGPU `shader-f16` extension and refuses to
+// load without it.
 const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
 
-// The window the engine is loaded with, and the number contextBuilder budgets
-// the prompt against — see LOCAL_CONTEXT_WINDOW for why it is not web-llm's
-// 4096 default. The KV cache is allocated up front at 2 x 28 layers x 2 KV
-// heads x 128 head dim x 4 bytes = 56 KiB per token, so 8192 costs ~450MB
-// against ~225MB, taking the model to roughly 2.1GB of the card's 4GB. Decode
-// speed is unaffected: attention runs over the tokens actually present, not
-// over the allocated window, and prefill tracks the real prompt length.
-
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
-// completed, 56 secs elapsed. It can take a while when we first visit this
-// page…". The percentage already has its own readout and the trailing advice
-// is written for a demo page, so keep only the leading shard/size clause.
+// completed, 56 secs elapsed. It can take a while…". The percentage has its own
+// readout and the trailing advice is written for a demo page, so keep only the
+// leading shard/size clause.
 const shortenProgressText = (text = '') =>
   text.replace(/\s*\d+% completed.*$/s, '').trim();
 
@@ -51,9 +35,8 @@ class ModelManager {
     this.status = 'uninitialized'; // 'uninitialized', 'downloading', 'ready', 'error'
     this.listeners = new Set();
     // Bumped whenever the on-disk cache changes. Subscribers key their
-    // hasModelInCache() lookup off this, because a delete can leave `status`
-    // untouched (removing a cached-but-not-loaded model) and would otherwise
-    // leave the UI claiming the model is still installed.
+    // hasModelInCache() lookup off this, because deleting a cached-but-unloaded
+    // model leaves `status` untouched and the UI claiming it is installed.
     this.cacheEpoch = 0;
   }
 

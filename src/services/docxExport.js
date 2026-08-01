@@ -3,7 +3,7 @@ import {
   Table, TableCell, TableRow, TextRun, WidthType
 } from 'docx';
 import mermaid from 'mermaid';
-import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
+import { BLUEPRINT_SECTIONS } from '../../shared/blueprintSections.js';
 
 const plain = (value = '') => value
   .replace(/\*\*(.*?)\*\*/g, '$1')

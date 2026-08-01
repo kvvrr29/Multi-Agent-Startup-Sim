@@ -6,8 +6,8 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { generateAgentContent } from './ai/aiBlueprintFactory';
 import { classifyDomain } from './ai/domainClassifier';
 import { routeAIRevision, heuristicRouting, normalizeRouting } from './ai/aiRouter';
-import { SECTION_OWNERSHIP, AGENT_ROLES } from '../config/sectionOwnership';
-import { SECTION_TITLES } from '../config/blueprintSections';
+import { SECTION_OWNERSHIP, AGENT_SECTIONS } from '../config/sectionOwnership';
+import { SECTION_TITLES } from '../../shared/blueprintSections.js';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 import { useAICostStore } from '../store/useAICostStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -66,7 +66,7 @@ const composeAgentContributions = () => {
   const { agents } = useProjectStore.getState();
   const lines = AGENT_PIPELINE.map(({ id, contribution }) => {
     const agent = agents[id];
-    const sections = (AGENT_ROLES[id] || []).map(s => SECTION_TITLES[s] || s).join(', ');
+    const sections = (AGENT_SECTIONS[id] || []).map(s => SECTION_TITLES[s] || s).join(', ');
     return `### ${agent?.name || id} — ${agent?.role || id}\n- **Sections:** ${sections}\n${contribution.map(c => `- ${c}`).join('\n')}`;
   });
   lines.push(`### Alex — Mediator\n- **Sections:** ${SECTION_TITLES.agentContributions}, ${SECTION_TITLES.finalRecommendations}\n- Classified project domain\n- Routed tasks to specialist agents\n- Assembled the final blueprint`);
@@ -151,7 +151,7 @@ export const runInitialSimulation = async (projectData) => {
     store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
     for (const step of AGENT_PIPELINE) {
       const { id, thinking, working, doneMsg, contribution } = step;
-      const sections = AGENT_ROLES[id];
+      const sections = AGENT_SECTIONS[id];
 
       store.updateAgentStatus(id, AGENT_STATUS.THINKING, thinking);
       store.addWorkflowEvent({ message: `Mediator assigned task to ${useProjectStore.getState().agents[id].role}.`, agent: 'mediator' });

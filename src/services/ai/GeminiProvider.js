@@ -15,12 +15,8 @@ const STORAGE_KEY = 'gemini_last_call_ts';
 const getLastCallTimestamp = () => parseInt(sessionStorage.getItem(STORAGE_KEY) || '0', 10);
 const setLastCallTimestamp = (ts) => sessionStorage.setItem(STORAGE_KEY, String(ts));
 
-/**
- * Parse the recommended retry delay from a Gemini 429 error.
- * Gemini includes it in two places:
- *  1. The human-readable message:  "Please retry in 37.6s."
- *  2. The structured RetryInfo detail object.
- */
+// Parse the recommended retry delay from a Gemini 429. It arrives in two
+// places: the message ("Please retry in 37.6s.") and a RetryInfo detail.
 const parseRetryDelayMs = (err) => {
   // 1. From the error message string (most reliable for the @google/genai SDK)
   const msgMatch = String(err?.message || err).match(/retry in ([\d.]+)s/i);
@@ -56,11 +52,8 @@ const withApiTimeout = (promiseFn) => {
   return Promise.race([promiseFn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
 };
 
-/**
- * Proactive rate-limit pacing.
- * Waits until enough time has elapsed since the last API call before proceeding.
- * Posts a visible workflow event so users see a countdown instead of a frozen screen.
- */
+// Proactive rate-limit pacing: wait out the gap since the last call, posting a
+// workflow event so users see a countdown rather than a frozen screen.
 const waitForCallSlot = async () => {
   const now = Date.now();
   const lastTs = getLastCallTimestamp();
@@ -76,7 +69,7 @@ const waitForCallSlot = async () => {
         message: `⏳ Free-tier pacing: waiting ${waitSec}s before next AI request…`,
         agent: 'mediator'
       });
-    } catch (_) { /* store not available during init — silently skip */ }
+    } catch { /* store not available during init — silently skip */ }
     await sleep(wait);
   }
   setLastCallTimestamp(Date.now());
@@ -100,10 +93,7 @@ export class GeminiProvider {
     return !!apiKey?.trim();
   }
 
-  /**
-   * Makes a single raw API call, no retry logic here.
-   * Applies proactive pacing before calling, and throws enriched errors on 429.
-   */
+  // A single raw API call: paces first, throws enriched errors on 429.
   async _callOnce({ systemPrompt, userPrompt, jsonSchema }) {
     // Proactively pace to avoid hitting the free-tier quota
     await waitForCallSlot();
@@ -139,14 +129,10 @@ export class GeminiProvider {
     }
   }
 
-  /**
-   * Public method called by the factory.
-   * Handles rate-limit retries internally so the factory retry loop
-   * only deals with validation failures, not quota errors.
-   */
-  // maxTokens is accepted for interface parity and deliberately ignored:
-  // Gemini is left uncapped so section length is bounded by the prompt, not by
-  // a client-side ceiling that would truncate mid-JSON.
+  // Called by the factory. Rate-limit retries are handled here so the factory's
+  // loop only sees validation failures, never quota errors. maxTokens is
+  // accepted for interface parity and ignored — Gemini is left uncapped so
+  // length is bounded by the prompt, not a ceiling that truncates mid-JSON.
   async generate({ systemPrompt, userPrompt, jsonSchema }) {
     await this.initialize();
 
@@ -173,9 +159,8 @@ export class GeminiProvider {
           continue; // retry after sleep
         }
 
-        // Permanent failure — tag the error so the factory does NOT retry it.
-        // GeminiProvider already tried MAX_RATE_LIMIT_RETRIES times; another factory
-        // retry would just create another 60s+ sleep loop on top.
+        // Permanent failure — tag it so the factory does NOT retry. We already
+        // tried MAX_RATE_LIMIT_RETRIES times; another loop just sleeps 60s+.
         console.error('[GeminiProvider] Generation failed permanently:', err);
         if (err.isRateLimit) {
           err.isPermanentRateLimit = true;

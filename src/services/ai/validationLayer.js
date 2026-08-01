@@ -73,16 +73,11 @@ const AGENT_CONCEPT_GROUPS = {
 // (the per-section strategy). Scoring a lone section against the agent's whole
 // responsibility list would fail it for concepts it was never asked to cover.
 //
-// Each section is split into four groups rather than one. With a single group
-// the score could only ever be 0 or 100, which made every agentRelevance
-// threshold between 1 and 100 behave identically — the gate existed but could
-// not be tuned. Four groups give it 25-point resolution, so a threshold of 60
-// means "covered three of the four things this section is actually about" and
-// a section that only restates its own title no longer scores full marks.
-//
-// The first synonym of each group is what the local prompt lists back to the
-// model as the concepts to cover, so groups are written as the definition of a
-// complete section, not as keyword bait.
+// Four groups per section, not one: a single group scores only 0 or 100, which
+// makes every agentRelevance threshold behave identically. Four give it
+// 25-point resolution. The first synonym of each is what the local prompt lists
+// back to the model, so groups are written as the definition of a complete
+// section, not as keyword bait.
 export const SECTION_CONCEPT_GROUPS = {
   executiveSummary: [
     ['problem', 'need', 'gap', 'challenge', 'pain'],
@@ -459,12 +454,10 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
 };
 
 /**
- * Parses a model response into an object.
- *
- * Well-behaved models return bare JSON. Smaller ones wrap it in ```json fences
- * or add a sentence of preamble, which is a formatting quirk rather than a
- * content failure — so we retry on a fenced block, then on the outermost
- * brace pair, before giving up. Throws when nothing parses.
+ * Parses a model response into an object. Small models wrap their JSON in
+ * ```json fences or add a sentence of preamble — a formatting quirk, not a
+ * content failure — so we retry on a fenced block, then on the outermost brace
+ * pair, before giving up. Throws when nothing parses.
  */
 export const extractJson = (responseText) => {
   const raw = (responseText || '').trim();
@@ -490,10 +483,8 @@ export const extractJson = (responseText) => {
   }
 };
 
-/**
- * Builds the targeted retry feedback the doc requires (§2): explain the exact
- * issue, ask to improve only the missing areas.
- */
+// Targeted retry feedback (doc §2): name the exact issue, ask for the missing
+// areas only.
 export const buildRetryFeedback = (validation) => {
   const { scores, issues } = validation;
   const structuralOk = scores.structural === 100;
@@ -504,12 +495,10 @@ export const buildRetryFeedback = (validation) => {
 };
 
 /**
- * Builds the response schema in the dialect the target provider expects.
- *
- * Gemini's responseSchema uses its own uppercase Type enum; OpenAI and WebLLM
- * expect standard lowercase JSON Schema. Emitting the wrong casing is silently
- * ignored by the model and produces unstructured output, so the dialect is
- * driven by the provider profile rather than guessed.
+ * Builds the response schema in the dialect the provider expects: Gemini's
+ * uppercase Type enum, or standard lowercase JSON Schema for OpenAI and WebLLM.
+ * Wrong casing is silently ignored and yields unstructured output, so the
+ * dialect comes from the provider profile rather than a guess.
  */
 export const createResponseSchema = (sectionKeys, { dialect = 'gemini' } = {}) => {
   const gemini = dialect === 'gemini';

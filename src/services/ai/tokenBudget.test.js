@@ -125,7 +125,7 @@ describe('generation is actually stopped, not just abandoned', () => {
     const engine = {
       interruptGenerate,
       chat: { completions: { create: vi.fn().mockResolvedValue({
-        async *[Symbol.asyncIterator]() { await new Promise(() => {}); }
+        [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) })
       }) } }
     };
     vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
@@ -147,7 +147,7 @@ describe('generation is actually stopped, not just abandoned', () => {
     const engine = {
       interruptGenerate,
       chat: { completions: { create: vi.fn().mockResolvedValue({
-        async *[Symbol.asyncIterator]() { await new Promise(() => {}); }
+        [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) })
       }) } }
     };
     vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);

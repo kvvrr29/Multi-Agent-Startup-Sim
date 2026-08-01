@@ -10,10 +10,9 @@ import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 
 // A section that clears every local gate, so the loop makes exactly one call
-// per section and any extra call in these tests means a gate regressed. It is
-// deliberately broad rather than deliberately thin: the local gates now score
-// against each section's own concept groups, so a fixture written for one
-// section would fail the others. Gate-rejection cases get their own fixtures.
+// per section — any extra call here means a gate regressed. Deliberately broad,
+// since the gates score against each section's own concept groups and a fixture
+// written for one section would fail the others.
 const sectionText = (name) =>
   `The ${name} section describes the core problem urban customers face and the solution this platform delivers. `
   + `Target users are students and working professionals in dense city demographics whose daily habits and spend patterns show a clear need for faster delivery. `

@@ -1,6 +1,7 @@
 import { useProjectStore } from '../../store/useProjectStore';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { SECTION_OWNERSHIP } from '../../config/sectionOwnership';
+import { estimateTokens } from './tokenEstimate';
 
 // Which memory categories are relevant to each agent (doc §13: the Mediator
 // injects only the relevant memory into each agent request; scope is global).
@@ -12,56 +13,31 @@ const AGENT_MEMORY_CATEGORIES = {
   mediator: ['scope', 'business', 'product', 'technical', 'marketing']
 };
 
-// The same 4-chars-per-token heuristic the cost tracker uses. It only has to be
-// good enough to decide whether the blueprint state needs trimming, and
-// getMaxContextTokens leaves slack for it being wrong.
-const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
-
 // How far non-focus sections get trimmed back when the context does not fit,
 // tried in order. The first length that fits wins, so a blueprint only loses
 // as much detail as the window actually demands.
 const TRIM_STEPS = [1600, 800, 400, 240, 120];
 
-/**
- * How much of a section an agent sees when it is not the one writing it.
- *
- * This was 240 — about 11% of a 350-word section, or its opening sentence cut
- * mid-word. The pipeline is sequential, so that was the entire view each agent
- * had of its predecessors' work: the Developer designed an architecture having
- * seen two of eight key features, and the Mediator wrote recommendations
- * "synthesized from the whole blueprint" from seventeen truncated openings.
- *
- * 240 made sense when the local engine ran a 4096 window and every token was
- * contested. At 8192 the heaviest call — the Mediator's — uses ~2400 of a 5892
- * budget, so the allowance was costing quality to save room nothing needed.
- * 800 puts that call at roughly 4800, still inside budget, and the trim loop
- * below still claws it back on the blueprints that genuinely do not fit.
- */
+// How much of a section an agent sees when it is not the one writing it. The
+// pipeline is sequential, so this is each agent's whole view of its
+// predecessors' work — too tight and it writes against sentence fragments.
 const NON_FOCUS_LIMIT = 800;
 
 /**
- * Builds the context block every agent request is grounded in.
+ * Builds the context block every agent request is grounded in. Both providers
+ * get the same brief; its shape is a property of the project, not the model.
  *
- * Both providers get the same context. The shape of the brief is a property of
- * the project, not of the model, and a local model given less than the cloud
- * one writes correspondingly less specific content.
+ * `focusSections` names the sections this call produces. Their current text is
+ * always included in full — "make this longer" is meaningless without it.
  *
- * `focusSections` names the sections this call is actually producing. Their
- * current text is always included in full, because a revision instruction like
- * "make this longer" is meaningless without it.
- *
- * `maxContextTokens` is the one concession to a fixed window. Cloud passes
- * nothing and its context is unchanged, byte for byte. The local engine passes
- * its budget, and if the assembled brief exceeds it the sections this call is
- * *not* writing are trimmed — approved ones included — until it fits. Without
- * this the context is unbounded: approved sections are never truncated, so a
- * blueprint of seventeen approved 350-word sections builds an 11,700-token
- * brief and overflows an 8192 window outright.
+ * `maxContextTokens` bounds the result for the local engine (cloud passes
+ * nothing and is never trimmed). Approved sections are otherwise never
+ * truncated, so without a budget seventeen of them build an ~11,700-token
+ * brief and overflow the 8192 window outright.
  *
  * `compact` is the older, blunter answer to the same problem: drop non-focus
- * sections and the memory blocks entirely rather than trim them. Nothing uses
- * it now that the budget exists, but it is kept as the fallback if full context
- * proves too slow to prefill on modest hardware.
+ * sections and memory entirely rather than trim. Unused now the budget exists,
+ * kept as the fallback if full context proves too slow to prefill.
  */
 export const buildContextString = (
   customInstruction = '',
@@ -143,10 +119,8 @@ export const buildContextString = (
       if (isFocus) return null;
       const allowance = section.status === 'approved' ? null : NON_FOCUS_LIMIT;
       if (trimTo === null) return allowance;
-      // A trim step can only ever tighten. Steps wider than the standard
-      // allowance exist to cut approved sections down from full length; applied
-      // to a pending one they would inflate the context the loop was called on
-      // to shrink, wasting an iteration.
+      // A trim step can only tighten. Wide steps exist to cut approved sections
+      // down; applied to a pending one they would grow the context instead.
       return allowance === null ? trimTo : Math.min(trimTo, allowance);
     };
 

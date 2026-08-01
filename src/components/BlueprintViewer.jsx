@@ -446,11 +446,10 @@ const VersionSwitcher = ({ sectionKey, versions, activeIndex }) => {
   );
 };
 
-// Section block with approval workflow, collapse, and copy
-// Memoized so navigating one section's versions (which changes only that
-// section's object in the blueprint) re-renders that block alone, not all 18.
-// Props are ref-stable for unchanged sections: updateBlueprintSection replaces
-// only the changed key's object, and onZoomDiagram is a stable setState ref.
+// Section block with approval workflow, collapse, and copy. Memoized so
+// navigating one section's versions re-renders that block alone, not all 18 —
+// updateBlueprintSection replaces only the changed key's object, and
+// onZoomDiagram is a stable setState ref.
 const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
   // Client-side version-history navigation (primitive selectors to avoid
@@ -1087,7 +1086,7 @@ function BlueprintViewerInner() {
           }}
         >
           <ErrorBoundary componentName="Export">
-            <ExportToolbar compact />
+            <ExportToolbar />
           </ErrorBoundary>
         </div>
       )}

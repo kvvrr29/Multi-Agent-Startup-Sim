@@ -4,8 +4,16 @@ import { useProjectStore } from './useProjectStore';
 
 const content = (key) => useProjectStore.getState().blueprint[key].content;
 const status = (key) => useProjectStore.getState().blueprint[key].status;
-const info = (key) => useSectionHistoryStore.getState().versionInfo(key);
-const entry = (key) => useSectionHistoryStore.getState().getEntry(key);
+const entry = (key) => {
+  const { activeProjectId, byProject } = useSectionHistoryStore.getState();
+  return byProject[activeProjectId]?.[key] || null;
+};
+const info = (key) => {
+  const found = entry(key);
+  return found
+    ? { index: found.activeIndex, count: found.versions.length }
+    : { index: 0, count: 0 };
+};
 
 beforeEach(() => {
   useSectionHistoryStore.setState({ activeProjectId: null, byProject: {} });

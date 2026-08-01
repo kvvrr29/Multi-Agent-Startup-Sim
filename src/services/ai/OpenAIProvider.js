@@ -1,9 +1,6 @@
-/**
- * OpenAIProvider — uses the official openai npm package.
- * Supports GPT-4o-mini by default (cheap, fast, high quality).
- * Rate limit pacing is shared via the same sessionStorage key as Gemini
- * since both are cloud providers subject to similar quota concerns.
- */
+// OpenAIProvider — the official openai npm package, GPT-4o-mini by default.
+// Rate limit pacing shares Gemini's sessionStorage key: both are cloud
+// providers under similar quota concerns.
 
 import { useSettingsStore } from '../../store/useSettingsStore';
 
@@ -68,9 +65,8 @@ export class OpenAIProvider {
       temperature: 0.7,
     };
 
-    // Only cap output when a caller explicitly asks. Left unset, the model
-    // stops on its own, matching Gemini. A fixed ceiling here used to truncate
-    // multi-section responses into unparseable JSON.
+    // Only cap output when a caller asks; left unset the model stops on its
+    // own, matching Gemini. A fixed ceiling truncates multi-section JSON.
     if (maxTokens) requestOptions.max_tokens = maxTokens;
 
     // If JSON schema requested, use structured output response format

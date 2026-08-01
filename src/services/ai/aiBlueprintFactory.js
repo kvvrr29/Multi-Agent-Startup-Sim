@@ -6,28 +6,21 @@ import { buildContextString } from './contextBuilder';
 import { validateAIResponse, createResponseSchema, buildRetryFeedback, SECTION_CONCEPT_GROUPS } from './validationLayer';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
-import { AGENT_ROLES } from '../../config/sectionOwnership';
-import { SECTION_TITLES } from '../../config/blueprintSections';
-
-// Sections each agent is responsible for generating (single source of truth).
-const AGENT_RESPONSIBILITIES = AGENT_ROLES;
+import { AGENT_SECTIONS } from '../../config/sectionOwnership';
+import { SECTION_TITLES } from '../../../shared/blueprintSections.js';
 
 const MAX_ATTEMPTS = 2;
 
 /**
- * The user prompt for a generation request. Both strategies use this, and both
- * now receive the same context — the only difference is how many sections are
- * asked for at once and how explicitly the task is spelled out.
- *
- * `profile.minWords` is what actually fixes short output: nothing else in the
- * prompt chain ever states a length, so a model that is not verbose by default
- * has no reason to write more than a sentence.
+ * The user prompt for a generation request. Both strategies use this and both
+ * get the identical brief; they differ only in how many sections are asked for
+ * at once and how explicitly the task is spelled out. `profile.minWords` is
+ * what fixes short output — nothing else in the prompt chain states a length.
  */
 const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null, { brevity = false } = {}) => {
   const perSection = profile.strategy === 'perSection';
-  // Both providers now get the identical brief. The local model only differs in
-  // carrying a budget, which trims the blueprint state if — and only if — the
-  // assembled context would not fit its window.
+  // The local model differs only in carrying a budget, which trims the
+  // blueprint state if — and only if — the context would not fit its window.
   const context = buildContextString(instruction, agentRole, {
     focusSections: sectionKeys,
     maxContextTokens: getMaxContextTokens(profile, sectionMaxTokens)
@@ -35,23 +28,19 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
 
   let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}.`;
   if (instruction) {
-    // A revision has to say so in the task. Left to the context alone, the
-    // instruction sits under a heading several thousand tokens up and the task
-    // still reads as a request for a fresh write — so the model produces one,
-    // discarding whatever the section already said.
+    // A revision has to say so in the task. Left to the context alone the
+    // instruction sits thousands of tokens up and the task still reads as a
+    // fresh write — so the model produces one, discarding the existing text.
     task += ` Rewrite each one so it applies this instruction to its current text shown above: ${instruction}. Keep whatever the instruction does not ask you to change.`;
   }
   task += ` ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
   if (perSection) {
     // A small model needs the shape spelled out; the schema alone is advisory
-    // for it in a way it is not for a cloud API that enforces one.
-    //
-    // The concept list comes from the same groups the relevance validator
-    // scores against. That is deliberate — they are the definition of a
-    // complete section, not a scoring trick — but it does mean a local
-    // relevance score reads as "covered what it was told to cover" rather than
-    // as an independent judgement of quality. Cloud gets no such hint.
+    // for it in a way it is not for a cloud API that enforces one. The concept
+    // list comes from the groups the relevance validator scores against, so a
+    // local relevance score reads as "covered what it was told to cover"
+    // rather than as an independent judgement. Cloud gets no such hint.
     const concepts = sectionKeys
       .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).map(group => group[0]))
       .slice(0, 6).join(', ');
@@ -63,8 +52,8 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
     }
     task += `\n\nRequirements:`;
     // The length target is stated once, here. A truncated attempt needs the
-    // opposite target, so it replaces this line rather than arguing with it
-    // further down the prompt — a small model given both writes neither.
+    // opposite target, so it replaces this line rather than contradicting it
+    // later in the prompt — a small model given both writes neither.
     task += brevity
       ? `\n- The previous attempt ran past the length limit and was cut off. Write 2 to 3 compact paragraphs and make sure the JSON object is closed.`
       : `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
@@ -77,11 +66,9 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
   return `${context}${task}`;
 };
 
-/**
- * Hand-written mermaid skeletons. A small local model reliably emits mermaid that
- * fails to render, which breaks the whole blueprint view — a correct generic
- * diagram is more useful than a malformed bespoke one.
- */
+// Hand-written mermaid skeletons. A small local model reliably emits mermaid
+// that fails to render, breaking the whole blueprint view — a correct generic
+// diagram beats a malformed bespoke one.
 const TEMPLATE_DIAGRAMS = {
   architecture: '```mermaid\ngraph TD\n  Client[Client App] --> Gateway[API Gateway]\n  Gateway --> Service[Application Service]\n  Service --> DB[(Database)]\n  Service --> Cache[(Cache)]\n```',
   umlDiagram: '```mermaid\ngraph TD\n  User((User)) --> Login[Sign In]\n  User --> Browse[Browse Catalogue]\n  User --> Manage[Manage Account]\n  Admin((Admin)) --> Reports[View Reports]\n```',
@@ -95,28 +82,22 @@ const buildTemplateDiagram = (sectionKey, sectionTitle) => {
 };
 
 /**
- * Which sections this call actually writes.
- *
- * Initial generation passes nothing and gets everything the agent owns. A
- * revision passes the sections it routed, and gets only those: regenerating
- * the agent's whole responsibility list and discarding the sections the
- * revision never asked about costs a batch provider a much larger response
- * and costs the per-section provider an entire extra call per unused section.
- *
- * The requested list is intersected with ownership rather than trusted — the
- * router's output reaches here, and an agent must never write a section it
- * does not own. Ordering follows the canonical list, not the routing payload.
+ * Which sections this call actually writes. Initial generation passes nothing
+ * and gets everything the agent owns; a revision gets only what it routed,
+ * since regenerating unused sections costs the per-section provider an entire
+ * extra call each. The requested list is intersected with ownership rather
+ * than trusted — the router's output reaches here, and an agent must never
+ * write a section it does not own. Ordering follows the canonical list.
  */
 const resolveSections = (agentRole, targetSections) => {
-  const owned = AGENT_RESPONSIBILITIES[agentRole] || [];
+  const owned = AGENT_SECTIONS[agentRole] || [];
   if (!targetSections?.length) return owned;
 
   const requested = owned.filter(key => targetSections.includes(key));
   if (requested.length === 0) {
-    // normalizeRouting already drops tasks whose sections fail this same
-    // ownership check, so an empty result means the caller built the task by
-    // hand and got it wrong. Falling back to `owned` would silently reinstate
-    // the over-generation this exists to prevent.
+    // normalizeRouting already drops tasks failing this same ownership check,
+    // so an empty result means a hand-built task got it wrong. Falling back to
+    // `owned` would silently reinstate the over-generation this prevents.
     throw new Error(
       `No section owned by ${agentRole} in the requested set: ${targetSections.join(', ')}.`
     );
@@ -144,10 +125,8 @@ const buildResult = (content, decisions, scores, stages, source, agentRole) => (
   generatedAt: new Date().toISOString()
 });
 
-/**
- * Single call covering every section the agent owns, with one feedback-driven
- * retry. This is the original behaviour and remains the path for cloud models.
- */
+// Single call covering every section the agent owns, with one feedback-driven
+// retry. The path for cloud models.
 const generateBatch = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const schema = createResponseSchema(sectionsToGenerate, { dialect: profile.schemaDialect });
   const userPrompt = buildUserPrompt(sectionsToGenerate, instruction, agentRole, profile);
@@ -193,12 +172,10 @@ const generateBatch = async (agentRole, instruction, systemPrompt, profile, prov
 };
 
 /**
- * One call per section, each with a slim prompt and its own token budget.
- *
- * A small local model cannot hold five sections plus full project context in a
- * single response, so the work is split. A section that never validates keeps
- * its best parseable attempt rather than failing the whole agent; only a total
- * washout throws.
+ * One call per section, each with its own token budget, because a small local
+ * model cannot hold five sections plus full context in a single response. A
+ * section that never validates keeps its best parseable attempt rather than
+ * failing the whole agent; only a total washout throws.
  */
 const generatePerSection = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const { domain, industry, mandatoryKeywords } = readScope();
@@ -234,9 +211,8 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
       let rawResponse = null;
       try {
         // A truncated attempt ran out of room rather than misunderstanding the
-        // task, so the retry asks for brevity. That has to replace the length
-        // requirement inside the prompt rather than contradict it from the end
-        // — hence a rebuild instead of an appended hint.
+        // task, so the retry asks for brevity — which must replace the length
+        // requirement inside the prompt, hence a rebuild not an appended hint.
         let prompt = basePrompt;
         if (attempt > 1) {
           prompt = wasTruncated

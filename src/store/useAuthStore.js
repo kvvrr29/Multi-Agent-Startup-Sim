@@ -3,11 +3,8 @@ import { supabase } from '../services/supabaseClient';
 import { api } from '../services/apiClient';
 import { useSectionHistoryStore } from './sectionHistoryStore';
 
-/**
- * Auth + cloud project registry.
- * session: undefined = still loading, null = signed out, object = signed in.
- * activeCloudId: the projects-table row the local stores currently sync into.
- */
+// Auth + cloud project registry. `session` is undefined while loading, null
+// when signed out; `activeCloudId` is the projects row the stores sync into.
 export const useAuthStore = create((set, get) => ({
   session: undefined,
   user: null,

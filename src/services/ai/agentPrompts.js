@@ -33,14 +33,9 @@ Your goal is to write the closing Final Recommendations: 3-6 concrete, prioritiz
 Do not restate the blueprint. Recommend actions, sequencing, and what to validate first.`
 };
 
-/**
- * Appended only for providers that cannot enforce a response schema.
- *
- * Gemini and OpenAI guarantee structure through their APIs, so this would be
- * redundant noise for them. The local model has no such guarantee — it is
- * merely asked nicely, and reminding it is the main defence against markdown
- * fences and chatty preamble.
- */
+// Appended only for providers that cannot enforce a response schema. Gemini and
+// OpenAI guarantee structure through their APIs; the local model is merely
+// asked nicely, and this is the main defence against fences and preamble.
 export const JSON_ONLY_DIRECTIVE =
   'CRITICAL: Respond with ONLY the raw JSON object. No markdown, no code fences, no explanation, no text before or after it.';
 
@@ -49,10 +44,8 @@ export const withJsonHardening = (systemPrompt, profile) =>
   profile?.jsonHardening ? `${systemPrompt}\n${JSON_ONLY_DIRECTIVE}` : systemPrompt;
 
 // ── Directives shared by every generation prompt ─────────────────────────────
-//
-// These say what a good section is, which does not depend on which model writes
-// it. They live here as single strings so the batch and per-section templates
-// cannot drift apart — the two templates differ in layout, not in requirements.
+// What makes a good section does not depend on which model writes it, so these
+// live as single strings the batch and per-section templates cannot drift from.
 
 export const SPECIFICITY_DIRECTIVE =
   'Ensure the content is highly specific to this exact project and not generic.';

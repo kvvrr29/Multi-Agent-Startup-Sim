@@ -1,22 +1,16 @@
 import { modelManager } from './ModelManager';
 import { getProviderProfile } from './providerProfiles';
+import { estimateTokens } from './tokenEstimate';
 
 // Only used when a caller supplies no budget of its own — the classifier and
 // the router, which both ask for a few lines of JSON. Read from the profile so
 // there is one number rather than two that can drift apart.
 const DEFAULT_MAX_TOKENS = getProviderProfile('webllm').maxTokens;
 
-/**
- * How long to wait before treating a generation as stuck.
- *
- * This has to scale with the budget: decoding is bandwidth-bound, so a small
- * model on modest hardware runs at roughly 10-30 tokens per second, and a flat
- * ceiling that comfortably fits a 700-token answer will cut a 1400-token one
- * off mid-sentence. The allowance below assumes a pessimistic ~10 tok/s plus
- * time to load and prefill, then caps the whole thing — this is a deadlock
- * detector, not a pacing mechanism, so it should only ever fire when something
- * has genuinely stopped making progress.
- */
+// How long before a generation counts as stuck. Scales with the budget, since
+// a flat ceiling that fits a 700-token answer cuts a 1400-token one off
+// mid-sentence: the allowance assumes a pessimistic ~10 tok/s plus load and
+// prefill. A deadlock detector, not a pacing mechanism.
 const generationTimeoutMs = (maxTokens) =>
   Math.min(180_000, 30_000 + maxTokens * 100);
 
@@ -76,7 +70,7 @@ export class WebLLMProvider {
       }
 
       logDiagnostic('GENERATION', {
-        'Prompt token estimate': Math.ceil((systemPrompt?.length + userPrompt?.length) / 4),
+        'Prompt token estimate': estimateTokens(systemPrompt) + estimateTokens(userPrompt),
         'Requested max_tokens': max_tokens,
         'Queue wait time (ms)': queueWaitTimeMs
       });
@@ -118,16 +112,15 @@ export class WebLLMProvider {
       logDiagnostic('GENERATION COMPLETE', {
         'Time to first token (ms)': firstTokenMs ? Math.round(firstTokenMs - t0) : 'n/a',
         'Total time (ms)': Math.round(performance.now() - t0),
-        'Output token estimate': Math.ceil(text.length / 4),
+        'Output token estimate': estimateTokens(text),
         'Finish reason': finishReason || 'stop'
       });
 
       if (!text) throw new Error('WebLLM returned an empty response.');
 
-      // finish_reason 'length' means the budget cut generation off. For JSON
-      // that is unrecoverable — an unterminated string cannot be repaired by
-      // the parser — so surface it as a distinct, retryable condition rather
-      // than letting it fail later as "bad content".
+      // finish_reason 'length' means the budget cut generation off, which for
+      // JSON is unrecoverable — so surface it as a distinct, retryable
+      // condition rather than letting it fail later as "bad content".
       if (finishReason === 'length') {
         const err = new Error(
           `WebLLM response was truncated at the ${max_tokens}-token budget.`
@@ -150,11 +143,8 @@ export class WebLLMProvider {
     }
   }
 
-  /**
-   * Stops in-flight decoding on the GPU. Safe to call when nothing is running.
-   * interruptGenerate resolves once the engine has actually stopped, but we do
-   * not await it here — callers are already unwinding an error path.
-   */
+  // Stops in-flight decoding on the GPU; safe when nothing is running. Not
+  // awaited: callers are already unwinding an error path.
   _interrupt() {
     const engine = this._activeEngine || modelManager.engine;
     try {

@@ -4,11 +4,9 @@ import { WebLLMProvider } from './WebLLMProvider';
 import { GeminiProvider } from './GeminiProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { getActiveProviderName } from './activeProvider';
+import { estimateTokens } from './tokenEstimate';
 
 export { getActiveProviderName };
-
-// Simple heuristic for tokens
-const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
 
 class AIProviderFactory {
   constructor() {
@@ -26,10 +24,8 @@ class AIProviderFactory {
 
 const aiProviderFactory = new AIProviderFactory();
 
-/**
- * Generates content through the active provider and returns the raw response
- * text. Callers get a plain string, exactly as before the multi-provider work.
- */
+// Generates content through the active provider, returning the raw response
+// text as a plain string.
 export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null, maxTokens = null) => {
   const providerName = getActiveProviderName();
   const provider = aiProviderFactory.get(providerName);
@@ -56,11 +52,9 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     setConnectionStatus('connected');
     return settle(responseText);
   } catch (err) {
-    // No cross-provider rescue here. A quota failure propagates to
-    // simulationEngine, which already falls back to the template factory —
-    // a predictable result that needs no download and cannot surprise the
-    // user mid-run. Switching to the local model from this depth would also
-    // hand it a prompt built for a cloud model and grade it on cloud gates.
+    // No cross-provider rescue: a quota failure propagates to simulationEngine,
+    // which falls back to the template factory. Switching to the local model
+    // from this depth would hand it a cloud prompt graded on cloud gates.
     incrementFailed();
     console.error(`[AIProvider] ${providerName} generation failed:`, err);
 

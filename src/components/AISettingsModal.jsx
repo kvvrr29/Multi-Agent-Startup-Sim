@@ -54,10 +54,8 @@ function useLocalModelState(enabled) {
   };
 }
 
-/**
- * Local-model panel. The engine lives in a module singleton, so state comes
- * from the shared hook above rather than being mirrored into a store.
- */
+// Local-model panel. The engine is a module singleton, so state comes from the
+// shared hook above rather than being mirrored into a store.
 function LocalModelPanel({ model }) {
   const { cached, webgpuSupported, downloading, ready } = model;
   const state = model;

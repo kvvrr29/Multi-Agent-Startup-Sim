@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
-import { BLUEPRINT_SECTION_KEYS } from './blueprintKeys.js';
+import { BLUEPRINT_SECTION_KEYS } from '../shared/blueprintSections.js';
 import {
   DECISION_HISTORY_LIMIT,
   EVENT_HISTORY_LIMIT,
@@ -23,11 +23,8 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 
-/**
- * Auth middleware: validates the Supabase access token from the browser and
- * builds a user-scoped Supabase client, so Row Level Security still applies
- * to every query the server makes on the user's behalf.
- */
+// Validates the browser's Supabase access token and builds a user-scoped
+// client, so RLS still applies to every query made on the user's behalf.
 const withUser = async (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'unauthenticated', message: 'Missing bearer token.' });

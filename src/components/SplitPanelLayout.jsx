@@ -1,9 +1,7 @@
 import { Sparkles } from "lucide-react";
 
-/**
- * Shared shell for focused flows that pair explanatory content with a primary
- * workspace, such as authentication and project creation.
- */
+// Shared shell for flows pairing explanatory content with a primary workspace,
+// such as authentication and project creation.
 export default function SplitPanelLayout({
   eyebrow,
   title,

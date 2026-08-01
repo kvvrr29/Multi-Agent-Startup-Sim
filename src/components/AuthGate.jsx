@@ -36,10 +36,9 @@ export default function AuthGate({ children }) {
   const [bootError, setBootError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
 
-  // Key the bootstrap on the stable user id, NOT the session object. Supabase
-  // mints a fresh session object on token refresh and tab re-focus; depending
-  // on the object would re-run the effect, re-hydrate the stores from the DB
-  // over un-synced local edits, and cancel the pending push via stopSync.
+  // Key the bootstrap on the stable user id, NOT the session object: Supabase
+  // mints a fresh one on token refresh and tab re-focus, which would re-hydrate
+  // the stores over un-synced local edits and cancel the pending push.
   const userId = session?.user?.id ?? null;
 
   useEffect(() => {

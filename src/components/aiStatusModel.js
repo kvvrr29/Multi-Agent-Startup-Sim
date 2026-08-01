@@ -32,7 +32,6 @@ export function useAIMode() {
   const isGeminiConfigured = aiModeEnabled && hasProviderKey;
   const hasLiveOutput = Object.values(generationSources).some(s => s && !NON_LIVE_SOURCES.includes(s));
   const hasFallbackOutput = Object.values(generationSources).some(s => s === 'Fallback');
-  const mode = isGeminiConfigured ? providerLabel : 'Simulator';
   const reason = !aiModeEnabled
     ? 'AI Mode is disabled in Settings'
     : !hasProviderKey ? `No ${providerLabel} API key — add one in AI Settings`
@@ -54,5 +53,5 @@ export function useAIMode() {
     status = { ...status, label: `${providerLabel} ${status.label}` };
   }
 
-  return { mode, reason, status, lastError, isGeminiConfigured, isLocalProvider, hasLiveOutput, hasFallbackOutput };
+  return { reason, status, lastError };
 }
