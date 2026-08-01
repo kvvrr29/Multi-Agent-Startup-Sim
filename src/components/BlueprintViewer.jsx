@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import mermaid from "mermaid";
+import { loadMermaid } from "../services/mermaidLoader";
 import { useProjectStore } from "../store/useProjectStore";
 import { useSectionHistoryStore } from "../store/sectionHistoryStore";
 import ErrorBoundary from "./ErrorBoundary";
@@ -36,29 +36,6 @@ import {
   approveSectionWorkflow,
 } from "../services/simulationEngine";
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: "dark",
-  securityLevel: "strict",
-  fontFamily: "Inter, sans-serif",
-  themeVariables: {
-    background: "#171717",
-    primaryColor: "#303030",
-    primaryTextColor: "#f5f5f5",
-    primaryBorderColor: "#8c8c8c",
-    secondaryColor: "#2b2b2b",
-    tertiaryColor: "#1f1f1f",
-    lineColor: "#a3a3a3",
-    textColor: "#f5f5f5",
-    mainBkg: "#303030",
-    nodeBorder: "#8c8c8c",
-    clusterBkg: "#1f1f1f",
-    clusterBorder: "#555555",
-    edgeLabelBackground: "#171717",
-  },
-  suppressErrorRendering: true,
-});
-
 const Mermaid = ({ chart, onZoom }) => {
   const ref = useRef(null);
   const [svg, setSvg] = useState("");
@@ -69,6 +46,7 @@ const Mermaid = ({ chart, onZoom }) => {
       const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
       try {
         if (chart) {
+          const mermaid = await loadMermaid();
           const { svg } = await mermaid.render(id, chart);
           if (isMounted) setSvg(svg);
         }
