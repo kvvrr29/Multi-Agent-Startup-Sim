@@ -1,8 +1,8 @@
-import express from 'express';
-import cors from 'cors';
-import { createClient } from '@supabase/supabase-js';
-import 'dotenv/config';
-import { BLUEPRINT_SECTION_KEYS } from '../shared/blueprintSections.js';
+import express from "express";
+import cors from "cors";
+import { createClient } from "@supabase/supabase-js";
+import "dotenv/config";
+import { BLUEPRINT_SECTION_KEYS } from "../shared/blueprintSections.js";
 import {
   DECISION_HISTORY_LIMIT,
   EVENT_HISTORY_LIMIT,
@@ -10,59 +10,70 @@ import {
   MAX_EVENT_HISTORY_LIMIT,
   MAX_PAGE_OFFSET,
   MAX_PROJECT_PAGE_LIMIT,
-  PROJECT_PAGE_LIMIT
-} from '../shared/readLimits.js';
+  PROJECT_PAGE_LIMIT,
+} from "../shared/readLimits.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || "https://ymxxxfvxjheaiacddcfa.supabase.co";
+const SUPABASE_KEY =
+  process.env.SUPABASE_KEY || "sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w";
 const PORT = process.env.PORT || 8787;
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: "4mb" }));
 const withUser = async (req, res, next) => {
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-  if (!token) return res.status(401).json({ error: 'unauthenticated', message: 'Missing bearer token.' });
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (!token)
+    return res
+      .status(401)
+      .json({ error: "unauthenticated", message: "Missing bearer token." });
   const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false }
+    auth: { persistSession: false, autoRefreshToken: false },
   });
-  // getClaims verifies the signature locally against a cached JWKS, so this
-  // costs one JWKS fetch per process rather than an auth round-trip per
-  // request. It falls back to getUser() on its own for symmetric (HS*) tokens.
+
   const { data, error } = await client.auth.getClaims(token);
-  if (error || !data?.claims?.sub) return res.status(401).json({ error: 'invalid_token', message: 'Session is invalid or expired.' });
+  if (error || !data?.claims?.sub)
+    return res
+      .status(401)
+      .json({
+        error: "invalid_token",
+        message: "Session is invalid or expired.",
+      });
   req.supabase = client;
   req.user = { id: data.claims.sub, email: data.claims.email };
   next();
 };
 
-app.get('/api/health', (_req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-const PROJECT_LIST_COLUMNS = 'id, name, updated_at, last_opened_at';
+const PROJECT_LIST_COLUMNS = "id, name, updated_at, last_opened_at";
 const BLUEPRINT_SECTION_KEY_SET = new Set(BLUEPRINT_SECTION_KEYS);
 const PROJECT_FIELD_MAP = {
-  name: 'name',
-  idea: 'idea',
-  targetAudience: 'target_audience',
-  budget: 'budget',
-  timeline: 'timeline',
-  platform: 'platform',
-  teamSize: 'team_size',
-  priorities: 'priorities'
+  name: "name",
+  idea: "idea",
+  targetAudience: "target_audience",
+  budget: "budget",
+  timeline: "timeline",
+  platform: "platform",
+  teamSize: "team_size",
+  priorities: "priorities",
 };
 
 const pickProjectFields = (body = {}) => {
   const row = {};
   for (const [field, column] of Object.entries(PROJECT_FIELD_MAP)) {
-    if (typeof body[field] === 'string') row[column] = body[field];
+    if (typeof body[field] === "string") row[column] = body[field];
   }
-  if (typeof row.name === 'string') row.name = row.name.trim() || 'Untitled Project';
+  if (typeof row.name === "string")
+    row.name = row.name.trim() || "Untitled Project";
   return row;
 };
 
-const dbError = (res, error) => res.status(500).json({ error: 'db_error', message: error.message });
+const dbError = (res, error) =>
+  res.status(500).json({ error: "db_error", message: error.message });
 
 const boundedInteger = (value, fallback, maximum, minimum = 0) => {
   const parsed = Number.parseInt(value, 10);
@@ -80,50 +91,63 @@ const pageMetadata = (rowCount, limit, offset) => ({
   limit,
   offset,
   hasMore: rowCount > limit && offset < MAX_PAGE_OFFSET,
-  nextOffset: rowCount > limit && offset < MAX_PAGE_OFFSET ? offset + limit : null
+  nextOffset:
+    rowCount > limit && offset < MAX_PAGE_OFFSET ? offset + limit : null,
 });
 
-app.get('/api/projects', withUser, async (req, res) => {
+app.get("/api/projects", withUser, async (req, res) => {
   const baseQuery = req.supabase
-    .from('projects')
+    .from("projects")
     .select(PROJECT_LIST_COLUMNS)
-    .order('last_opened_at', { ascending: false, nullsFirst: false })
-    .order('updated_at', { ascending: false });
-  const { query, limit, offset } = readPage(baseQuery, req, PROJECT_PAGE_LIMIT, MAX_PROJECT_PAGE_LIMIT);
+    .order("last_opened_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false });
+  const { query, limit, offset } = readPage(
+    baseQuery,
+    req,
+    PROJECT_PAGE_LIMIT,
+    MAX_PROJECT_PAGE_LIMIT,
+  );
   const { data, error } = await query;
   if (error) return dbError(res, error);
   const rows = data || [];
-  res.json({ projects: rows.slice(0, limit), pagination: pageMetadata(rows.length, limit, offset) });
+  res.json({
+    projects: rows.slice(0, limit),
+    pagination: pageMetadata(rows.length, limit, offset),
+  });
 });
 
-app.post('/api/projects', withUser, async (req, res) => {
+app.post("/api/projects", withUser, async (req, res) => {
   const row = pickProjectFields(req.body);
-  if (!row.name) row.name = 'Untitled Project';
+  if (!row.name) row.name = "Untitled Project";
   const { data, error } = await req.supabase
-    .from('projects')
+    .from("projects")
     .insert(row)
     .select(PROJECT_LIST_COLUMNS)
     .single();
   if (error) return dbError(res, error);
   res.status(201).json(data);
 });
-app.get('/api/projects/:id/blueprint', withUser, async (req, res) => {
+app.get("/api/projects/:id/blueprint", withUser, async (req, res) => {
   const { data, error } = await req.supabase
-    .from('blueprint_sections')
-    .select('section_key, content, status, generation_source, generated_by, validation_scores, generated_at, failure_reason, updated_at')
-    .eq('project_id', req.params.id);
+    .from("blueprint_sections")
+    .select(
+      "section_key, content, status, generation_source, generated_by, validation_scores, generated_at, failure_reason, updated_at",
+    )
+    .eq("project_id", req.params.id);
   if (error) return dbError(res, error);
   res.json({ sections: data || [] });
 });
 
-app.get('/api/projects/:id/meta', withUser, async (req, res) => {
+app.get("/api/projects/:id/meta", withUser, async (req, res) => {
   const { data, error } = await req.supabase
-    .from('projects')
-    .select('name, idea, target_audience, budget, timeline, platform, team_size, priorities')
-    .eq('id', req.params.id)
+    .from("projects")
+    .select(
+      "name, idea, target_audience, budget, timeline, platform, team_size, priorities",
+    )
+    .eq("id", req.params.id)
     .maybeSingle();
   if (error) return dbError(res, error);
-  if (!data) return res.status(404).json({ error: 'not_found' });
+  if (!data) return res.status(404).json({ error: "not_found" });
   res.json({
     name: data.name,
     idea: data.idea,
@@ -132,146 +156,205 @@ app.get('/api/projects/:id/meta', withUser, async (req, res) => {
     timeline: data.timeline,
     platform: data.platform,
     teamSize: data.team_size,
-    priorities: data.priorities
+    priorities: data.priorities,
   });
 });
 
-app.get('/api/projects/:id/events', withUser, async (req, res) => {
+app.get("/api/projects/:id/events", withUser, async (req, res) => {
   const baseQuery = req.supabase
-    .from('workflow_events')
-    .select('client_id, occurred_at, payload')
-    .eq('project_id', req.params.id)
-    .order('occurred_at', { ascending: false })
-    .order('id', { ascending: false });
-  const { query, limit, offset } = readPage(baseQuery, req, EVENT_HISTORY_LIMIT, MAX_EVENT_HISTORY_LIMIT);
+    .from("workflow_events")
+    .select("client_id, occurred_at, payload")
+    .eq("project_id", req.params.id)
+    .order("occurred_at", { ascending: false })
+    .order("id", { ascending: false });
+  const { query, limit, offset } = readPage(
+    baseQuery,
+    req,
+    EVENT_HISTORY_LIMIT,
+    MAX_EVENT_HISTORY_LIMIT,
+  );
   const { data, error } = await query;
   if (error) return dbError(res, error);
   const rows = data || [];
-  const events = rows.slice(0, limit).reverse().map(row => ({
-    ...(row.payload || {}),
-    id: row.payload?.id ?? row.client_id,
-    timestamp: row.payload?.timestamp ?? row.occurred_at
-  }));
+  const events = rows
+    .slice(0, limit)
+    .reverse()
+    .map((row) => ({
+      ...(row.payload || {}),
+      id: row.payload?.id ?? row.client_id,
+      timestamp: row.payload?.timestamp ?? row.occurred_at,
+    }));
   res.json({ events, pagination: pageMetadata(rows.length, limit, offset) });
 });
 
-app.get('/api/projects/:id/memory', withUser, async (req, res) => {
+app.get("/api/projects/:id/memory", withUser, async (req, res) => {
   const { data, error } = await req.supabase
-    .from('memory_entries')
-    .select('category, key, value')
-    .eq('project_id', req.params.id)
-    .order('category', { ascending: true })
-    .order('key', { ascending: true });
+    .from("memory_entries")
+    .select("category, key, value")
+    .eq("project_id", req.params.id)
+    .order("category", { ascending: true })
+    .order("key", { ascending: true });
   if (error) return dbError(res, error);
   res.json({ entries: data || [] });
 });
 
-app.get('/api/projects/:id/decisions', withUser, async (req, res) => {
+app.get("/api/projects/:id/decisions", withUser, async (req, res) => {
   const baseQuery = req.supabase
-    .from('decision_entries')
-    .select('client_id, category, key, value, agent, instruction, decided_at, payload')
-    .eq('project_id', req.params.id)
-    .order('decided_at', { ascending: false })
-    .order('id', { ascending: false });
-  const { query, limit, offset } = readPage(baseQuery, req, DECISION_HISTORY_LIMIT, MAX_DECISION_HISTORY_LIMIT);
+    .from("decision_entries")
+    .select(
+      "client_id, category, key, value, agent, instruction, decided_at, payload",
+    )
+    .eq("project_id", req.params.id)
+    .order("decided_at", { ascending: false })
+    .order("id", { ascending: false });
+  const { query, limit, offset } = readPage(
+    baseQuery,
+    req,
+    DECISION_HISTORY_LIMIT,
+    MAX_DECISION_HISTORY_LIMIT,
+  );
   const { data, error } = await query;
   if (error) return dbError(res, error);
   const rows = data || [];
-  const decisions = rows.slice(0, limit).reverse().map(row => ({
-    ...(row.payload || {}),
-    id: row.payload?.id ?? row.client_id,
-    category: row.payload?.category ?? row.category,
-    key: row.payload?.key ?? row.key,
-    value: row.payload?.value ?? row.value,
-    agent: row.payload?.agent ?? row.agent,
-    instruction: row.payload?.instruction ?? row.instruction,
-    timestamp: row.payload?.timestamp ?? row.decided_at
-  }));
+  const decisions = rows
+    .slice(0, limit)
+    .reverse()
+    .map((row) => ({
+      ...(row.payload || {}),
+      id: row.payload?.id ?? row.client_id,
+      category: row.payload?.category ?? row.category,
+      key: row.payload?.key ?? row.key,
+      value: row.payload?.value ?? row.value,
+      agent: row.payload?.agent ?? row.agent,
+      instruction: row.payload?.instruction ?? row.instruction,
+      timestamp: row.payload?.timestamp ?? row.decided_at,
+    }));
   res.json({ decisions, pagination: pageMetadata(rows.length, limit, offset) });
 });
 
-app.patch('/api/projects/:id', withUser, async (req, res) => {
+app.patch("/api/projects/:id", withUser, async (req, res) => {
   const patch = pickProjectFields(req.body);
-  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'bad_request', message: 'Nothing to update.' });
+  if (Object.keys(patch).length === 0)
+    return res
+      .status(400)
+      .json({ error: "bad_request", message: "Nothing to update." });
   const { data, error } = await req.supabase
-    .from('projects')
+    .from("projects")
     .update(patch)
-    .eq('id', req.params.id)
-    .select('id, updated_at')
+    .eq("id", req.params.id)
+    .select("id, updated_at")
     .maybeSingle();
   if (error) return dbError(res, error);
-  if (!data) return res.status(404).json({ error: 'not_found' });
+  if (!data) return res.status(404).json({ error: "not_found" });
   res.json(data);
 });
 
-app.put('/api/projects/:id/sections', withUser, async (req, res) => {
+app.put("/api/projects/:id/sections", withUser, async (req, res) => {
   const sections = Array.isArray(req.body?.sections) ? req.body.sections : [];
-  if (sections.length === 0) return res.status(400).json({ error: 'bad_request', message: 'sections array is required.' });
+  if (sections.length === 0)
+    return res
+      .status(400)
+      .json({ error: "bad_request", message: "sections array is required." });
   const rows = sections
-    .filter(s => typeof s?.key === 'string' && BLUEPRINT_SECTION_KEY_SET.has(s.key))
-    .map(s => ({
+    .filter(
+      (s) => typeof s?.key === "string" && BLUEPRINT_SECTION_KEY_SET.has(s.key),
+    )
+    .map((s) => ({
       project_id: req.params.id,
       section_key: s.key,
-      content: typeof s.content === 'string' ? s.content : '',
-      status: s.status === 'approved' ? 'approved' : 'pending',
+      content: typeof s.content === "string" ? s.content : "",
+      status: s.status === "approved" ? "approved" : "pending",
       generation_source: s.generationSource ?? null,
       generated_by: s.generatedBy ?? null,
       validation_scores: s.validationScores ?? null,
       generated_at: s.generatedAt ?? null,
-      failure_reason: s.failureReason ?? null
+      failure_reason: s.failureReason ?? null,
     }));
   if (rows.length === 0) {
-    return res.status(400).json({ error: 'bad_request', message: 'No valid blueprint sections were provided.' });
+    return res
+      .status(400)
+      .json({
+        error: "bad_request",
+        message: "No valid blueprint sections were provided.",
+      });
   }
   const { data, error } = await req.supabase
-    .from('blueprint_sections')
-    .upsert(rows, { onConflict: 'project_id,section_key' })
-    .select('id');
+    .from("blueprint_sections")
+    .upsert(rows, { onConflict: "project_id,section_key" })
+    .select("id");
   if (error) return dbError(res, error);
-  if (!data || data.length === 0) return res.status(404).json({ error: 'not_found' });
+  if (!data || data.length === 0)
+    return res.status(404).json({ error: "not_found" });
   res.json({ updated: data.length });
 });
 
-app.post('/api/projects/:id/events', withUser, async (req, res) => {
+app.post("/api/projects/:id/events", withUser, async (req, res) => {
   const events = Array.isArray(req.body?.events) ? req.body.events : [];
-  if (events.length === 0) return res.status(400).json({ error: 'bad_request', message: 'events array is required.' });
+  if (events.length === 0)
+    return res
+      .status(400)
+      .json({ error: "bad_request", message: "events array is required." });
   const rows = events
-    .filter(e => e && (typeof e.id === 'string' || typeof e.id === 'number'))
-    .map(e => ({
+    .filter((e) => e && (typeof e.id === "string" || typeof e.id === "number"))
+    .map((e) => ({
       project_id: req.params.id,
       client_id: String(e.id),
       event_type: e.type ?? null,
       agent_id: e.agentId ?? e.agent ?? null,
       occurred_at: e.timestamp || new Date().toISOString(),
-      payload: e
+      payload: e,
     }));
   const { error } = await req.supabase
-    .from('workflow_events')
-    .upsert(rows, { onConflict: 'project_id,client_id', ignoreDuplicates: true });
+    .from("workflow_events")
+    .upsert(rows, {
+      onConflict: "project_id,client_id",
+      ignoreDuplicates: true,
+    });
   if (error) return dbError(res, error);
   res.status(201).json({ appended: rows.length });
 });
 
-app.put('/api/projects/:id/memory', withUser, async (req, res) => {
+app.put("/api/projects/:id/memory", withUser, async (req, res) => {
   const entries = Array.isArray(req.body?.entries) ? req.body.entries : [];
-  if (entries.length === 0) return res.status(400).json({ error: 'bad_request', message: 'entries array is required.' });
+  if (entries.length === 0)
+    return res
+      .status(400)
+      .json({ error: "bad_request", message: "entries array is required." });
   const rows = entries
-    .filter(e => typeof e?.category === 'string' && typeof e?.key === 'string')
-    .map(e => ({ project_id: req.params.id, category: e.category, key: e.key, value: e.value ?? null }));
-  if (rows.length === 0) return res.status(400).json({ error: 'bad_request', message: 'No valid memory entries were provided.' });
+    .filter(
+      (e) => typeof e?.category === "string" && typeof e?.key === "string",
+    )
+    .map((e) => ({
+      project_id: req.params.id,
+      category: e.category,
+      key: e.key,
+      value: e.value ?? null,
+    }));
+  if (rows.length === 0)
+    return res
+      .status(400)
+      .json({
+        error: "bad_request",
+        message: "No valid memory entries were provided.",
+      });
   const { error } = await req.supabase
-    .from('memory_entries')
-    .upsert(rows, { onConflict: 'project_id,category,key' });
+    .from("memory_entries")
+    .upsert(rows, { onConflict: "project_id,category,key" });
   if (error) return dbError(res, error);
   res.json({ ok: true });
 });
 
-app.post('/api/projects/:id/decisions', withUser, async (req, res) => {
-  const decisions = Array.isArray(req.body?.decisions) ? req.body.decisions : [];
-  if (decisions.length === 0) return res.status(400).json({ error: 'bad_request', message: 'decisions array is required.' });
+app.post("/api/projects/:id/decisions", withUser, async (req, res) => {
+  const decisions = Array.isArray(req.body?.decisions)
+    ? req.body.decisions
+    : [];
+  if (decisions.length === 0)
+    return res
+      .status(400)
+      .json({ error: "bad_request", message: "decisions array is required." });
   const rows = decisions
-    .filter(d => d && typeof d.id === 'string')
-    .map(d => ({
+    .filter((d) => d && typeof d.id === "string")
+    .map((d) => ({
       project_id: req.params.id,
       client_id: d.id,
       category: d.category ?? null,
@@ -280,17 +363,23 @@ app.post('/api/projects/:id/decisions', withUser, async (req, res) => {
       agent: d.agent ?? null,
       instruction: d.instruction ?? null,
       decided_at: d.timestamp || new Date().toISOString(),
-      payload: d
+      payload: d,
     }));
   const { error } = await req.supabase
-    .from('decision_entries')
-    .upsert(rows, { onConflict: 'project_id,client_id', ignoreDuplicates: true });
+    .from("decision_entries")
+    .upsert(rows, {
+      onConflict: "project_id,client_id",
+      ignoreDuplicates: true,
+    });
   if (error) return dbError(res, error);
   res.status(201).json({ appended: rows.length });
 });
 
-app.delete('/api/projects/:id', withUser, async (req, res) => {
-  const { error } = await req.supabase.from('projects').delete().eq('id', req.params.id);
+app.delete("/api/projects/:id", withUser, async (req, res) => {
+  const { error } = await req.supabase
+    .from("projects")
+    .delete()
+    .eq("id", req.params.id);
   if (error) return dbError(res, error);
   res.status(204).end();
 });
