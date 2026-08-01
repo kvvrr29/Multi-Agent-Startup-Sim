@@ -8,23 +8,6 @@ const DEFAULT_MODEL = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 const shortenProgressText = (text = "") =>
   text.replace(/\s*\d+% completed.*$/s, "").trim();
 
-// Which physical GPU WebGPU actually handed us. On a hybrid laptop Chrome may
-// composite on the integrated GPU and still run WebGPU on the discrete one, or
-// not — chrome://gpu shows the former, and only this shows the latter. Same
-// powerPreference web-llm requests, so it reports the adapter it will get.
-const describeAdapter = async () => {
-  try {
-    const adapter = await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' });
-    if (!adapter) return 'no adapter';
-    const info = adapter.info ?? await adapter.requestAdapterInfo?.();
-    if (!info) return 'unknown';
-    return [info.vendor, info.architecture, info.device, info.description]
-      .filter(Boolean).join(' / ') || 'unknown';
-  } catch (err) {
-    return `unavailable (${err.message})`;
-  }
-};
-
 const logDiagnostic = (section, data) => {
   if (!import.meta.env.DEV) return;
   console.log(
@@ -105,7 +88,6 @@ class ModelManager {
         "Selected provider": "WebLLM",
         Browser: navigator.userAgent,
         "WebGPU supported": !!navigator.gpu,
-        "GPU adapter": await describeAdapter(),
         "Selected model": this.modelId,
       });
 
