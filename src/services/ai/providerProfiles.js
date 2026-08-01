@@ -86,7 +86,8 @@ export const getProviderProfile = (providerName) =>
 // The window the local engine is loaded with, and the one contextBuilder
 // budgets against — sharing it means the two cannot disagree. Qwen2.5 is
 // trained for 32768; web-llm's prebuilt entry pins 4096 for every model size,
-// a phone-sized default. Raising it costs KV cache VRAM (~56 KiB/token) only.
+// a phone-sized default. Raising it costs KV cache VRAM only — ~28 KiB/token
+// on the f16 build, so 8192 holds at ~225MB.
 export const LOCAL_CONTEXT_WINDOW = 8192;
 
 // Room for the system prompt and task block that follow the context, plus slack
