@@ -2,16 +2,19 @@
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// web-llm reports 2504MB for this build, against 4GB of dedicated VRAM — the
-// largest Qwen2.5 that leaves room for the browser's own GPU allocations (the
-// 7B needs 5106MB and cannot load at all). The context window is 4096 either
-// way; web-llm pins the same window for every Qwen2.5 size, so stepping up
-// buys instruction-following and prose quality, not room.
+// ~828 MiB to download once, 1889MB of VRAM in use, 4096-token context.
 //
-// Size is not the reason to prefer this over the 1.5B on a discrete card —
-// bandwidth is. Decoding is bandwidth-bound, so a 3050 reading ~1.8GB of
-// weights per token still outruns an integrated GPU reading ~1.0GB.
-const DEFAULT_MODEL = 'Qwen2.5-3B-Instruct-q4f16_1-MLC';
+// The q4f32 build costs no more to download than the q4f16 one — the weights
+// are the same packed 4-bit values and only the scales differ in dtype, which
+// the shard sizes work out identical for. What it does cost is VRAM (1889MB
+// against 1630MB) and what it buys is reach: the f16 builds require the WebGPU
+// `shader-f16` extension and refuse to load without it, so q4f32 runs on
+// machines where q4f16 fails outright.
+//
+// Against 4GB of dedicated VRAM that leaves roughly 2GB of headroom for the
+// browser's own GPU allocations. The 3B q4f16 build would also fit at 2504MB,
+// but it is twice the download (~1656 MiB) for a margin half the size.
+const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
 
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
 // completed, 56 secs elapsed. It can take a while when we first visit this
