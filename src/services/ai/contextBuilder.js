@@ -12,26 +12,44 @@ const AGENT_MEMORY_CATEGORIES = {
   mediator: ['scope', 'business', 'product', 'technical', 'marketing']
 };
 
+// The same 4-chars-per-token heuristic the cost tracker uses. It only has to be
+// good enough to decide whether the blueprint state needs trimming, and
+// getMaxContextTokens leaves slack for it being wrong.
+const estimateTokens = (text) => Math.ceil((text?.length || 0) / 4);
+
+// How far non-focus sections get trimmed back when the context does not fit,
+// tried in order. The first length that fits wins, so a blueprint only loses
+// as much detail as the window actually demands.
+const TRIM_STEPS = [1600, 800, 400, 240, 120];
+
 /**
  * Builds the context block every agent request is grounded in.
  *
- * Both providers use this one builder — the shape of the context is a property
- * of the project, not of the model. `compact` only controls how much of it a
- * model with a small window is asked to hold:
- *
- *   compact: false  the full brief (cloud default, unchanged)
- *   compact: true   the same facts, minus the parts that cost the most tokens
- *                   per unit of usefulness — the raw memory JSON, the decision
- *                   log, and the text of sections this call is not writing.
+ * Both providers get the same context. The shape of the brief is a property of
+ * the project, not of the model, and a local model given less than the cloud
+ * one writes correspondingly less specific content.
  *
  * `focusSections` names the sections this call is actually producing. Their
  * current text is always included in full, because a revision instruction like
  * "make this longer" is meaningless without it.
+ *
+ * `maxContextTokens` is the one concession to a fixed window. Cloud passes
+ * nothing and its context is unchanged, byte for byte. The local engine passes
+ * its budget, and if the assembled brief exceeds it the sections this call is
+ * *not* writing are trimmed — approved ones included — until it fits. Without
+ * this the context is unbounded: approved sections are never truncated, so a
+ * blueprint of seventeen approved 350-word sections builds an 11,700-token
+ * brief and overflows an 8192 window outright.
+ *
+ * `compact` is the older, blunter answer to the same problem: drop non-focus
+ * sections and the memory blocks entirely rather than trim them. Nothing uses
+ * it now that the budget exists, but it is kept as the fallback if full context
+ * proves too slow to prefill on modest hardware.
  */
 export const buildContextString = (
   customInstruction = '',
   agentRole = 'mediator',
-  { compact = false, focusSections = null } = {}
+  { compact = false, focusSections = null, maxContextTokens = null } = {}
 ) => {
   const store = useProjectStore.getState();
   const memoryStore = useProjectMemoryStore.getState();
@@ -98,23 +116,45 @@ export const buildContextString = (
       .join('\n') + `\n\n`;
   }
 
-  let blueprintState = '';
-  Object.keys(blueprint).forEach(key => {
-    const section = blueprint[key];
-    if (!section || !section.content) return;
-    const isFocus = focus ? focus.has(key) : SECTION_OWNERSHIP[key] === agentRole;
-    // In compact mode everything outside the focus set is dropped rather than
-    // truncated: 240 characters of an unrelated section is enough to bias a
-    // small model's topic without being enough to inform it.
-    if (compact && !isFocus) return;
-    blueprintState += `[${section.title}] (Status: ${section.status})\n`;
-    // Approved sections are settled facts and are never truncated. Likewise,
-    // an agent receives its own current sections in full for safe revisions.
-    const content = section.status === 'approved' || isFocus
-      ? section.content
-      : `${section.content.substring(0, 240)}${section.content.length > 240 ? '…' : ''}`;
-    blueprintState += `${content}\n\n`;
-  });
+  // `trimTo` is the ceiling for sections this call is not writing. null means
+  // the original rule: approved sections in full, the rest cut at 240 chars.
+  const renderBlueprintState = (trimTo = null) => {
+    let state = '';
+    Object.keys(blueprint).forEach(key => {
+      const section = blueprint[key];
+      if (!section || !section.content) return;
+      const isFocus = focus ? focus.has(key) : SECTION_OWNERSHIP[key] === agentRole;
+      // In compact mode everything outside the focus set is dropped rather than
+      // truncated: 240 characters of an unrelated section is enough to bias a
+      // small model's topic without being enough to inform it.
+      if (compact && !isFocus) return;
+      state += `[${section.title}] (Status: ${section.status})\n`;
+      // An agent always receives the sections it is writing in full — trimming
+      // those would break the revision it was asked to make. Approved sections
+      // are settled facts and are only trimmed under budget pressure.
+      const limit = isFocus
+        ? null
+        : trimTo ?? (section.status === 'approved' ? null : 240);
+      const content = limit === null
+        ? section.content
+        : `${section.content.substring(0, limit)}${section.content.length > limit ? '…' : ''}`;
+      state += `${content}\n\n`;
+    });
+    return state;
+  };
+
+  let blueprintState = renderBlueprintState();
+
+  if (maxContextTokens) {
+    // Everything except the blueprint state is already committed, so the state
+    // is what has to give. Each step trims the sections this call is not
+    // writing harder; the first one that fits is used.
+    const fixedTokens = estimateTokens(context) + estimateTokens(customInstruction);
+    for (const step of TRIM_STEPS) {
+      if (fixedTokens + estimateTokens(blueprintState) <= maxContextTokens) break;
+      blueprintState = renderBlueprintState(step);
+    }
+  }
 
   if (!compact) {
     context += `--- CURRENT BLUEPRINT STATE ---\n${blueprintState}`;

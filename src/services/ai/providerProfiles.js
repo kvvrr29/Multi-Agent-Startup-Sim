@@ -92,6 +92,33 @@ export const getProviderProfile = (providerName) =>
   PROFILES[providerName] || CLOUD_PROFILE;
 
 /**
+ * The context window the local engine is loaded with. Qwen2.5 is trained for
+ * 32768; web-llm's prebuilt entry pins 4096 for every model size, which is a
+ * default sized for phones rather than a property of the model. Raising it
+ * costs KV cache VRAM (~56 KiB per token) and nothing else.
+ *
+ * ModelManager loads the engine with this and contextBuilder budgets against
+ * it, so the two cannot disagree about how much room there is.
+ */
+export const LOCAL_CONTEXT_WINDOW = 8192;
+
+// Room kept aside for the system prompt and the task block that follow the
+// context, plus slack for the difference between the 4-chars-per-token estimate
+// and the real tokenizer. Overflowing the window is a hard engine error, so
+// this errs high.
+const PROMPT_OVERHEAD_TOKENS = 900;
+
+/**
+ * How many tokens of context the model can be given, once its answer is
+ * accounted for. Cloud providers get null — they are not budgeted, and the
+ * context they receive is unchanged.
+ */
+export const getMaxContextTokens = (profile, sectionMaxTokens) =>
+  profile.maxTokens === null
+    ? null
+    : LOCAL_CONTEXT_WINDOW - (sectionMaxTokens || profile.maxTokens) - PROMPT_OVERHEAD_TOKENS;
+
+/**
  * Output budget per section for the per-section strategy.
  *
  * These bound worst-case generation time and stop a small model looping. They

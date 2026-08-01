@@ -55,7 +55,7 @@ describe('per-section generation for the local model', () => {
     expect(result.generationSource).toBe('Built-in AI');
   });
 
-  it('sends a compact prompt with a per-section token budget', async () => {
+  it('sends the full cloud context with a per-section task and token budget', async () => {
     generateAIContent.mockImplementation((_system, prompt) => {
       const key = ['executiveSummary', 'targetUsers', 'businessModel', 'budgetCostEstimate', 'risksMitigation']
         .find(k => prompt.includes(k));
@@ -65,18 +65,18 @@ describe('per-section generation for the local model', () => {
     await generateAgentContent('ceo');
 
     const [, prompt, schema, maxTokens] = generateAIContent.mock.calls[0];
-    // Slim: nothing like the multi-section batch prompt.
+    // The task is per-section, not the multi-section batch instruction.
     expect(prompt).not.toMatch(/generate the following blueprint sections/);
     expect(prompt).toMatch(/Respond with ONLY valid JSON/);
     expect(maxTokens).toBeGreaterThan(0);
-    // The compact context still carries what the model cannot work without:
-    // the actual project, and an explicit length target.
     expect(prompt).toMatch(/Urban food delivery/);
     expect(prompt).toMatch(/at least 350 words/);
     // One concept per scored group, not six synonyms of the first group.
     expect(prompt).toMatch(/Cover concepts such as: problem, solution, customer, value\./);
-    // …but not the token-heavy blocks the batch prompt carries.
-    expect(prompt).not.toMatch(/PROJECT MEMORY/);
+    // The context itself is now the full cloud brief, memory blocks included —
+    // the local model is no longer working from a reduced picture.
+    expect(prompt).toMatch(/PROJECT MEMORY/);
+    expect(prompt).toMatch(/CURRENT BLUEPRINT STATE/);
     // Single-section schema, in the dialect a local model understands.
     expect(schema.type).toBe('object');
     expect(Object.keys(schema.properties)).toContain('executiveSummary');

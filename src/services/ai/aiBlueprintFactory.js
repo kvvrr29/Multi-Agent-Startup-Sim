@@ -1,6 +1,6 @@
 import { generateAIContent } from './aiProvider';
 import { getActiveProviderName, getProviderSourceLabel } from './activeProvider';
-import { getProviderProfile, getSectionMaxTokens, DIAGRAM_SECTIONS } from './providerProfiles';
+import { getProviderProfile, getSectionMaxTokens, getMaxContextTokens, DIAGRAM_SECTIONS } from './providerProfiles';
 import { AGENT_SYSTEM_PROMPTS, withJsonHardening, SPECIFICITY_DIRECTIVE, NO_MERMAID_DIRECTIVE } from './agentPrompts';
 import { buildContextString } from './contextBuilder';
 import { validateAIResponse, createResponseSchema, buildRetryFeedback, SECTION_CONCEPT_GROUPS } from './validationLayer';
@@ -15,24 +15,27 @@ const AGENT_RESPONSIBILITIES = AGENT_ROLES;
 const MAX_ATTEMPTS = 2;
 
 /**
- * The user prompt for a generation request. Both strategies use this — the only
- * difference is how many sections are asked for at once, and whether the
- * context is the full brief or the compact one.
+ * The user prompt for a generation request. Both strategies use this, and both
+ * now receive the same context — the only difference is how many sections are
+ * asked for at once and how explicitly the task is spelled out.
  *
  * `profile.minWords` is what actually fixes short output: nothing else in the
  * prompt chain ever states a length, so a model that is not verbose by default
  * has no reason to write more than a sentence.
  */
-const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
-  const compact = profile.strategy === 'perSection';
+const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null) => {
+  const perSection = profile.strategy === 'perSection';
+  // Both providers now get the identical brief. The local model only differs in
+  // carrying a budget, which trims the blueprint state if — and only if — the
+  // assembled context would not fit its window.
   const context = buildContextString(instruction, agentRole, {
-    compact,
-    focusSections: sectionKeys
+    focusSections: sectionKeys,
+    maxContextTokens: getMaxContextTokens(profile, sectionMaxTokens)
   });
 
   let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}. ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
-  if (compact) {
+  if (perSection) {
     // A small model needs the shape spelled out; the schema alone is advisory
     // for it in a way it is not for a cloud API that enforces one.
     //
@@ -179,7 +182,7 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
 
     const schema = createResponseSchema([sectionKey], { dialect: profile.schemaDialect });
     const maxTokens = getSectionMaxTokens(sectionKey, profile);
-    const basePrompt = buildUserPrompt([sectionKey], instruction, agentRole, profile);
+    const basePrompt = buildUserPrompt([sectionKey], instruction, agentRole, profile, maxTokens);
 
     let sectionDone = false;
     let bestEffort = null;

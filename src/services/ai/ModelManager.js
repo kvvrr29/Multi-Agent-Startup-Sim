@@ -1,8 +1,10 @@
+import { LOCAL_CONTEXT_WINDOW } from './providerProfiles';
+
 // web-llm is several megabytes of WASM glue. Loading it on demand keeps it out
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// ~828 MiB to download once, 1889MB of VRAM in use, 4096-token context.
+// ~828 MiB to download once, ~1889MB of VRAM for the weights.
 //
 // The q4f32 build costs no more to download than the q4f16 one — the weights
 // are the same packed 4-bit values and only the scales differ in dtype, which
@@ -16,20 +18,13 @@ const loadWebLLM = () => import('@mlc-ai/web-llm');
 // but it is twice the download (~1656 MiB) for a margin half the size.
 const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC';
 
-// Qwen2.5 is trained for 32768 tokens; web-llm's prebuilt entry overrides that
-// down to 4096 for every size, as a default sized for phones rather than for
-// any property of the model. We raise it because 4096 is genuinely close for
-// this app: a revision of an already-long section can reach ~2200 tokens of
-// prompt, and a 1400-token answer on top of that leaves only a few hundred
-// spare before web-llm throws ContextWindowSizeExceededError.
-//
-// The cost is VRAM and nothing else. The KV cache is allocated up front at
-// 2 x 28 layers x 2 KV heads x 128 head dim x 4 bytes = 56 KiB per token, so
-// 8192 costs ~450MB against ~225MB, taking the model to roughly 2.1GB of the
-// card's 4GB. Decode speed is unaffected: attention runs over the tokens
-// actually present, not over the allocated window, and prefill cost tracks the
-// real prompt length. 16384 would still fit but buys nothing this app can use.
-const CONTEXT_WINDOW_SIZE = 8192;
+// The window the engine is loaded with, and the number contextBuilder budgets
+// the prompt against — see LOCAL_CONTEXT_WINDOW for why it is not web-llm's
+// 4096 default. The KV cache is allocated up front at 2 x 28 layers x 2 KV
+// heads x 128 head dim x 4 bytes = 56 KiB per token, so 8192 costs ~450MB
+// against ~225MB, taking the model to roughly 2.1GB of the card's 4GB. Decode
+// speed is unaffected: attention runs over the tokens actually present, not
+// over the allocated window, and prefill tracks the real prompt length.
 
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
 // completed, 56 secs elapsed. It can take a while when we first visit this
@@ -145,7 +140,7 @@ class ModelManager {
           }
           this._notify();
         }
-      }, { context_window_size: CONTEXT_WINDOW_SIZE });
+      }, { context_window_size: LOCAL_CONTEXT_WINDOW });
       const t1 = performance.now();
       
       if (!hasCached) {
