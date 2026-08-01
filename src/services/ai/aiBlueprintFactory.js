@@ -42,7 +42,7 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile) => {
     // relevance score reads as "covered what it was told to cover" rather than
     // as an independent judgement of quality. Cloud gets no such hint.
     const concepts = sectionKeys
-      .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).flat())
+      .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).map(group => group[0]))
       .slice(0, 6).join(', ');
     const titles = sectionKeys.map(key => SECTION_TITLES[key] || key).join(', ');
     task = `\n\nTask: Write the "${titles}" section for this startup, in detailed Markdown.`;

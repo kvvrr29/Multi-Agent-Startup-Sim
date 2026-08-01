@@ -9,11 +9,20 @@ import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
 
-// Content thin enough that the strict cloud gates would reject it, which is
-// exactly the regime the local model operates in.
+// A section that clears every local gate, so the loop makes exactly one call
+// per section and any extra call in these tests means a gate regressed. It is
+// deliberately broad rather than deliberately thin: the local gates now score
+// against each section's own concept groups, so a fixture written for one
+// section would fail the others. Gate-rejection cases get their own fixtures.
 const sectionText = (name) =>
-  `The ${name} covers revenue, pricing and commission for urban delivery customers, with budget, cost and risk mitigation noted. `
-  + `Margins and growth are tracked against the target market so the team can judge viability as the service expands.`;
+  `The ${name} section describes the core problem urban customers face and the solution this platform delivers. `
+  + `Target users are students and working professionals in dense city demographics whose daily habits and spend patterns show a clear need for faster delivery. `
+  + `The business model earns revenue through commission pricing on each order, with unit economics that keep cost per delivery below the customer contribution margin. `
+  + `The budget allocates salary for a small engineering team, cloud infrastructure and hosting tooling, and a total monthly estimate with contingency. `
+  + `Key risks include competition, regulatory and privacy exposure, and technical scaling delays; each has a mitigation owner. `
+  + `The frontend is React, the backend is Node with a REST api, the database is Postgres, and we deploy to cloud infrastructure with Docker. `
+  + `Marketing reaches that audience through social media channels, a launch campaign with clear positioning, and acquisition funnels measured on retention and growth. `
+  + `The value and advantage of this approach is a defined mvp scope of core features and a roadmap phase plan across quarters, with milestones every month.`;
 
 const respondWithSection = (key) => JSON.stringify({ [key]: sectionText(key) });
 
@@ -63,7 +72,9 @@ describe('per-section generation for the local model', () => {
     // The compact context still carries what the model cannot work without:
     // the actual project, and an explicit length target.
     expect(prompt).toMatch(/Urban food delivery/);
-    expect(prompt).toMatch(/at least 200 words/);
+    expect(prompt).toMatch(/at least 350 words/);
+    // One concept per scored group, not six synonyms of the first group.
+    expect(prompt).toMatch(/Cover concepts such as: problem, solution, customer, value\./);
     // …but not the token-heavy blocks the batch prompt carries.
     expect(prompt).not.toMatch(/PROJECT MEMORY/);
     // Single-section schema, in the dialect a local model understands.

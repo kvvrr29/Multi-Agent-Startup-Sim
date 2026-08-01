@@ -72,27 +72,123 @@ const AGENT_CONCEPT_GROUPS = {
 // Per-section concept groups, used when a response covers exactly one section
 // (the per-section strategy). Scoring a lone section against the agent's whole
 // responsibility list would fail it for concepts it was never asked to cover.
+//
+// Each section is split into four groups rather than one. With a single group
+// the score could only ever be 0 or 100, which made every agentRelevance
+// threshold between 1 and 100 behave identically — the gate existed but could
+// not be tuned. Four groups give it 25-point resolution, so a threshold of 60
+// means "covered three of the four things this section is actually about" and
+// a section that only restates its own title no longer scores full marks.
+//
+// The first synonym of each group is what the local prompt lists back to the
+// model as the concepts to cover, so groups are written as the definition of a
+// complete section, not as keyword bait.
 export const SECTION_CONCEPT_GROUPS = {
-  executiveSummary: [['business', 'platform', 'service', 'company', 'startup', 'product', 'solution', 'customer', 'user', 'value']],
-  targetUsers: [['user', 'audience', 'demographic', 'customer', 'people', 'consumer', 'client', 'segment']],
-  businessModel: [['revenue', 'monetization', 'income', 'pricing', 'subscription', 'fee', 'model', 'commission', 'profit']],
-  budgetCostEstimate: [['budget', 'funding', 'cost', 'expense', 'investment', 'salary', 'spend', '$', 'funds', 'financial']],
-  risksMitigation: [['risk', 'threat', 'challenge', 'mitigation', 'competition', 'concern', 'issue', 'barrier', 'failure']],
+  executiveSummary: [
+    ['problem', 'need', 'gap', 'challenge', 'pain'],
+    ['solution', 'product', 'platform', 'service', 'offering', 'app'],
+    ['customer', 'user', 'audience', 'market', 'segment'],
+    ['value', 'benefit', 'advantage', 'differentiat', 'opportunit', 'growth']
+  ],
+  targetUsers: [
+    ['user', 'audience', 'customer', 'segment', 'persona'],
+    ['demographic', 'age', 'student', 'professional', 'income', 'location', 'urban', 'region'],
+    ['need', 'pain', 'problem', 'motivation', 'goal', 'frustration'],
+    ['behaviour', 'behavior', 'habit', 'usage', 'adopt', 'journey', 'spend', 'frequen']
+  ],
+  businessModel: [
+    ['revenue', 'monetization', 'monetisation', 'income'],
+    ['pricing', 'price', 'subscription', 'fee', 'commission', 'tier', 'freemium', 'plan'],
+    ['cost', 'margin', 'expense', 'unit econom', 'profitab'],
+    ['customer', 'segment', 'channel', 'partner', 'acquisition', 'retention']
+  ],
+  budgetCostEstimate: [
+    ['budget', 'cost', 'expense', 'spend', 'funding'],
+    ['salary', 'team', 'hire', 'personnel', 'staff', 'developer', 'engineer'],
+    ['infrastructure', 'hosting', 'cloud', 'server', 'tool', 'license', 'software', 'domain'],
+    ['total', 'estimate', 'month', 'year', '$', 'usd', 'runway', 'allocat', 'contingenc']
+  ],
+  risksMitigation: [
+    ['risk', 'threat', 'challenge', 'concern'],
+    ['mitigat', 'reduce', 'address', 'prevent', 'contingen', 'counter'],
+    ['competit', 'market', 'adoption', 'regulat', 'legal', 'privacy', 'security', 'compliance'],
+    ['technical', 'scal', 'depend', 'operational', 'financial', 'churn', 'delay']
+  ],
 
-  problemStatement: [['problem', 'pain', 'frustration', 'struggle', 'challenge', 'gap', 'issue', 'difficulty', 'lack', 'need']],
-  proposedSolution: [['solution', 'solve', 'address', 'platform', 'service', 'provide', 'offer', 'system', 'deliver']],
-  mvpScope: [['scope', 'mvp', 'minimum viable', 'feature', 'core', 'first version', 'boundary', 'define', 'user stor', 'goal']],
-  keyFeatures: [['feature', 'capability', 'functionality', 'tracking', 'recommendation', 'payment', 'notification', 'interface']],
-  productRoadmap: [['roadmap', 'plan', 'future', 'mission', 'strategy', 'development', 'growth', 'phase', 'product']],
-  timeline: [['timeline', 'phase', 'milestone', 'month', 'week', 'day', 'launch', 'research', 'develop', 'test']],
+  problemStatement: [
+    ['problem', 'pain', 'frustration', 'struggle', 'difficulty', 'gap'],
+    ['current', 'today', 'existing', 'traditional', 'manual', 'alternative'],
+    ['user', 'customer', 'people', 'business', 'owner', 'team'],
+    ['impact', 'cost', 'time', 'waste', 'lose', 'inefficien', 'consequence', 'revenue']
+  ],
+  proposedSolution: [
+    ['solution', 'platform', 'system', 'service', 'application', 'product'],
+    ['solve', 'address', 'enable', 'allow', 'provide', 'deliver', 'automat', 'streamline'],
+    ['user', 'customer', 'workflow', 'experience'],
+    ['differ', 'unlike', 'advantage', 'better', 'unique', 'instead', 'compared']
+  ],
+  mvpScope: [
+    ['mvp', 'minimum viable', 'first version', 'initial release', 'core'],
+    ['in scope', 'include', 'deliver', 'must have', 'build'],
+    ['out of scope', 'exclude', 'later', 'not include', 'defer', 'future', 'post-mvp'],
+    ['user', 'feature', 'goal', 'success', 'validat', 'assumption']
+  ],
+  keyFeatures: [
+    ['feature', 'capabilit', 'functionalit'],
+    ['user', 'allow', 'enable', 'lets', 'can '],
+    ['search', 'dashboard', 'notification', 'payment', 'profile', 'tracking', 'recommend', 'report', 'upload', 'chat', 'schedul', 'filter'],
+    ['priorit', 'core', 'essential', 'phase', 'must', 'differentiat']
+  ],
+  productRoadmap: [
+    ['roadmap', 'phase', 'stage', 'quarter', 'release', 'version'],
+    ['launch', 'ship', 'deliver', 'rollout', 'beta', 'pilot'],
+    ['feature', 'capabilit', 'expand', 'scale', 'improve', 'integrat'],
+    ['month', 'quarter', 'year', 'short term', 'long term', 'timeline', 'horizon']
+  ],
+  timeline: [
+    ['timeline', 'schedule', 'phase', 'milestone'],
+    ['week', 'month', 'day', 'sprint', 'quarter'],
+    ['design', 'develop', 'build', 'test', 'deploy', 'launch', 'research'],
+    ['deliver', 'complete', 'duration', 'start', 'parallel', 'dependenc']
+  ],
 
-  architecture: [['architecture', 'microservice', 'monolith', 'service', 'gateway', 'system', 'infrastructure', 'cloud', 'database', 'backend', 'server', 'api', 'scalab']],
-  technologyStack: [['technology', 'tech', 'framework', 'database', 'language', 'node', 'python', 'react', 'java', 'fastapi', 'postgresql', 'stack']],
-  umlDiagram: [['user', 'actor', 'use case', 'system', 'flow', 'diagram', 'uml', 'graph', 'class', 'sequence']],
-  erDiagram: [['entity', 'relationship', 'table', 'database', 'schema', 'diagram', 'er', 'primary key', 'foreign key', 'attribute']],
+  architecture: [
+    ['architecture', 'microservice', 'monolith', 'layer', 'tier', 'component'],
+    ['api', 'gateway', 'endpoint', 'rest', 'graphql', 'service'],
+    ['database', 'storage', 'cache', 'queue', 'schema', 'data flow'],
+    ['scalab', 'infrastructure', 'cloud', 'deploy', 'availab', 'security', 'load']
+  ],
+  technologyStack: [
+    ['frontend', 'client', 'react', 'vue', 'angular', 'next', 'flutter', 'mobile', 'ui'],
+    ['backend', 'server', 'api', 'node', 'python', 'java', 'django', 'fastapi', 'spring', 'express', 'rails'],
+    ['database', 'postgres', 'mysql', 'mongodb', 'sql', 'redis', 'storage'],
+    ['deploy', 'host', 'cloud', 'aws', 'docker', 'kubernetes', 'vercel', 'infrastructure', 'ci/cd']
+  ],
+  umlDiagram: [
+    ['user', 'actor', 'role', 'admin'],
+    ['use case', 'flow', 'interaction', 'scenario', 'action'],
+    ['system', 'component', 'class', 'module', 'boundary'],
+    ['diagram', 'uml', 'graph', 'sequence', 'relationship']
+  ],
+  erDiagram: [
+    ['entity', 'table', 'record'],
+    ['relationship', 'one-to-many', 'many-to-many', 'links', 'references', 'belongs'],
+    ['attribute', 'field', 'column', 'primary key', 'foreign key', 'id'],
+    ['database', 'schema', 'diagram', 'data model', 'normal']
+  ],
 
-  marketingStrategy: [['audience', 'brand', 'acquisition', 'channel', 'social media', 'campaign', 'growth', 'viral', 'marketing', 'strategy', 'influencer']],
-  finalRecommendations: [['recommend', 'suggest', 'advise', 'next step', 'priorit', 'validate', 'design', 'develop', 'create', 'ensure', 'build', 'implement']]
+  marketingStrategy: [
+    ['audience', 'target', 'segment', 'persona'],
+    ['channel', 'social media', 'seo', 'content', 'ads', 'email', 'influencer', 'community', 'app store'],
+    ['campaign', 'launch', 'promotion', 'messaging', 'brand', 'positioning', 'value proposition'],
+    ['acquisition', 'conversion', 'funnel', 'retention', 'growth', 'referral', 'metric', 'cac']
+  ],
+  finalRecommendations: [
+    ['recommend', 'suggest', 'advise', 'should'],
+    ['priorit', 'first', 'next step', 'immediate', 'focus'],
+    ['validat', 'test', 'measure', 'metric', 'milestone', 'track'],
+    ['risk', 'avoid', 'ensure', 'caution', 'watch', 'before']
+  ]
 };
 
 // How Stage 3 weighs domain entities vs. general domain/industry terms per

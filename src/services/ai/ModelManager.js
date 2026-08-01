@@ -2,13 +2,16 @@
 // of the main bundle for everyone who never selects the built-in provider.
 const loadWebLLM = () => import('@mlc-ai/web-llm');
 
-// ~1.6GB of weights, 4096-token context (the same window web-llm configures
-// for every Qwen2.5 size — a bigger model buys capability, not room).
-// 1.5B is where instruction-following stops being the bottleneck: the 0.5B
-// could not reliably hold "write JSON, hit a length target, apply a revision
-// instruction, stay on topic" at the same time, which is what this app asks
-// of it on every section.
-const DEFAULT_MODEL = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
+// web-llm reports 2504MB for this build, against 4GB of dedicated VRAM — the
+// largest Qwen2.5 that leaves room for the browser's own GPU allocations (the
+// 7B needs 5106MB and cannot load at all). The context window is 4096 either
+// way; web-llm pins the same window for every Qwen2.5 size, so stepping up
+// buys instruction-following and prose quality, not room.
+//
+// Size is not the reason to prefer this over the 1.5B on a discrete card —
+// bandwidth is. Decoding is bandwidth-bound, so a 3050 reading ~1.8GB of
+// weights per token still outruns an integrated GPU reading ~1.0GB.
+const DEFAULT_MODEL = 'Qwen2.5-3B-Instruct-q4f16_1-MLC';
 
 // web-llm's progress text is "Fetching param cache[3/8]: 96MB fetched. 35%
 // completed, 56 secs elapsed. It can take a while when we first visit this
