@@ -4,8 +4,16 @@ import { useProjectStore } from './useProjectStore';
 
 const content = (key) => useProjectStore.getState().blueprint[key].content;
 const status = (key) => useProjectStore.getState().blueprint[key].status;
-const info = (key) => useSectionHistoryStore.getState().versionInfo(key);
-const entry = (key) => useSectionHistoryStore.getState().getEntry(key);
+const entry = (key) => {
+  const { activeProjectId, byProject } = useSectionHistoryStore.getState();
+  return byProject[activeProjectId]?.[key] || null;
+};
+const info = (key) => {
+  const found = entry(key);
+  return found
+    ? { index: found.activeIndex, count: found.versions.length }
+    : { index: 0, count: 0 };
+};
 
 beforeEach(() => {
   useSectionHistoryStore.setState({ activeProjectId: null, byProject: {} });
@@ -35,8 +43,6 @@ describe('section history store', () => {
     store.setActiveIndex('executiveSummary', 0);
     expect(info('executiveSummary').index).toBe(0);
     expect(content('executiveSummary')).toBe('v1 content');
-
-    // Clamps out-of-range indices.
     store.setActiveIndex('executiveSummary', 99);
     expect(info('executiveSummary').index).toBe(1);
     store.setActiveIndex('executiveSummary', -5);
@@ -51,17 +57,12 @@ describe('section history store', () => {
     store.addVersion('executiveSummary', 'v3 content', {});
 
     store.setActiveIndex('executiveSummary', 1); // view v2
-    // Mirror approveSectionWorkflow: flip blueprint status, then drop drafts.
     useProjectStore.getState().approveBlueprintSection('executiveSummary');
     store.approveSection('executiveSummary');
-
-    // Client-side drafts are gone; content remains (now from the DB-bound blueprint).
     expect(entry('executiveSummary')).toBeNull();
     expect(info('executiveSummary')).toEqual({ index: 0, count: 0 });
     expect(content('executiveSummary')).toBe('v2 content');
     expect(status('executiveSummary')).toBe('approved');
-
-    // Locked: further versions are rejected (guarded by blueprint status).
     const added = store.addVersion('executiveSummary', 'v4 content', {});
     expect(added).toBe(false);
     expect(entry('executiveSummary')).toBeNull();
@@ -78,13 +79,9 @@ describe('section history store', () => {
       { section_key: 'executiveSummary', status: 'approved', content: 'EXEC FINAL', generation_source: 'Gemini' },
       { section_key: 'problemStatement', status: 'pending', content: '' }
     ]);
-
-    // Approved section: no client draft, content + approved status projected.
     expect(entry('executiveSummary')).toBeNull();
     expect(content('executiveSummary')).toBe('EXEC FINAL');
     expect(status('executiveSummary')).toBe('approved');
-
-    // Unapproved section: local draft restored.
     expect(info('problemStatement')).toEqual({ index: 0, count: 1 });
     expect(content('problemStatement')).toBe('problem draft');
   });

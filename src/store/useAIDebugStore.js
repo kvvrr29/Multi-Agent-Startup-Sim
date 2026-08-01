@@ -13,10 +13,7 @@ const sanitizeLog = (entry) => Object.fromEntries(
 );
 
 export const useAIDebugStore = create((set) => ({
-  // API-level counters
   apiStats: { sent: 0, successful: 0, failed: 0 },
-
-  // Per-agent generation source: 'Gemini' | 'Fallback' | null
   generationSources: {
     domain: null,
     ceo: null,
@@ -24,16 +21,10 @@ export const useAIDebugStore = create((set) => ({
     developer: null,
     marketing: null,
   },
-
-  // Raw log entries (most recent first)
   rawLogs: [],
-
-  // Live status signals for the AI status indicator (doc §12)
   activeGenerations: 0,
   lastError: null, // { kind: 'rate_limit' | 'api_error', message, timestamp }
   connectionStatus: 'configured', // configured | generating | connected | rate_limited | api_error | fallback
-
-  // ── actions ──────────────────────────────────────────────────────────────
 
   incrementSent: () =>
     set((s) => ({ apiStats: { ...s.apiStats, sent: s.apiStats.sent + 1 } })),

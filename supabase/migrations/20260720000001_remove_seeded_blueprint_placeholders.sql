@@ -1,6 +1,3 @@
--- Blueprint rows are created on first approved-section upsert. Empty seeded
--- placeholders add storage and make every blueprint read return 18 useless
--- rows, so remove the existing placeholders and stop creating new ones.
 delete from public.blueprint_sections
 where content = ''
   and status = 'pending'

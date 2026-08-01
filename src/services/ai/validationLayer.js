@@ -1,20 +1,10 @@
-// ── 3-stage AI response validation with scoring (doc §1) ────────────────────
-// Stage 1: Structural  — parseable, complete, non-empty, safe
-// Stage 2: Agent-specific — content matches the agent's responsibility
-// Stage 3: Domain relevance — content matches the project, per-agent rules
-//
-// Pure functions: no store access, fully unit-testable.
+
+import { getProviderProfile, CLOUD_THRESHOLDS } from './providerProfiles';
 
 const MIN_SECTION_LENGTH = 50;
 const BANNED_PHRASES = ['lorem ipsum', 'as an ai'];
 const SAAS_BUZZWORDS = ['freemium', 'white-label', 'invite only beta'];
-const VALIDATION_THRESHOLDS = {
-  structural: 100,
-  agentRelevance: 60,
-  domainRelevance: 60,
-  developerDomainRelevance: 70,
-  overall: 70
-};
+const VALIDATION_THRESHOLDS = CLOUD_THRESHOLDS;
 
 const DECISION_CATEGORIES = ['Business', 'Product', 'Technical', 'Marketing', 'Scope'];
 const AGENT_DECISION_CATEGORIES = {
@@ -24,9 +14,6 @@ const AGENT_DECISION_CATEGORIES = {
   marketing: ['Marketing', 'Scope'],
   mediator: DECISION_CATEGORIES
 };
-
-// Concept groups per agent (doc §1 Stage 2). Each group is a synonym list;
-// the group counts as matched when any synonym appears in the combined text.
 const AGENT_CONCEPT_GROUPS = {
   ceo: [
     ['business model', 'revenue model', 'monetization', 'monetisation'],
@@ -70,10 +57,113 @@ const AGENT_CONCEPT_GROUPS = {
     ['validate', 'test', 'measure', 'verify', 'milestone']
   ]
 };
+export const SECTION_CONCEPT_GROUPS = {
+  executiveSummary: [
+    ['problem', 'need', 'gap', 'challenge', 'pain'],
+    ['solution', 'product', 'platform', 'service', 'offering', 'app'],
+    ['customer', 'user', 'audience', 'market', 'segment'],
+    ['value', 'benefit', 'advantage', 'differentiat', 'opportunit', 'growth']
+  ],
+  targetUsers: [
+    ['user', 'audience', 'customer', 'segment', 'persona'],
+    ['demographic', 'age', 'student', 'professional', 'income', 'location', 'urban', 'region'],
+    ['need', 'pain', 'problem', 'motivation', 'goal', 'frustration'],
+    ['behaviour', 'behavior', 'habit', 'usage', 'adopt', 'journey', 'spend', 'frequen']
+  ],
+  businessModel: [
+    ['revenue', 'monetization', 'monetisation', 'income'],
+    ['pricing', 'price', 'subscription', 'fee', 'commission', 'tier', 'freemium', 'plan'],
+    ['cost', 'margin', 'expense', 'unit econom', 'profitab'],
+    ['customer', 'segment', 'channel', 'partner', 'acquisition', 'retention']
+  ],
+  budgetCostEstimate: [
+    ['budget', 'cost', 'expense', 'spend', 'funding'],
+    ['salary', 'team', 'hire', 'personnel', 'staff', 'developer', 'engineer'],
+    ['infrastructure', 'hosting', 'cloud', 'server', 'tool', 'license', 'software', 'domain'],
+    ['total', 'estimate', 'month', 'year', '$', 'usd', 'runway', 'allocat', 'contingenc']
+  ],
+  risksMitigation: [
+    ['risk', 'threat', 'challenge', 'concern'],
+    ['mitigat', 'reduce', 'address', 'prevent', 'contingen', 'counter'],
+    ['competit', 'market', 'adoption', 'regulat', 'legal', 'privacy', 'security', 'compliance'],
+    ['technical', 'scal', 'depend', 'operational', 'financial', 'churn', 'delay']
+  ],
 
-// How Stage 3 weighs domain entities vs. general domain/industry terms per
-// agent (doc §1 Stage 3: technical entities are NOT mandatory in marketing
-// output; marketing terms are NOT mandatory in architecture output, etc.)
+  problemStatement: [
+    ['problem', 'pain', 'frustration', 'struggle', 'difficulty', 'gap'],
+    ['current', 'today', 'existing', 'traditional', 'manual', 'alternative'],
+    ['user', 'customer', 'people', 'business', 'owner', 'team'],
+    ['impact', 'cost', 'time', 'waste', 'lose', 'inefficien', 'consequence', 'revenue']
+  ],
+  proposedSolution: [
+    ['solution', 'platform', 'system', 'service', 'application', 'product'],
+    ['solve', 'address', 'enable', 'allow', 'provide', 'deliver', 'automat', 'streamline'],
+    ['user', 'customer', 'workflow', 'experience'],
+    ['differ', 'unlike', 'advantage', 'better', 'unique', 'instead', 'compared']
+  ],
+  mvpScope: [
+    ['mvp', 'minimum viable', 'first version', 'initial release', 'core'],
+    ['in scope', 'include', 'deliver', 'must have', 'build'],
+    ['out of scope', 'exclude', 'later', 'not include', 'defer', 'future', 'post-mvp'],
+    ['user', 'feature', 'goal', 'success', 'validat', 'assumption']
+  ],
+  keyFeatures: [
+    ['feature', 'capabilit', 'functionalit'],
+    ['user', 'allow', 'enable', 'lets', 'can '],
+    ['search', 'dashboard', 'notification', 'payment', 'profile', 'tracking', 'recommend', 'report', 'upload', 'chat', 'schedul', 'filter'],
+    ['priorit', 'core', 'essential', 'phase', 'must', 'differentiat']
+  ],
+  productRoadmap: [
+    ['roadmap', 'phase', 'stage', 'quarter', 'release', 'version'],
+    ['launch', 'ship', 'deliver', 'rollout', 'beta', 'pilot'],
+    ['feature', 'capabilit', 'expand', 'scale', 'improve', 'integrat'],
+    ['month', 'quarter', 'year', 'short term', 'long term', 'timeline', 'horizon']
+  ],
+  timeline: [
+    ['timeline', 'schedule', 'phase', 'milestone'],
+    ['week', 'month', 'day', 'sprint', 'quarter'],
+    ['design', 'develop', 'build', 'test', 'deploy', 'launch', 'research'],
+    ['deliver', 'complete', 'duration', 'start', 'parallel', 'dependenc']
+  ],
+
+  architecture: [
+    ['architecture', 'microservice', 'monolith', 'layer', 'tier', 'component'],
+    ['api', 'gateway', 'endpoint', 'rest', 'graphql', 'service'],
+    ['database', 'storage', 'cache', 'queue', 'schema', 'data flow'],
+    ['scalab', 'infrastructure', 'cloud', 'deploy', 'availab', 'security', 'load']
+  ],
+  technologyStack: [
+    ['frontend', 'client', 'react', 'vue', 'angular', 'next', 'flutter', 'mobile', 'ui'],
+    ['backend', 'server', 'api', 'node', 'python', 'java', 'django', 'fastapi', 'spring', 'express', 'rails'],
+    ['database', 'postgres', 'mysql', 'mongodb', 'sql', 'redis', 'storage'],
+    ['deploy', 'host', 'cloud', 'aws', 'docker', 'kubernetes', 'vercel', 'infrastructure', 'ci/cd']
+  ],
+  umlDiagram: [
+    ['user', 'actor', 'role', 'admin'],
+    ['use case', 'flow', 'interaction', 'scenario', 'action'],
+    ['system', 'component', 'class', 'module', 'boundary'],
+    ['diagram', 'uml', 'graph', 'sequence', 'relationship']
+  ],
+  erDiagram: [
+    ['entity', 'table', 'record'],
+    ['relationship', 'one-to-many', 'many-to-many', 'links', 'references', 'belongs'],
+    ['attribute', 'field', 'column', 'primary key', 'foreign key', 'id'],
+    ['database', 'schema', 'diagram', 'data model', 'normal']
+  ],
+
+  marketingStrategy: [
+    ['audience', 'target', 'segment', 'persona'],
+    ['channel', 'social media', 'seo', 'content', 'ads', 'email', 'influencer', 'community', 'app store'],
+    ['campaign', 'launch', 'promotion', 'messaging', 'brand', 'positioning', 'value proposition'],
+    ['acquisition', 'conversion', 'funnel', 'retention', 'growth', 'referral', 'metric', 'cac']
+  ],
+  finalRecommendations: [
+    ['recommend', 'suggest', 'advise', 'should'],
+    ['priorit', 'first', 'next step', 'immediate', 'focus'],
+    ['validat', 'test', 'measure', 'metric', 'milestone', 'track'],
+    ['risk', 'avoid', 'ensure', 'caution', 'watch', 'before']
+  ]
+};
 const DOMAIN_WEIGHTS = {
   ceo: { entities: 40, domainTerms: 60 },
   pm: { entities: 60, domainTerms: 40 },
@@ -88,9 +178,7 @@ const tokenize = (str) =>
     .split(/[^a-z0-9]+/)
     .filter(t => t.length > 3);
 
-// ── Stage 1: Structural ──────────────────────────────────────────────────────
-
-export const validateStructure = (data, expectedSections) => {
+export const validateStructure = (data, expectedSections, { minSectionLength = MIN_SECTION_LENGTH } = {}) => {
   const issues = [];
   let checks = 0;
   let passedChecks = 0;
@@ -109,8 +197,8 @@ export const validateStructure = (data, expectedSections) => {
     }
     passedChecks += 1;
 
-    if (value.trim().length < MIN_SECTION_LENGTH) {
-      issues.push(`Section "${section}" is too short (needs at least ${MIN_SECTION_LENGTH} characters of useful content).`);
+    if (value.trim().length < minSectionLength) {
+      issues.push(`Section "${section}" is too short (needs at least ${minSectionLength} characters of useful content).`);
     } else {
       passedChecks += 1;
     }
@@ -128,11 +216,11 @@ export const validateStructure = (data, expectedSections) => {
   return { score, ok: issues.length === 0, issues };
 };
 
-// ── Stage 2: Agent-specific relevance ────────────────────────────────────────
+export const validateAgentRelevance = (combinedText, agentRole, { expectedSections = [], threshold = VALIDATION_THRESHOLDS.agentRelevance } = {}) => {
+  let groups = expectedSections.flatMap(section => SECTION_CONCEPT_GROUPS[section] || []);
+  if (groups.length === 0) groups = AGENT_CONCEPT_GROUPS[agentRole] || [];
 
-export const validateAgentRelevance = (combinedText, agentRole) => {
-  const groups = AGENT_CONCEPT_GROUPS[agentRole];
-  if (!groups || groups.length === 0) {
+  if (groups.length === 0) {
     return { score: 100, issues: [], missingConcepts: [] };
   }
 
@@ -150,26 +238,20 @@ export const validateAgentRelevance = (combinedText, agentRole) => {
 
   const score = Math.round((matched / groups.length) * 100);
   const issues = [];
-  if (score < VALIDATION_THRESHOLDS.agentRelevance) {
+  if (score < threshold) {
     issues.push(`Content does not cover the ${agentRole.toUpperCase()} agent's core responsibilities. Missing concepts: ${missingConcepts.join(', ')}.`);
   }
   return { score, issues, missingConcepts };
 };
 
-// ── Stage 3: Domain relevance (per-agent expectations) ───────────────────────
-
-export const validateDomainRelevance = (combinedText, agentRole, domain = '', industry = '', mandatoryKeywords = []) => {
+export const validateDomainRelevance = (combinedText, agentRole, domain = '', industry = '', mandatoryKeywords = [], { enforceCriticals = true } = {}) => {
   const issues = [];
   const lower = combinedText.toLowerCase();
   const weights = DOMAIN_WEIGHTS[agentRole] || DOMAIN_WEIGHTS.mediator;
-
-  // Nothing to evaluate against (e.g. classifier failed) — do not punish.
   const domainTokens = [...tokenize(domain), ...tokenize(industry)];
   if (mandatoryKeywords.length === 0 && domainTokens.length === 0) {
     return { score: 100, issues: [] };
   }
-
-  // Entity coverage
   let entityScore = 100;
   let matchedEntities = [];
   if (mandatoryKeywords.length > 0) {
@@ -179,8 +261,6 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
       issues.push(`Technical output must model the project's core domain entities (${mandatoryKeywords.join(', ')}) but none appear.`);
     }
   }
-
-  // Domain / industry terminology presence
   let domainTermScore = 100;
   if (domainTokens.length > 0) {
     domainTermScore = domainTokens.some(t => lower.includes(t)) ? 100 : 0;
@@ -189,8 +269,6 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
   let score = Math.round(
     (entityScore * weights.entities + domainTermScore * weights.domainTerms) / 100
   );
-
-  // Generic-SaaS penalty: only business/marketing content, only non-SaaS domains.
   const isGenericSaaS = domain.toLowerCase().includes('saas') || domain.toLowerCase().includes('general');
   if (!isGenericSaaS && (agentRole === 'ceo' || agentRole === 'marketing')) {
     const buzzword = SAAS_BUZZWORDS.find(b => lower.includes(b));
@@ -207,7 +285,7 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
   return {
     score,
     issues,
-    criticalIssues: agentRole === 'developer' && mandatoryKeywords.length > 0 && matchedEntities.length === 0
+    criticalIssues: enforceCriticals && agentRole === 'developer' && mandatoryKeywords.length > 0 && matchedEntities.length === 0
       ? [`Developer output is missing every mandatory technical entity: ${mandatoryKeywords.join(', ')}.`]
       : []
   };
@@ -242,18 +320,13 @@ const validateDecisions = (decisions, agentRole) => {
   });
   return { decisions: valid, issues };
 };
+export const validateAIResponse = (responseText, expectedSections = [], { agentRole = '', domain = '', industry = '', mandatoryKeywords = [], providerName = 'gemini' } = {}) => {
+  const profile = getProviderProfile(providerName);
+  const thresholds = profile.thresholds;
 
-// ── Combined validator ───────────────────────────────────────────────────────
-
-/**
- * Validates a raw AI response through all three stages.
- * Returns { passed, scores: {structural, agentRelevance, domainRelevance, overall}, issues, content, decisions }.
- * Never throws on content problems — only `passed: false` with issues.
- */
-export const validateAIResponse = (responseText, expectedSections = [], { agentRole = '', domain = '', industry = '', mandatoryKeywords = [] } = {}) => {
   let data;
   try {
-    data = JSON.parse(responseText);
+    data = extractJson(responseText);
   } catch {
     return {
       passed: false,
@@ -269,28 +342,32 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
     };
   }
 
-  const structural = validateStructure(data, expectedSections);
+  const structural = validateStructure(data, expectedSections, { minSectionLength: profile.minSectionLength });
 
   const combinedText = expectedSections
     .map(s => (typeof data?.[s] === 'string' ? data[s] : ''))
     .join(' ');
-
-  const agent = validateAgentRelevance(combinedText, agentRole);
-  const domainRes = validateDomainRelevance(combinedText, agentRole, domain, industry, mandatoryKeywords);
+  const agent = validateAgentRelevance(combinedText, agentRole, {
+    expectedSections: profile.strategy === 'perSection' ? expectedSections : [],
+    threshold: thresholds.agentRelevance
+  });
+  const domainRes = validateDomainRelevance(combinedText, agentRole, domain, industry, mandatoryKeywords, {
+    enforceCriticals: profile.enforceDomainCriticals
+  });
 
   const overall = Math.round(
     structural.score * 0.4 + agent.score * 0.3 + domainRes.score * 0.3
   );
 
   const domainThreshold = agentRole === 'developer'
-    ? VALIDATION_THRESHOLDS.developerDomainRelevance
-    : VALIDATION_THRESHOLDS.domainRelevance;
+    ? thresholds.developerDomainRelevance
+    : thresholds.domainRelevance;
   const stagePass = {
-    structural: structural.ok && structural.score === VALIDATION_THRESHOLDS.structural,
-    agentRelevance: agent.score >= VALIDATION_THRESHOLDS.agentRelevance,
+    structural: structural.ok && structural.score === thresholds.structural,
+    agentRelevance: agent.score >= thresholds.agentRelevance,
     domainRelevance: domainRes.score >= domainThreshold && !(domainRes.criticalIssues?.length)
   };
-  const passed = Object.values(stagePass).every(Boolean) && overall >= VALIDATION_THRESHOLDS.overall;
+  const passed = Object.values(stagePass).every(Boolean) && overall >= thresholds.overall;
   const decisionsResult = validateDecisions(data?.decisions, agentRole);
   const issues = [...structural.issues, ...agent.issues, ...domainRes.issues, ...(domainRes.criticalIssues || []), ...decisionsResult.issues];
   if (!passed && issues.length === 0) {
@@ -311,8 +388,8 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
       overall
     },
     stages: {
-      structural: { status: stagePass.structural ? 'passed' : 'failed', score: structural.score, threshold: VALIDATION_THRESHOLDS.structural },
-      agentRelevance: { status: stagePass.agentRelevance ? 'passed' : 'failed', score: agent.score, threshold: VALIDATION_THRESHOLDS.agentRelevance },
+      structural: { status: stagePass.structural ? 'passed' : 'failed', score: structural.score, threshold: thresholds.structural },
+      agentRelevance: { status: stagePass.agentRelevance ? 'passed' : 'failed', score: agent.score, threshold: thresholds.agentRelevance },
       domainRelevance: { status: stagePass.domainRelevance ? 'passed' : 'failed', score: domainRes.score, threshold: domainThreshold }
     },
     issues,
@@ -321,11 +398,28 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
     decisionIssues: decisionsResult.issues
   };
 };
+export const extractJson = (responseText) => {
+  const raw = (responseText || '').trim();
+  try {
+    return JSON.parse(raw);
+  } catch (initialErr) {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const candidates = [];
+    if (fenced) candidates.push(fenced[1].trim());
 
-/**
- * Builds the targeted retry feedback the doc requires (§2): explain the exact
- * issue, ask to improve only the missing areas.
- */
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start !== -1 && end > start) candidates.push(raw.slice(start, end + 1).trim());
+
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+      }
+    }
+    throw initialErr;
+  }
+};
 export const buildRetryFeedback = (validation) => {
   const { scores, issues } = validation;
   const structuralOk = scores.structural === 100;
@@ -334,34 +428,40 @@ export const buildRetryFeedback = (validation) => {
     : 'Your previous response had structural problems.';
   return `${intro}\nExact issues found:\n${issues.map(i => `- ${i}`).join('\n')}\nImprove only the missing areas while preserving the useful content. Do not change what was already correct.`;
 };
+export const createResponseSchema = (sectionKeys, { dialect = 'gemini' } = {}) => {
+  const gemini = dialect === 'gemini';
+  const T = {
+    string: gemini ? 'STRING' : 'string',
+    array: gemini ? 'ARRAY' : 'array',
+    object: gemini ? 'OBJECT' : 'object'
+  };
 
-export const createResponseSchema = (sectionKeys) => {
   const properties = {};
   sectionKeys.forEach(key => {
     properties[key] = {
-      type: "STRING",
-      description: `The markdown content for the ${key} section. Must be detailed and professional.`
+      type: T.string,
+      description: `The markdown content for the ${key} section. Must be detailed and professional. Must not be empty.`
     };
   });
 
   properties.decisions = {
-    type: "ARRAY",
+    type: T.array,
     description: "A list of 1-3 structured decisions. Use only a category authorized for the agent.",
     items: {
-      type: "OBJECT",
+      type: T.object,
       properties: {
-        category: { type: "STRING", enum: DECISION_CATEGORIES },
-        key: { type: "STRING" },
-        value: { type: "STRING" },
-        rationale: { type: "STRING" }
+        category: { type: T.string, enum: DECISION_CATEGORIES },
+        key: { type: T.string },
+        value: { type: T.string },
+        rationale: { type: T.string }
       },
       required: ["category", "key", "value", "rationale"]
     }
   };
 
   return {
-    type: "OBJECT",
+    type: T.object,
     properties,
-    required: [...sectionKeys, "decisions"]
+    required: gemini ? [...sectionKeys, "decisions"] : [...sectionKeys]
   };
 };

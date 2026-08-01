@@ -31,8 +31,6 @@ export default function ProjectEvolution({ contextReady = true, contextError = "
   const clearRevisionState = useProjectStore(
     (state) => state.clearRevisionState,
   );
-
-  // Global Lock: True if ANY agent is actively occupied (Completed/Failed don't block)
   const isBusy =
     workflowActive || Object.values(agents).some(isAgentBusy) || isPreviewing;
 

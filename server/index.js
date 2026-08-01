@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
-import { BLUEPRINT_SECTION_KEYS } from './blueprintKeys.js';
+import { BLUEPRINT_SECTION_KEYS } from '../shared/blueprintSections.js';
 import {
   DECISION_HISTORY_LIMIT,
   EVENT_HISTORY_LIMIT,
@@ -15,23 +15,10 @@ import {
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
-// The Gemini key lives ONLY here, server-side. Never sent to or read by the browser.
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const PORT = process.env.PORT || 8787;
-
-// Rolling aliases first — they track Google's current models, so retired ids
-// (like gemini-2.5-flash for keys created after mid-2026) can't break us.
-const ALLOWED_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-2.5-pro'];
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
-
-/**
- * Auth middleware: validates the Supabase access token from the browser and
- * builds a user-scoped Supabase client, so Row Level Security still applies
- * to every query the server makes on the user's behalf.
- */
 const withUser = async (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'unauthenticated', message: 'Missing bearer token.' });
@@ -47,15 +34,11 @@ const withUser = async (req, res, next) => {
 };
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, aiConfigured: !!GEMINI_API_KEY });
+  res.json({ ok: true });
 });
-
-// ---------- Projects (Supabase Postgres behind RLS) ----------
 
 const PROJECT_LIST_COLUMNS = 'id, name, updated_at, last_opened_at';
 const BLUEPRINT_SECTION_KEY_SET = new Set(BLUEPRINT_SECTION_KEYS);
-
-// camelCase client field → projects column, for create/patch whitelisting.
 const PROJECT_FIELD_MAP = {
   name: 'name',
   idea: 'idea',
@@ -87,8 +70,6 @@ const boundedInteger = (value, fallback, maximum, minimum = 0) => {
 const readPage = (query, req, defaultLimit, maxLimit) => {
   const limit = boundedInteger(req.query.limit, defaultLimit, maxLimit, 1);
   const offset = boundedInteger(req.query.offset, 0, MAX_PAGE_OFFSET);
-  // Supabase ranges are inclusive, so this requests one extra row to compute
-  // hasMore without an additional count query.
   return { query: query.range(offset, offset + limit), limit, offset };
 };
 
@@ -123,9 +104,6 @@ app.post('/api/projects', withUser, async (req, res) => {
   if (error) return dbError(res, error);
   res.status(201).json(data);
 });
-
-// Blueprint selection is intentionally a single, narrow read. The project name
-// already came from the registry; all other domains are loaded by their panels.
 app.get('/api/projects/:id/blueprint', withUser, async (req, res) => {
   const { data, error } = await req.supabase
     .from('blueprint_sections')
@@ -247,7 +225,6 @@ app.put('/api/projects/:id/sections', withUser, async (req, res) => {
     .upsert(rows, { onConflict: 'project_id,section_key' })
     .select('id');
   if (error) return dbError(res, error);
-  // RLS makes writes against someone else's project affect zero rows.
   if (!data || data.length === 0) return res.status(404).json({ error: 'not_found' });
   res.json({ updated: data.length });
 });
@@ -315,58 +292,6 @@ app.delete('/api/projects/:id', withUser, async (req, res) => {
   res.status(204).end();
 });
 
-// ---------- AI proxy (Gemini) ----------
-
-app.post('/api/ai/generate', withUser, async (req, res) => {
-  if (!GEMINI_API_KEY) {
-    return res.status(501).json({ error: 'not_configured', message: 'Server AI is not configured (GEMINI_API_KEY is not set).' });
-  }
-
-  const { systemPrompt, userPrompt, jsonSchema, model } = req.body || {};
-  if (!userPrompt || typeof userPrompt !== 'string') {
-    return res.status(400).json({ error: 'bad_request', message: 'userPrompt (string) is required.' });
-  }
-  const chosenModel = ALLOWED_MODELS.includes(model) ? model : 'gemini-flash-latest';
-
-  const payload = {
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      ...(jsonSchema ? { responseMimeType: 'application/json', responseSchema: jsonSchema } : {})
-    }
-  };
-  if (systemPrompt && typeof systemPrompt === 'string') {
-    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-  }
-
-  let upstream;
-  try {
-    upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-        body: JSON.stringify(payload)
-      }
-    );
-  } catch (err) {
-    return res.status(502).json({ error: 'upstream_unreachable', message: String(err) });
-  }
-
-  const data = await upstream.json().catch(() => ({}));
-  if (!upstream.ok) {
-    const message = data?.error?.message || `Gemini returned ${upstream.status}`;
-    if (upstream.status === 429) return res.status(429).json({ error: 'rate_limited', message });
-    return res.status(502).json({ error: 'gemini_error', message, status: upstream.status });
-  }
-
-  const parts = data?.candidates?.[0]?.content?.parts || [];
-  const text = parts.map(p => p.text || '').join('');
-  if (!text) return res.status(502).json({ error: 'empty_response', message: 'Gemini returned no text.' });
-
-  res.json({ text });
-});
-
 app.listen(PORT, () => {
-  console.log(`[server] API listening on http://localhost:${PORT} (AI ${GEMINI_API_KEY ? 'configured' : 'NOT configured'})`);
+  console.log(`[server] API listening on http://localhost:${PORT}`);
 });

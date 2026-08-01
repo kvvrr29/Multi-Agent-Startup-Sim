@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { generateDynamicBlueprint } from './blueprintFactory';
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
-import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
-
-// Every section except agentContributions (composed by the engine, not the factory)
+import { BLUEPRINT_SECTIONS } from '../../shared/blueprintSections.js';
 const FACTORY_SECTIONS = BLUEPRINT_SECTIONS.map(s => s.id).filter(id => id !== 'agentContributions');
 
 const PROJECTS = {

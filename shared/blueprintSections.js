@@ -19,6 +19,8 @@ export const BLUEPRINT_SECTIONS = [
   { id: 'finalRecommendations', title: 'Final Recommendations', type: 'text' }
 ];
 
+export const BLUEPRINT_SECTION_KEYS = BLUEPRINT_SECTIONS.map((s) => s.id);
+
 export const SECTION_TITLES = Object.fromEntries(
-  BLUEPRINT_SECTIONS.map(s => [s.id, s.title])
+  BLUEPRINT_SECTIONS.map((s) => [s.id, s.title])
 );

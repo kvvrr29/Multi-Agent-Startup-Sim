@@ -1,5 +1,3 @@
--- Cloud persistence for the Multi-Agent Startup Simulator.
--- One row per startup project; jsonb columns mirror the client's Zustand store slices.
 create table public.projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,

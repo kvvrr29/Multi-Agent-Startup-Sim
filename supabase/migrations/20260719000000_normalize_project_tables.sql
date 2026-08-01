@@ -1,10 +1,3 @@
--- Normalize project storage: intake form + memory domain move onto projects,
--- and blueprint sections, versions, workflow events, memory entries and
--- decision history each get their own table. The old jsonb blob columns
--- (project_state, memory_state, version_state) are dropped in a follow-up
--- migration once the client cutover is verified.
-
--- ---------- projects: intake form + open tracking ----------
 
 alter table public.projects
   add column idea text not null default '',
@@ -21,8 +14,6 @@ alter table public.projects
 create index projects_user_last_opened_idx
   on public.projects (user_id, last_opened_at desc nulls last, updated_at desc);
 
--- ---------- blueprint_sections: one row per section per project ----------
-
 create table public.blueprint_sections (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -38,8 +29,6 @@ create table public.blueprint_sections (
   updated_at timestamptz not null default now(),
   unique (project_id, section_key)
 );
-
--- ---------- versions: immutable snapshots (snapshot payloads stay jsonb) ----------
 
 create table public.versions (
   id uuid primary key default gen_random_uuid(),
@@ -59,8 +48,6 @@ create table public.versions (
   unique (project_id, version_number)
 );
 
--- ---------- workflow_events: append-only timeline ----------
-
 create table public.workflow_events (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -75,8 +62,6 @@ create table public.workflow_events (
 create index workflow_events_project_time_idx
   on public.workflow_events (project_id, occurred_at);
 
--- ---------- memory_entries: agent memory key/value per category ----------
-
 create table public.memory_entries (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -86,8 +71,6 @@ create table public.memory_entries (
   updated_at timestamptz not null default now(),
   unique (project_id, category, key)
 );
-
--- ---------- decision_entries: append-only decision history ----------
 
 create table public.decision_entries (
   id uuid primary key default gen_random_uuid(),
@@ -106,8 +89,6 @@ create table public.decision_entries (
 
 create index decision_entries_project_time_idx
   on public.decision_entries (project_id, decided_at);
-
--- ---------- RLS: every child row is visible iff its project belongs to the user ----------
 
 alter table public.blueprint_sections enable row level security;
 alter table public.versions enable row level security;
@@ -164,8 +145,6 @@ create policy "Users can update own decision entries" on public.decision_entries
   with check (exists (select 1 from public.projects p where p.id = project_id and p.user_id = auth.uid()));
 create policy "Users can delete own decision entries" on public.decision_entries for delete
   using (exists (select 1 from public.projects p where p.id = project_id and p.user_id = auth.uid()));
-
--- ---------- updated_at triggers (reuses public.set_updated_at from the projects migration) ----------
 
 create trigger blueprint_sections_set_updated_at
   before update on public.blueprint_sections

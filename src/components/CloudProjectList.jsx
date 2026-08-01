@@ -1,16 +1,7 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { FolderOpen, Trash2 } from "lucide-react";
-
-/**
- * The user's cloud projects. Used on the create screen (full) and in the
- * Dashboard's Project panel (compact) to switch between projects.
- */
-export default function CloudProjectList({
-  compact = false,
-  activeId = null,
-  onOpen,
-}) {
+export default function CloudProjectList({ activeId = null, onOpen }) {
   const cloudProjects = useAuthStore((state) => state.cloudProjects);
   const projectsHasMore = useAuthStore((state) => state.projectsHasMore);
   const projectsLoadingMore = useAuthStore((state) => state.projectsLoadingMore);
@@ -39,12 +30,7 @@ export default function CloudProjectList({
 
   return (
     <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "6px",
-        marginTop: compact ? 0 : "15px",
-      }}
+      style={{ display: "flex", flexDirection: "column", gap: "6px" }}
     >
       {cloudProjects.map((p) => {
         const isActive = p.id === activeId;

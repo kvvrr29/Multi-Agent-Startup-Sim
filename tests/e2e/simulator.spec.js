@@ -1,9 +1,4 @@
 import { test, expect } from '@playwright/test';
-
-// The app is gated behind Supabase magic-link auth. E2E runs sign in with a
-// seeded test user via env credentials; without them the suite skips instead
-// of failing (create a user in Supabase Auth and export these to enable):
-//   E2E_SUPABASE_EMAIL / E2E_SUPABASE_PASSWORD
 const E2E_EMAIL = process.env.E2E_SUPABASE_EMAIL;
 const E2E_PASSWORD = process.env.E2E_SUPABASE_PASSWORD;
 
@@ -35,15 +30,11 @@ test.beforeEach(async ({ page }) => {
     const { data } = await window.__supabase.auth.getSession();
     if (!data.session) await window.__supabase.auth.signInWithPassword({ email, password });
   }, { email: E2E_EMAIL, password: E2E_PASSWORD });
-  // Delete the seeded user's cloud projects so each test starts on the empty
-  // project registry with a clean database.
   await page.evaluate(async () => {
     if (!window.__supabase) return;
     const { data } = await window.__supabase.auth.getSession();
     if (!data.session) return;
     const headers = { Authorization: `Bearer ${data.session.access_token}` };
-    // Delete one bounded page at a time. Deleting shifts the next page to
-    // offset zero, so this also cleans registries larger than one API page.
     while (true) {
       const res = await fetch('/api/projects?limit=100&offset=0', { headers });
       const payload = res.ok ? await res.json() : [];
@@ -84,9 +75,6 @@ test('simulator generates, revises, persists, and exposes exports', async ({ pag
   await expect(page.getByText('Revision Preview')).toBeVisible();
   await page.getByRole('button', { name: 'Apply Revision' }).click();
   await expect(page.getByText(/Revision Applied Successfully|partially completed/)).toBeVisible({ timeout: 15_000 });
-
-  // Reload returns to the unselected registry. Reopening performs exactly one
-  // blueprint read and restores the approved cloud sections/local drafts.
   await page.reload();
   await expect(page.getByText('Select a project from Your Projects to load its blueprint.')).toBeVisible();
   await page.evaluate(() => sessionStorage.setItem('e2e-api-requests', '[]'));
@@ -94,8 +82,6 @@ test('simulator generates, revises, persists, and exposes exports', async ({ pag
   await expect(page.locator('#blueprint-section-executiveSummary')).toBeVisible();
   const openRequests = await page.evaluate(() => JSON.parse(sessionStorage.getItem('e2e-api-requests') || '[]'));
   expect(openRequests.filter(url => new URL(url, 'http://localhost').pathname.endsWith('/blueprint'))).toHaveLength(1);
-
-  // Approval and Your Projects consume registry/blueprint state only.
   await page.getByTitle('Approval').click();
   await expect(page.getByRole('heading', { name: 'Approval & Quality' })).toBeVisible();
   await page.getByTitle('Your Projects').click();
@@ -103,8 +89,6 @@ test('simulator generates, revises, persists, and exposes exports', async ({ pag
     .map(url => new URL(url, window.location.origin).pathname)
     .filter(path => /\/(meta|events|memory|decisions)$/.test(path)));
   expect(resourcePaths).toEqual([]);
-
-  // Memory loads only itself on first visit and is cached on revisit.
   await page.getByTitle('Project Memory').click();
   await expect(page.getByRole('heading', { name: 'Memory Inspector' })).toBeVisible();
   await page.getByTitle('Your Projects').click();
@@ -114,8 +98,6 @@ test('simulator generates, revises, persists, and exposes exports', async ({ pag
     .map(url => new URL(url, window.location.origin).pathname)
     .filter(path => /\/(meta|events|memory|decisions)$/.test(path)));
   expect(resourcePaths.map(path => path.split('/').at(-1))).toEqual(['memory']);
-
-  // Agent Team progressively loads the three remaining resources and reuses memory.
   await page.getByTitle('Agent Team').click();
   await expect(page.getByRole('heading', { name: 'Agent Timeline' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Project Evolution' })).toBeVisible();

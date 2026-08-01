@@ -1,9 +1,9 @@
 import { generateAIContent } from './aiProvider';
+import { getActiveProviderName } from './activeProvider';
+import { getProviderProfile } from './providerProfiles';
+import { withJsonHardening } from './agentPrompts';
+import { extractJson } from './validationLayer';
 import { SECTION_OWNERSHIP } from '../../config/sectionOwnership';
-
-// Derives the flat affectedSections/assignedAgents lists from a task list and
-// drops tasks referencing unknown agents/sections so bad AI output can't
-// corrupt the workflow.
 export const normalizeRouting = (tasks, confidence = 'Low') => {
   const validAgents = new Set(Object.values(SECTION_OWNERSHIP));
   const normalized = (Array.isArray(tasks) ? tasks : [])
@@ -36,8 +36,6 @@ export const normalizeRouting = (tasks, confidence = 'Low') => {
   const assignedAgents = [...new Set(validTasks.map(t => t.agent))];
   return { tasks: validTasks, affectedSections, assignedAgents, confidence };
 };
-
-// Static keyword fallback used when AI routing is unavailable or fails.
 export const heuristicRouting = (revisionInstruction, categoryHint = '') => {
   const lower = revisionInstruction.toLowerCase();
   const tasks = [];
@@ -94,26 +92,33 @@ Rules:
 6. Return a confidence score ("High", "Medium", "Low") based on how clear the instruction is.`;
 
   const userPrompt = `Project Context: ${projectContext}\nCategory Hint: ${categoryHint || 'Auto Detect'}\n\nUser Request: "${revisionInstruction}"`;
+  const profile = getProviderProfile(getActiveProviderName());
+  const gemini = profile.schemaDialect === 'gemini';
+  const T = {
+    string: gemini ? 'STRING' : 'string',
+    array: gemini ? 'ARRAY' : 'array',
+    object: gemini ? 'OBJECT' : 'object'
+  };
 
   const schema = {
-    type: "OBJECT",
+    type: T.object,
     properties: {
       tasks: {
-        type: "ARRAY",
+        type: T.array,
         description: "One task per responsible agent.",
         items: {
-          type: "OBJECT",
+          type: T.object,
           properties: {
-            agent: { type: "STRING", description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
-            sections: { type: "ARRAY", description: "Section keys this task updates.", items: { type: "STRING" } },
-            taskDescription: { type: "STRING", description: "The specific sub-instruction for this agent." },
-            reason: { type: "STRING", description: "One sentence: why this agent was selected." }
+            agent: { type: T.string, description: "The agent role responsible: ceo, pm, developer, marketing or mediator." },
+            sections: { type: T.array, description: "Section keys this task updates.", items: { type: T.string } },
+            taskDescription: { type: T.string, description: "The specific sub-instruction for this agent." },
+            reason: { type: T.string, description: "One sentence: why this agent was selected." }
           },
           required: ["agent", "sections", "taskDescription", "reason"]
         }
       },
       confidence: {
-        type: "STRING",
+        type: T.string,
         description: "High, Medium, or Low"
       }
     },
@@ -121,8 +126,12 @@ Rules:
   };
 
   try {
-    const rawResponse = await generateAIContent(systemPrompt, userPrompt, schema);
-    const parsed = JSON.parse(rawResponse);
+    const rawResponse = await generateAIContent(
+      withJsonHardening(systemPrompt, profile),
+      userPrompt,
+      schema
+    );
+    const parsed = extractJson(rawResponse);
     const normalized = normalizeRouting(parsed.tasks, parsed.confidence || 'Medium');
     if (normalized.tasks.length === 0) {
       throw new Error('AI routing returned no valid tasks.');

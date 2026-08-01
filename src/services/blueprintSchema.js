@@ -1,4 +1,4 @@
-import { BLUEPRINT_SECTIONS } from '../config/blueprintSections';
+import { BLUEPRINT_SECTIONS } from '../../shared/blueprintSections.js';
 
 export const createBlueprintSchema = () => {
   const schema = {};

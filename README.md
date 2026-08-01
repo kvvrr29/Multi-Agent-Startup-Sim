@@ -11,17 +11,16 @@ npm install
 npm run dev:full   # Express API (8787) + Vite frontend (3000)
 ```
 
-Open http://localhost:3000 and sign in with your email (magic link). AI generation goes through a **server-side Gemini proxy** by default — no API key needed in the browser. You can still paste a personal [Gemini API key](https://aistudio.google.com/apikey) in **AI Settings** to call Gemini directly; that key is stored only in the current browser so it survives reloads, and is never synced to the user's account or logged. With AI Mode off, the app runs in clearly-labeled **Simulator Mode** using fallback templates.
+Open http://localhost:3000 and sign in with your email (magic link). AI generation always runs on **your own API key**: paste a [Gemini API key](https://aistudio.google.com/apikey) or an [OpenAI key](https://platform.openai.com/api-keys) in **AI Settings**, or pick the built-in browser model, which needs no key. Keys are stored only in the current browser so they survive reloads, and are never sent to the server, synced to your account, or logged. With AI Mode off — or with no key set — the app runs in clearly-labeled **Simulator Mode** using fallback templates.
 
 ## Backend (Express + Supabase)
 
-All backend traffic routes through an **Express API server** (`server/index.js`, port 8787; the Vite dev server proxies `/api/*` to it). The browser talks to Supabase directly only for the auth handshake — everything else goes `frontend → Express → Supabase/Gemini`:
+All backend traffic routes through an **Express API server** (`server/index.js`, port 8787; the Vite dev server proxies `/api/*` to it). The server is **persistence only** — it holds no AI credentials and makes no model calls. The browser talks to Supabase directly only for the auth handshake, and to Gemini/OpenAI directly with the user's key; everything else goes `frontend → Express → Supabase`:
 
 - **Auth** — email magic-link login gates the app (`AuthGate.jsx`); `supabase-js` in the browser handles the link/session, and its access token authenticates every `/api` request. Express verifies the JWT per request and queries Supabase with a user-scoped client, so Row Level Security still applies end to end. The dev server runs on port 3000 to match the Supabase project's Site URL, so magic links redirect back correctly.
 - **Cloud persistence** — `/api/projects` CRUD backed by normalized tables (blueprint sections, memory, and decision history). The client debounce-syncs on every store change (`services/cloudSync.js`), and the creation screen lists your saved projects for reopening on any device.
-- **AI proxy** — `/api/ai/generate` holds the Gemini key in the server's `GEMINI_API_KEY` env variable; the browser never sees a Gemini key. Until it is set the endpoint returns a clean 501 and the app falls back visibly (revisions fail safely without changing the blueprint; initial generation uses the fallback factory). Users can still paste a personal key in AI Settings to bypass the proxy.
 
-Run both together with `npm run dev:full` (or `npm run server` + `npm run dev` separately). To point at your own Supabase project, copy `.env.example` to `.env`, set the URL/key values, and apply `supabase/migrations/` (a deployed `gemini-proxy` Edge Function also exists as a serverless alternative to the Express AI route, but the app does not use it).
+Run both together with `npm run dev:full` (or `npm run server` + `npm run dev` separately). To point at your own Supabase project, copy `.env.example` to `.env`, set the URL/key values, and apply `supabase/migrations/`.
 
 ## How it works
 

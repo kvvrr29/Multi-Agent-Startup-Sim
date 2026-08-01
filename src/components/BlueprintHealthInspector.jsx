@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { Bug, ChevronDown, ChevronRight } from "lucide-react";
-import { BLUEPRINT_SECTIONS } from "../config/blueprintSections";
+import { BLUEPRINT_SECTIONS } from "../../shared/blueprintSections.js";
 
 export default function BlueprintHealthInspector() {
   const blueprint = useProjectStore((state) => state.blueprint);

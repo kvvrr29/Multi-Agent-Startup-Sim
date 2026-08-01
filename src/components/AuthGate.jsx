@@ -35,19 +35,11 @@ export default function AuthGate({ children }) {
   const [booted, setBooted] = useState(false);
   const [bootError, setBootError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
-
-  // Key the bootstrap on the stable user id, NOT the session object. Supabase
-  // mints a fresh session object on token refresh and tab re-focus; depending
-  // on the object would re-run the effect, re-hydrate the stores from the DB
-  // over un-synced local edits, and cancel the pending push via stopSync.
   const userId = session?.user?.id ?? null;
 
   useEffect(() => {
     init();
   }, [init]);
-
-  // Bootstrap after sign-in: load the registry only. Project data is fetched
-  // explicitly when the user selects a project from the Dashboard.
   useEffect(() => {
     if (!userId) {
       stopSync();
@@ -76,16 +68,12 @@ export default function AuthGate({ children }) {
       }
       setBootError(null);
       setBooted(true);
-      // Subscriptions are safe with no active target. Selecting a project
-      // establishes its synchronization cursor before edits can be observed.
       startSync();
     })();
     return () => {
       cancelled = true;
     };
   }, [userId, retryKey]);
-
-  // Best effort: push pending changes before the tab closes.
   useEffect(() => {
     window.addEventListener("beforeunload", flush);
     return () => window.removeEventListener("beforeunload", flush);

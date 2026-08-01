@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { createBlueprintSchema } from '../services/blueprintSchema';
-
-export const AGENT_ROLES = {
+const AGENT_ROLE_LABELS = {
   MEDIATOR: 'Mediator',
   CEO: 'CEO',
   PM: 'Product Manager',
@@ -22,9 +21,6 @@ export const AGENT_STATUS = {
   COMPLETED: 'Completed',
   FAILED: 'Failed',
 };
-
-// Statuses in which an agent is actively occupied. Completed/Failed/Idle are
-// terminal states — they must never block new work (doc §5: no stuck agents).
 const BUSY_STATUSES = [
   AGENT_STATUS.ANALYZING,
   AGENT_STATUS.ROUTING,
@@ -39,45 +35,26 @@ const BUSY_STATUSES = [
 export const isAgentBusy = (agent) => BUSY_STATUSES.includes(agent?.status);
 
 const initialAgents = {
-  mediator: { id: 'mediator', name: 'Alex', role: AGENT_ROLES.MEDIATOR, status: AGENT_STATUS.IDLE, currentTask: null },
-  ceo: { id: 'ceo', name: 'Sarah', role: AGENT_ROLES.CEO, status: AGENT_STATUS.IDLE, currentTask: null },
-  pm: { id: 'pm', name: 'David', role: AGENT_ROLES.PM, status: AGENT_STATUS.IDLE, currentTask: null },
-  developer: { id: 'developer', name: 'Elena', role: AGENT_ROLES.DEVELOPER, status: AGENT_STATUS.IDLE, currentTask: null },
-  marketing: { id: 'marketing', name: 'Marcus', role: AGENT_ROLES.MARKETING, status: AGENT_STATUS.IDLE, currentTask: null },
+  mediator: { id: 'mediator', name: 'Alex', role: AGENT_ROLE_LABELS.MEDIATOR, status: AGENT_STATUS.IDLE, currentTask: null },
+  ceo: { id: 'ceo', name: 'Sarah', role: AGENT_ROLE_LABELS.CEO, status: AGENT_STATUS.IDLE, currentTask: null },
+  pm: { id: 'pm', name: 'David', role: AGENT_ROLE_LABELS.PM, status: AGENT_STATUS.IDLE, currentTask: null },
+  developer: { id: 'developer', name: 'Elena', role: AGENT_ROLE_LABELS.DEVELOPER, status: AGENT_STATUS.IDLE, currentTask: null },
+  marketing: { id: 'marketing', name: 'Marcus', role: AGENT_ROLE_LABELS.MARKETING, status: AGENT_STATUS.IDLE, currentTask: null },
 };
 
 const createInitialAgents = () => Object.fromEntries(
   Object.entries(initialAgents).map(([key, value]) => [key, { ...value }])
 );
-
-// No local persistence: the database is the source of truth. Selecting a
-// registry entry hydrates its blueprint; other project domains remain unloaded.
 export const useProjectStore = create((set, get) => ({
-  // App State
   currentView: 'create', // 'create', 'dashboard'
-
-  // Project Data
   project: null,
-  
-  // Agents State
   agents: createInitialAgents(),
-  
-  // Blueprint Data
   blueprint: createBlueprintSchema(),
-  
-  // Workflow Timeline
   workflowEvents: [],
-
-  // 'local' means this browser is actively generating a newly-created project.
-  // 'unloaded' means only the selected project's blueprint has been fetched.
   deferredDataState: 'unloaded',
-
-  // Active Revision State
   activeRevision: null,
   recentRevisionResult: null,
   workflow: { active: false, runId: null, kind: null, startedAt: null },
-
-  // Actions
   setCurrentView: (view) => set({ currentView: view }),
 
   beginWorkflow: (kind) => {

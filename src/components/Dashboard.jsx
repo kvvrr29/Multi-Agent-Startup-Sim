@@ -29,20 +29,16 @@ import {
   LogOut,
 } from "lucide-react";
 
-import { BLUEPRINT_SECTIONS } from "../config/blueprintSections";
+import { BLUEPRINT_SECTIONS } from "../../shared/blueprintSections.js";
 import BlueprintHealthInspector from "./BlueprintHealthInspector";
 
 const ApprovalDashboard = () => {
   const blueprint = useProjectStore((state) => state.blueprint);
-
-  // 1. Math Definitions
   const total = BLUEPRINT_SECTIONS.length;
   const textSections = BLUEPRINT_SECTIONS.filter((s) => s.type === "text");
   const diagramSections = BLUEPRINT_SECTIONS.filter(
     (s) => s.type === "diagram",
   );
-
-  // 2. Calculations
   const textFilled = textSections.filter(
     (s) => blueprint[s.id]?.content?.trim().length > 0,
   ).length;
@@ -58,8 +54,6 @@ const ApprovalDashboard = () => {
   ).length;
   const pending = filledSections.length - approved;
   const missing = total - filledSections.length;
-
-  // 3. Quality Metrics
   const coveragePercent =
     Math.round((textFilled / textSections.length) * 100) || 0;
   const diagramsPercent =
@@ -68,9 +62,6 @@ const ApprovalDashboard = () => {
     filledSections.length > 0
       ? Math.round((approved / filledSections.length) * 100)
       : 0;
-
-  // Weighted Quality Score
-  // Content (35%), Diagrams (25%), Approvals (40%)
   const qualityScore = Math.round(
     coveragePercent * 0.35 + diagramsPercent * 0.25 + approvalPercent * 0.4,
   );
@@ -278,8 +269,6 @@ const ApprovalDashboard = () => {
     </div>
   );
 };
-
-// One contextual panel at a time (doc §8)
 const PANELS = [
   { id: "project", label: "Your Projects", icon: BriefcaseBusiness },
   { id: "agents", label: "Agent Team", icon: Bot },
@@ -383,9 +372,6 @@ export default function Dashboard() {
     (state) => state.resources.decisions,
   );
   const anyBusy = Object.values(agents).some(isAgentBusy);
-
-  // Auto-switch to Agent Activity when a simulation starts so the user
-  // always sees what the AI team is doing (doc §8).
   const wasBusy = React.useRef(false);
   React.useEffect(() => {
     if (anyBusy && !wasBusy.current) setActivePanel("agents");
@@ -556,7 +542,6 @@ export default function Dashboard() {
         {activePanel === "project" && (
           <>
             <CloudProjectList
-              compact
               activeId={activeCloudId}
               onOpen={async (id) => {
                 if (anyBusy) {
@@ -576,9 +561,6 @@ export default function Dashboard() {
                   return;
                 }
                 await flush();
-                // Detach from the cloud row before clearing the render stores.
-                // Keep this project's browser-local drafts so reopening it can
-                // restore every unapproved section.
                 useAuthStore.getState().detachCloud();
                 resetAllProjectData({ preserveSectionHistory: true });
               }}

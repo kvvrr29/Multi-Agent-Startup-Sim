@@ -1,7 +1,5 @@
 import { useProjectMemoryStore } from '../store/projectMemoryStore';
 
-// ── Markdown builders for profile-driven sections ────────────────────────────
-
 const buildTargetUsers = (users) =>
   `### Primary User Segments\n${users.map(u => `- **${u.name}:** ${u.description}`).join('\n')}`;
 
@@ -33,8 +31,6 @@ const buildTimeline = (timeline, declaredTimeline) => {
 
 const buildRecommendations = (recommendations) =>
   recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n');
-
-// ── Domain profiles for the newer blueprint sections ─────────────────────────
 
 const DOMAIN_PROFILES = {
   general: {
@@ -692,8 +688,6 @@ erDiagram
 
   const selected = content[domain] || content.general;
   const profile = DOMAIN_PROFILES[domain] || DOMAIN_PROFILES.general;
-
-  // Apply memory overrides
   const backendPattern = /Node\.js(?: microservices| \(Express\/Fastify\))?|Java Spring Boot \/ \.NET Core/g;
   let finalArchitecture = selected.architecture;
   let finalTechStack = buildTechStack(profile.techStack);
