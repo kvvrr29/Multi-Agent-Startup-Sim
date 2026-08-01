@@ -1,5 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { useSettingsStore } from '../../store/useSettingsStore';
+const loadGenAI = () => import('@google/genai').then(m => m.GoogleGenAI);
 import { useProjectStore } from '../../store/useProjectStore';
 const MIN_CALL_INTERVAL_MS = 4200; // 14.2 requests per minute (avoids 15 RPM 60s sleep penalty)
 const DEFAULT_RATE_LIMIT_DELAY_MS = 65_000;
@@ -67,7 +67,12 @@ export class GeminiProvider {
 
   async initialize() {
     const { apiKey } = useSettingsStore.getState();
-    this.client = apiKey?.trim() ? new GoogleGenAI({ apiKey: apiKey.trim() }) : null;
+    if (!apiKey?.trim()) {
+      this.client = null;
+      return this.client;
+    }
+    const GoogleGenAI = await loadGenAI();
+    this.client = new GoogleGenAI({ apiKey: apiKey.trim() });
     return this.client;
   }
 
