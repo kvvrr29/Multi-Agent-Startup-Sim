@@ -26,10 +26,13 @@ const withUser = async (req, res, next) => {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false }
   });
-  const { data, error } = await client.auth.getUser(token);
-  if (error || !data?.user) return res.status(401).json({ error: 'invalid_token', message: 'Session is invalid or expired.' });
+  // getClaims verifies the signature locally against a cached JWKS, so this
+  // costs one JWKS fetch per process rather than an auth round-trip per
+  // request. It falls back to getUser() on its own for symmetric (HS*) tokens.
+  const { data, error } = await client.auth.getClaims(token);
+  if (error || !data?.claims?.sub) return res.status(401).json({ error: 'invalid_token', message: 'Session is invalid or expired.' });
   req.supabase = client;
-  req.user = data.user;
+  req.user = { id: data.claims.sub, email: data.claims.email };
   next();
 };
 
