@@ -16,30 +16,8 @@ import {
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
 const PORT = process.env.PORT || 8787;
-
-// The app itself calls /api on its own origin, so CORS only ever applies to
-// other callers. Default to the local dev/preview origins; set ALLOWED_ORIGINS
-// (comma-separated) when the API is served from a different host than the UI.
-const DEV_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173'
-];
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
-  : DEV_ORIGINS;
-
 const app = express();
-app.use(cors({
-  origin: (origin, callback) => {
-    // No Origin header means same-origin or a non-browser client (curl, tests).
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    // Reject by withholding the CORS headers rather than raising, so a blocked
-    // page sees a clean browser-side error instead of a 500 from this server.
-    callback(null, false);
-  }
-}));
+app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 const withUser = async (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
