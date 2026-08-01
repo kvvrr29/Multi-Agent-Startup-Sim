@@ -185,18 +185,27 @@ describe('blueprint-only project opening', () => {
     expect(useProjectMemoryStore.getState().decisionHistory).toEqual([]);
   });
 
-  it('flushes approved outgoing changes before reading the incoming blueprint', async () => {
+  it('flushes outgoing changes to the previous project without waiting to read the incoming blueprint', async () => {
     useAuthStore.setState(state => ({
       cloudProjects: [...state.cloudProjects, { id: 'proj-2', name: 'Second Project' }]
     }));
     setSection('executiveSummary', 'outgoing approved edit', 'approved');
+
+    // Hold the outgoing write open so the read cannot silently depend on it.
+    let releaseFlush;
+    api.upsertSections.mockReturnValue(new Promise(resolve => { releaseFlush = () => resolve({}); }));
     api.getProjectBlueprint.mockResolvedValue({ sections: [] });
 
-    await openCloudProject('proj-2');
+    const opening = openCloudProject('proj-2');
+    await vi.waitFor(() => expect(api.upsertSections).toHaveBeenCalled());
 
+    // The outgoing write is still pending, yet the incoming read is already in
+    // flight: the two overlap instead of costing two serial round trips.
     expect(api.upsertSections).toHaveBeenCalledWith('proj-1', expect.any(Array));
-    expect(api.upsertSections.mock.invocationCallOrder[0])
-      .toBeLessThan(api.getProjectBlueprint.mock.invocationCallOrder[0]);
+    expect(api.getProjectBlueprint).toHaveBeenCalledWith('proj-2');
+
+    releaseFlush();
+    expect(await opening).toBe(true);
   });
 
   it('clears data from the outgoing project when switching', async () => {
