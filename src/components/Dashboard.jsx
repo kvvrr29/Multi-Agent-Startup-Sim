@@ -1,5 +1,4 @@
-import React from "react";
-import AgentVisualizer from "./AgentVisualizer";
+import React, { Suspense } from "react";
 import BlueprintViewer from "./BlueprintViewer";
 import ProjectEvolution from "./ProjectEvolution";
 import MemoryInspector from "./MemoryInspector";
@@ -31,6 +30,25 @@ import {
 
 import { BLUEPRINT_SECTIONS } from "../../shared/blueprintSections.js";
 import BlueprintHealthInspector from "./BlueprintHealthInspector";
+
+// ReactFlow + framer-motion live only here, so they load with the panel.
+const AgentVisualizer = React.lazy(() => import("./AgentVisualizer"));
+
+const AgentVisualizerFallback = () => (
+  <div
+    className="glass-panel"
+    style={{
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "var(--text-muted)",
+      fontSize: "0.8rem",
+    }}
+  >
+    Loading agent graph…
+  </div>
+);
 
 const ApprovalDashboard = () => {
   const blueprint = useProjectStore((state) => state.blueprint);
@@ -505,7 +523,9 @@ export default function Dashboard() {
                 }}
               >
                 <ErrorBoundary componentName="AgentVisualizer">
-                  <AgentVisualizer />
+                  <Suspense fallback={<AgentVisualizerFallback />}>
+                    <AgentVisualizer />
+                  </Suspense>
                 </ErrorBoundary>
               </div>
               {eventsState.status === "ready" ? (
