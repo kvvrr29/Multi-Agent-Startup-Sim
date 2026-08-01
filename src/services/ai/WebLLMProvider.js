@@ -1,7 +1,24 @@
 import { modelManager } from './ModelManager';
+import { getProviderProfile } from './providerProfiles';
 
-// Only used when a caller supplies no budget of its own.
-const DEFAULT_MAX_TOKENS = 1500;
+// Only used when a caller supplies no budget of its own — the classifier and
+// the router, which both ask for a few lines of JSON. Read from the profile so
+// there is one number rather than two that can drift apart.
+const DEFAULT_MAX_TOKENS = getProviderProfile('webllm').maxTokens;
+
+/**
+ * How long to wait before treating a generation as stuck.
+ *
+ * This has to scale with the budget: decoding is bandwidth-bound, so a small
+ * model on modest hardware runs at roughly 10-30 tokens per second, and a flat
+ * ceiling that comfortably fits a 700-token answer will cut a 1400-token one
+ * off mid-sentence. The allowance below assumes a pessimistic ~10 tok/s plus
+ * time to load and prefill, then caps the whole thing — this is a deadlock
+ * detector, not a pacing mechanism, so it should only ever fire when something
+ * has genuinely stopped making progress.
+ */
+const generationTimeoutMs = (maxTokens) =>
+  Math.min(180_000, 30_000 + maxTokens * 100);
 
 const logDiagnostic = (section, data) => {
   if (!import.meta.env.DEV) return;
@@ -68,7 +85,7 @@ export class WebLLMProvider {
       let firstTokenMs = null;
       let finishReason = null;
 
-      const timeoutMs = 60000;
+      const timeoutMs = generationTimeoutMs(max_tokens);
 
       // We wrap the active generation in a timeout Promise race
       const generateWithTimeout = async () => {

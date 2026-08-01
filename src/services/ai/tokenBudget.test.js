@@ -44,8 +44,10 @@ describe('WebLLM honours the caller token budget', () => {
 
     await provider.generate({ systemPrompt: 's', userPrompt: 'u' });
 
+    // Read from the profile rather than repeated here, so the provider default
+    // and the profile cannot drift apart without a test noticing.
     expect(engine.chat.completions.create).toHaveBeenCalledWith(
-      expect.objectContaining({ max_tokens: 1500 })
+      expect.objectContaining({ max_tokens: getProviderProfile('webllm').maxTokens })
     );
   });
 
@@ -132,9 +134,36 @@ describe('generation is actually stopped, not just abandoned', () => {
     const pending = provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 700 });
     const assertion = expect(pending).rejects.toThrow(/timed out/);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    // 30s of load and prefill allowance plus 100ms per requested token.
+    await vi.advanceTimersByTimeAsync(100_000);
     await assertion;
 
+    expect(interruptGenerate).toHaveBeenCalled();
+  });
+
+  it('scales the timeout with the token budget so a long answer is not cut off', async () => {
+    vi.useFakeTimers();
+    const interruptGenerate = vi.fn().mockResolvedValue(undefined);
+    const engine = {
+      interruptGenerate,
+      chat: { completions: { create: vi.fn().mockResolvedValue({
+        async *[Symbol.asyncIterator]() { await new Promise(() => {}); }
+      }) } }
+    };
+    vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
+
+    const provider = new WebLLMProvider();
+    const pending = provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 1400 });
+    const assertion = expect(pending).rejects.toThrow(/timed out/);
+
+    // The old flat 60s ceiling sat below the time a 1400-token answer needs on
+    // modest hardware, so raising the section budgets would have turned normal
+    // long output into a timeout.
+    await vi.advanceTimersByTimeAsync(100_000);
+    expect(interruptGenerate).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(80_000);
+    await assertion;
     expect(interruptGenerate).toHaveBeenCalled();
   });
 
