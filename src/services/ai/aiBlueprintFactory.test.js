@@ -33,9 +33,6 @@ describe('cloud batch revisions', () => {
     generateAIContent.mockResolvedValue(JSON.stringify({ businessModel: text }));
 
     await generateAgentContent('ceo', 'switch to a commission model', ['businessModel']);
-
-    // Buried under a context heading the instruction reads as background and
-    // the task still asks for a fresh write, so the existing text is lost.
     const task = generateAIContent.mock.calls[0][1].split('\n\nTask:')[1];
     expect(task).toMatch(/applies this instruction to its current text shown above: switch to a commission model/);
   });

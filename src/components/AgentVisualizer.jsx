@@ -27,8 +27,6 @@ const statusColors = {
   [AGENT_STATUS.COMPLETED]: 'var(--success)',
   [AGENT_STATUS.FAILED]: 'var(--danger)'
 };
-
-// Custom Node for Agent
 const AgentNode = ({ data }) => {
   if (!data) return null; // Safe guard
   
@@ -98,8 +96,6 @@ const nodeTypes = { agentNode: AgentNode };
 
 function AgentVisualizerInner() {
   const agents = useProjectStore(state => state.agents);
-  
-  // Define layout
   const initialNodes = [
     { id: 'mediator', type: 'agentNode', position: { x: 50, y: 200 }, data: agents.mediator },
     { id: 'ceo', type: 'agentNode', position: { x: 400, y: 50 }, data: agents.ceo },
@@ -117,8 +113,6 @@ function AgentVisualizerInner() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-
-  // Update nodes and edges when agent state changes
   useEffect(() => {
     setNodes(nds => nds.map(node => {
       const updatedData = agents[node.id];

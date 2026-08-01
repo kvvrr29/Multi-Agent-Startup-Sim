@@ -2,9 +2,6 @@ import { create } from 'zustand';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/apiClient';
 import { useSectionHistoryStore } from './sectionHistoryStore';
-
-// Auth + cloud project registry. `session` is undefined while loading, null
-// when signed out; `activeCloudId` is the projects row the stores sync into.
 export const useAuthStore = create((set, get) => ({
   session: undefined,
   user: null,
@@ -65,9 +62,6 @@ export const useAuthStore = create((set, get) => ({
     cloudProjects: [project, ...state.cloudProjects.filter(p => p.id !== project.id)],
     projectsNextOffset: state.projectsHasMore ? state.projectsNextOffset + 1 : state.projectsNextOffset
   })),
-
-  // Returns the project list, or null when the API is unreachable — callers
-  // must not treat a failure as "the user has no projects".
   refreshProjects: async () => {
     if (!get().session) return [];
     try {

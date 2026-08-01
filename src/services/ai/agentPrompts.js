@@ -32,20 +32,10 @@ Focus on: Initial customer acquisition, viral loops, marketing channels, and com
 Your goal is to write the closing Final Recommendations: 3-6 concrete, prioritized next steps for the founders, synthesized from the whole blueprint and strictly specific to this project's domain.
 Do not restate the blueprint. Recommend actions, sequencing, and what to validate first.`
 };
-
-// Appended only for providers that cannot enforce a response schema. Gemini and
-// OpenAI guarantee structure through their APIs; the local model is merely
-// asked nicely, and this is the main defence against fences and preamble.
 export const JSON_ONLY_DIRECTIVE =
   'CRITICAL: Respond with ONLY the raw JSON object. No markdown, no code fences, no explanation, no text before or after it.';
-
-/** Adds the directive when the provider profile asks for it, otherwise returns the prompt unchanged. */
 export const withJsonHardening = (systemPrompt, profile) =>
   profile?.jsonHardening ? `${systemPrompt}\n${JSON_ONLY_DIRECTIVE}` : systemPrompt;
-
-// ── Directives shared by every generation prompt ─────────────────────────────
-// What makes a good section does not depend on which model writes it, so these
-// live as single strings the batch and per-section templates cannot drift from.
 
 export const SPECIFICITY_DIRECTIVE =
   'Ensure the content is highly specific to this exact project and not generic.';

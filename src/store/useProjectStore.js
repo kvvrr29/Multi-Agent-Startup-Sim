@@ -1,8 +1,5 @@
 import { create } from 'zustand';
 import { createBlueprintSchema } from '../services/blueprintSchema';
-
-// Display names for each agent. Not to be confused with AGENT_SECTIONS in
-// config/sectionOwnership.js, which maps an agent to the sections it writes.
 const AGENT_ROLE_LABELS = {
   MEDIATOR: 'Mediator',
   CEO: 'CEO',
@@ -24,9 +21,6 @@ export const AGENT_STATUS = {
   COMPLETED: 'Completed',
   FAILED: 'Failed',
 };
-
-// Statuses in which an agent is actively occupied. Completed/Failed/Idle are
-// terminal states — they must never block new work (doc §5: no stuck agents).
 const BUSY_STATUSES = [
   AGENT_STATUS.ANALYZING,
   AGENT_STATUS.ROUTING,
@@ -51,35 +45,16 @@ const initialAgents = {
 const createInitialAgents = () => Object.fromEntries(
   Object.entries(initialAgents).map(([key, value]) => [key, { ...value }])
 );
-
-// No local persistence: the database is the source of truth. Selecting a
-// registry entry hydrates its blueprint; other project domains remain unloaded.
 export const useProjectStore = create((set, get) => ({
-  // App State
   currentView: 'create', // 'create', 'dashboard'
-
-  // Project Data
   project: null,
-  
-  // Agents State
   agents: createInitialAgents(),
-  
-  // Blueprint Data
   blueprint: createBlueprintSchema(),
-  
-  // Workflow Timeline
   workflowEvents: [],
-
-  // 'local' means this browser is actively generating a newly-created project.
-  // 'unloaded' means only the selected project's blueprint has been fetched.
   deferredDataState: 'unloaded',
-
-  // Active Revision State
   activeRevision: null,
   recentRevisionResult: null,
   workflow: { active: false, runId: null, kind: null, startedAt: null },
-
-  // Actions
   setCurrentView: (view) => set({ currentView: view }),
 
   beginWorkflow: (kind) => {

@@ -2,9 +2,6 @@ import { AlertTriangle, Cpu, Zap, Activity, WifiOff, Timer } from 'lucide-react'
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAIDebugStore } from '../store/useAIDebugStore';
 import { PROVIDER_SOURCE_LABELS, NON_LIVE_SOURCES } from '../services/ai/activeProvider';
-
-// Labels are built per provider so the badge never claims "Gemini" while the
-// built-in local model is doing the work.
 const AI_STATUS = {
   GENERATING: { key: 'generating', label: 'AI Generation Active', color: '#e5e5e5', icon: Activity },
   CONNECTED: { key: 'connected', label: 'Connected', color: '#10b981', icon: Zap },
@@ -24,8 +21,6 @@ export function useAIMode() {
 
   const providerLabel = PROVIDER_SOURCE_LABELS[aiProvider] || 'Gemini';
   const isLocalProvider = aiProvider === 'webllm';
-  // Cloud providers run on the user's own key and nothing else, so no key means
-  // no AI. The local provider needs none.
   const hasProviderKey = isLocalProvider
     ? true
     : !!(aiProvider === 'openai' ? openaiApiKey?.trim() : apiKey?.trim());
@@ -46,9 +41,6 @@ export function useAIMode() {
   else if (hasFallbackOutput || connectionStatus === 'fallback') status = AI_STATUS.FALLBACK;
   else if (connectionStatus === 'connected' || hasLiveOutput) status = AI_STATUS.CONNECTED;
   else status = AI_STATUS.CONFIGURED;
-
-  // Name the actual provider in the two steady states ("Gemini Connected",
-  // "Built-in AI Configured"); the error states stay provider-neutral.
   if (status === AI_STATUS.CONNECTED || status === AI_STATUS.CONFIGURED) {
     status = { ...status, label: `${providerLabel} ${status.label}` };
   }

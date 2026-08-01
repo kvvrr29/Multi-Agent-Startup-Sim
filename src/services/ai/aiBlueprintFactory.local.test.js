@@ -8,11 +8,6 @@ import { useProjectStore } from '../../store/useProjectStore';
 import { useProjectMemoryStore } from '../../store/projectMemoryStore';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAIDebugStore } from '../../store/useAIDebugStore';
-
-// A section that clears every local gate, so the loop makes exactly one call
-// per section — any extra call here means a gate regressed. Deliberately broad,
-// since the gates score against each section's own concept groups and a fixture
-// written for one section would fail the others.
 const sectionText = (name) =>
   `The ${name} section describes the core problem urban customers face and the solution this platform delivers. `
   + `Target users are students and working professionals in dense city demographics whose daily habits and spend patterns show a clear need for faster delivery. `
@@ -64,19 +59,14 @@ describe('per-section generation for the local model', () => {
     await generateAgentContent('ceo');
 
     const [, prompt, schema, maxTokens] = generateAIContent.mock.calls[0];
-    // The task is per-section, not the multi-section batch instruction.
     expect(prompt).not.toMatch(/generate the following blueprint sections/);
     expect(prompt).toMatch(/Respond with ONLY valid JSON/);
     expect(maxTokens).toBeGreaterThan(0);
     expect(prompt).toMatch(/Urban food delivery/);
     expect(prompt).toMatch(/at least 350 words/);
-    // One concept per scored group, not six synonyms of the first group.
     expect(prompt).toMatch(/Cover concepts such as: problem, solution, customer, value\./);
-    // The context itself is now the full cloud brief, memory blocks included —
-    // the local model is no longer working from a reduced picture.
     expect(prompt).toMatch(/PROJECT MEMORY/);
     expect(prompt).toMatch(/CURRENT BLUEPRINT STATE/);
-    // Single-section schema, in the dialect a local model understands.
     expect(schema.type).toBe('object');
     expect(Object.keys(schema.properties)).toContain('executiveSummary');
     expect(Object.keys(schema.properties)).not.toContain('targetUsers');
@@ -89,8 +79,6 @@ describe('per-section generation for the local model', () => {
     });
 
     const result = await generateAgentContent('developer');
-
-    // Only technologyStack is asked for; the three diagram sections are templated.
     expect(generateAIContent).toHaveBeenCalledTimes(1);
     expect(result.content.architecture).toMatch(/```mermaid/);
     expect(result.content.umlDiagram).toMatch(/```mermaid/);
@@ -105,16 +93,12 @@ describe('per-section generation for the local model', () => {
     await generateAgentContent('marketing', 'make this section bigger');
 
     const prompt = generateAIContent.mock.calls[0][1];
-    // Without this, "make this section bigger" has no referent and the model
-    // writes a fresh one-liner instead of expanding anything.
     expect(prompt).toContain(existing);
     expect(prompt).toMatch(/Apply this instruction to the current text shown above: make this section bigger/);
-    // The instruction must not also masquerade as the project description.
     expect(prompt).not.toMatch(/Project Name: make this section bigger/);
   });
 
   it('keeps best-effort content when a section never fully validates', async () => {
-    // Always returns content too short to clear even the relaxed structural gate.
     generateAIContent.mockResolvedValue(JSON.stringify({ marketingStrategy: 'Ads.' }));
 
     const result = await generateAgentContent('marketing');
@@ -134,9 +118,6 @@ describe('per-section generation for the local model', () => {
     generateAIContent.mockResolvedValue(JSON.stringify({ businessModel: sectionText('businessModel') }));
 
     const result = await generateAgentContent('ceo', 'switch to a commission model', ['businessModel']);
-
-    // One call, not the five the CEO owns. The other four would have been
-    // generated and then discarded by the caller.
     expect(generateAIContent).toHaveBeenCalledTimes(1);
     expect(Object.keys(result.content)).toEqual(['businessModel']);
     expect(generateAIContent.mock.calls[0][1]).toMatch(/switch to a commission model/);
@@ -158,8 +139,6 @@ describe('per-section generation for the local model', () => {
 
     const [first, second] = generateAIContent.mock.calls.map(call => call[1]);
     expect(first).toMatch(/at least 350 words/);
-    // The retry must not carry both targets — a small model given "at least
-    // 350 words" and "be brief" in one prompt satisfies neither.
     expect(second).not.toMatch(/at least 350 words/);
     expect(second).toMatch(/2 to 3 compact paragraphs/);
   });
@@ -174,8 +153,6 @@ describe('per-section generation for the local model', () => {
     }));
 
     const result = await generateAgentContent('ceo');
-
-    // One call covering every section, not five.
     expect(generateAIContent).toHaveBeenCalledTimes(1);
     expect(result.generationSource).toBe('Gemini');
     expect(generateAIContent.mock.calls[0][1]).toMatch(/generate the following blueprint sections/);

@@ -23,9 +23,6 @@ class AIProviderFactory {
 }
 
 const aiProviderFactory = new AIProviderFactory();
-
-// Generates content through the active provider, returning the raw response
-// text as a plain string.
 export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = null, maxTokens = null) => {
   const providerName = getActiveProviderName();
   const provider = aiProviderFactory.get(providerName);
@@ -48,13 +45,9 @@ export const generateAIContent = async (systemPrompt, userPrompt, jsonSchema = n
     beginGeneration();
 
     const responseText = await provider.generate({ systemPrompt, userPrompt, jsonSchema, maxTokens });
-    // A configured key is not a connection. Only a successful response earns it.
     setConnectionStatus('connected');
     return settle(responseText);
   } catch (err) {
-    // No cross-provider rescue: a quota failure propagates to simulationEngine,
-    // which falls back to the template factory. Switching to the local model
-    // from this depth would hand it a cloud prompt graded on cloud gates.
     incrementFailed();
     console.error(`[AIProvider] ${providerName} generation failed:`, err);
 

@@ -2,19 +2,6 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { getBrowserStorage } from './persistence';
 import { useProjectStore } from './useProjectStore';
-
-/**
- * Per-section version history, CLIENT-SIDE ONLY (localStorage, keyed by project
- * id). Each content change during prep appends a version, scrolled with the ‹ ›
- * arrows. Approving is the only thing that writes to the database, and it
- * DELETES the section's local drafts — so this store only ever holds unapproved
- * sections, and an approved one stays frozen with no history entry at all.
- *
- * useProjectStore.blueprint stays the render surface: the active version is
- * projected into it via updateBlueprintSection, a plain display setter that
- * records no history (hence no circular recording).
- */
-
 const emptyEntry = () => ({ versions: [], activeIndex: 0 });
 
 const isLocked = (sectionKey) =>
@@ -43,9 +30,6 @@ const versionFromDbRow = (row = {}) => ({
   failureReason: row.failure_reason ?? null,
   timestamp: row.updated_at || new Date().toISOString()
 });
-
-// Push a version's content into the blueprint store so the rest of the app
-// (rendering, export, health inspector) sees the currently-viewed content.
 const project = (sectionKey, version, approved = false) => {
   if (!version) return;
   useProjectStore.getState().updateBlueprintSection(
@@ -93,10 +77,6 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
     }));
     project(sectionKey, entry.versions[clamped]);
   },
-
-  // Approving locks the section (status flip is done by approveBlueprintSection)
-  // and DELETES its client-side drafts — the approved content lives in the DB.
-  // The blueprint already holds the viewed version, so nothing is re-projected.
   approveSection: (sectionKey) => {
     const { activeProjectId, byProject } = get();
     if (!byProject[activeProjectId]?.[sectionKey]) return false;
@@ -107,9 +87,6 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
     });
     return true;
   },
-
-  // Reconcile on open: approved sections come from the DB (no client draft
-  // retained); unapproved local drafts are restored and overlaid.
   loadProject: (projectId, dbSectionRows = []) => {
     const merged = { ...(get().byProject[projectId] || {}) };
     for (const row of dbSectionRows || []) {
@@ -122,7 +99,6 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
       activeProjectId: projectId,
       byProject: { ...state.byProject, [projectId]: merged }
     }));
-    // Overlay each remaining (unapproved) section's active draft.
     for (const [key, entry] of Object.entries(merged)) {
       project(key, entry.versions[entry.activeIndex]);
     }
@@ -133,11 +109,7 @@ export const useSectionHistoryStore = create(persist((set, get) => ({
     delete byProject[projectId];
     return { byProject, activeProjectId: state.activeProjectId === projectId ? null : state.activeProjectId };
   }),
-
-  // Stop projecting one project's local drafts without deleting them.
   deactivateProject: () => set({ activeProjectId: null }),
-
-  // Clears the ACTIVE project's history (New Project / reset flows).
   reset: () => set((state) => {
     if (!state.activeProjectId) return {};
     return { byProject: { ...state.byProject, [state.activeProjectId]: {} } };

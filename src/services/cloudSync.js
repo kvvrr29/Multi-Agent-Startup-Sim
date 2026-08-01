@@ -6,24 +6,14 @@ import { useAuthStore } from '../store/useAuthStore';
 import { cloneSerializable } from '../store/persistence';
 import { createBlueprintSchema } from './blueprintSchema';
 import { useProjectResourceStore, PROJECT_RESOURCES } from '../store/useProjectResourceStore';
-
-// This module owns long-lived singleton state (store subscriptions + the sync
-// cursor). A hot-swap would strand the old subscriptions and silently stop
-// syncing until a full reload, so force one on any change to this file.
 if (import.meta.hot) import.meta.hot.decline();
 
 const SYNC_DEBOUNCE_MS = 1500;
 
 let timer = null;
 let unsubscribers = [];
-// Hydration writes into the stores; suspend prevents echoing those writes back up.
 let suspended = false;
-// Serializes pushes so a debounced run and an explicit flush() can't overlap
-// and double-advance the cursor.
 let inFlight = null;
-
-// Last-pushed cursor for the open project. pushNow() diffs the stores against
-// it and sends only what changed.
 let cursor = null;
 let resourceEpoch = 0;
 const pendingResources = new Map();
@@ -66,7 +56,6 @@ const snapshotCursor = () => {
 };
 
 export const pushNow = async () => {
-  // Chain onto any in-flight push so cursor commits stay serialized.
   const run = (inFlight || Promise.resolve()).then(doPush);
   inFlight = run.catch(() => {});
   return run;
@@ -80,15 +69,7 @@ const doPush = async () => {
   const { memory, decisionHistory } = useProjectMemoryStore.getState();
 
   const next = snapshotCursor();
-
-  // Each domain is pushed independently and commits its own slice of the
-  // cursor only on success. A failure in one domain must not block the others
-  // or wedge the cursor into re-pushing everything forever.
   const tasks = [];
-
-  // Only APPROVED sections are persisted. Unapproved drafts and their version
-  // history live entirely client-side (sectionHistoryStore + localStorage) until
-  // the user approves, which flips status to 'approved' and lets it through here.
   const changedSections = Object.entries(blueprint || {})
     .filter(([key, section]) => section.status === 'approved' && next.sectionsByKey[key] !== cursor.sectionsByKey[key])
     .map(([key, section]) => ({
@@ -102,8 +83,6 @@ const doPush = async () => {
       failureReason: section.failureReason
     }));
   if (changedSections.length > 0) {
-    // Commit only the keys actually pushed, so an unapproved edit stays dirty
-    // (unsent) and its later approval still triggers a push.
     tasks.push({ name: 'sections', run: () => api.upsertSections(activeCloudId, changedSections), commit: () => { changedSections.forEach(s => { cursor.sectionsByKey[s.key] = next.sectionsByKey[s.key]; }); } });
   }
 
@@ -147,8 +126,6 @@ const doPush = async () => {
   if (tasks.length === 0) return true;
 
   const results = await Promise.allSettled(tasks.map(t => t.run()));
-  // The project may have been closed (stopSync) while requests were in flight;
-  // its cursor is gone, so there is nothing left to commit against.
   if (!cursor) return false;
   let allOk = true;
   results.forEach((result, i) => {
@@ -162,8 +139,6 @@ const doPush = async () => {
 
   return allOk;
 };
-
-/** Await any pending changes; used before switching projects and on unload. */
 export const flush = () => {
   clearTimeout(timer);
   return pushNow();
@@ -182,9 +157,6 @@ const unsubscribeAll = () => {
 };
 
 export const startSync = () => {
-  // Re-subscribe WITHOUT clearing the cursor: openCloudProject() sets the
-  // cursor just before this runs, and nulling it here would make pushNow's
-  // `!cursor` guard bail forever — edits to a reopened project would never sync.
   unsubscribeAll();
   unsubscribers = [useProjectStore, useProjectMemoryStore]
     .map(store => store.subscribe(scheduleSync));
@@ -201,8 +173,6 @@ export const resetProjectResourceLoading = (projectId = null, status = 'idle') =
   pendingResources.clear();
   useProjectResourceStore.getState().resetForProject(projectId, status);
 };
-
-/** Register a new project on the server and make it the sync target. */
 export const createCloudProject = async (form) => {
   const { session, setActiveCloudId, addCloudProject } = useAuthStore.getState();
   if (!session) return null;
@@ -210,17 +180,9 @@ export const createCloudProject = async (form) => {
     const row = await api.createProject(form);
     addCloudProject(row);
     setActiveCloudId(row.id);
-    // Make this the active project for the client-side section history (empty)
-    // before the initial simulation starts recording versions.
     useSectionHistoryStore.getState().loadProject(row.id, []);
-    // The create response already persisted the complete form. Initialize the
-    // local project before taking the sync baseline so setProject does not
-    // immediately echo the same metadata back through PATCH /projects/:id.
     useProjectStore.getState().setProject({ ...form, id: row.id });
     cursor = snapshotCursor();
-    // All four domains are born in this browser and will be appended/upserted
-    // by normal sync. Fetching the just-created, incomplete DB rows would race
-    // initial generation and overwrite local state.
     resetProjectResourceLoading(row.id, 'ready');
     return row.id;
   } catch (err) {
@@ -228,8 +190,6 @@ export const createCloudProject = async (form) => {
     return null;
   }
 };
-
-// ---------- Hydration: blueprint rows → store shape ----------
 
 const buildBlueprint = (sectionRows = []) => {
   const blueprint = createBlueprintSchema();
@@ -248,10 +208,6 @@ const buildBlueprint = (sectionRows = []) => {
   });
   return blueprint;
 };
-
-// Select a registry project and hydrate its blueprint only. The outgoing
-// project's pending writes flush first, and the active stores are untouched
-// unless the incoming blueprint request succeeds.
 export const openCloudProject = async (id) => {
   const registryProject = useAuthStore.getState().cloudProjects.find(project => project.id === id);
   if (!registryProject) {
@@ -276,8 +232,6 @@ export const openCloudProject = async (id) => {
       buildBlueprint(data.sections)
     );
     useProjectMemoryStore.getState().clearMemory();
-    // Reconcile client-side histories: DB wins for approved sections, and local
-    // unapproved drafts are restored and overlaid onto the blueprint display.
     useSectionHistoryStore.getState().loadProject(id, data.sections);
   } finally {
     suspended = false;
@@ -321,8 +275,6 @@ const applyHydratedResource = (resource, payload) => {
           ...(metaWasLocallyChanged ? { name: currentProject.name } : {}),
         }
       });
-      // Rebase to the database value, not the merged display value, so a local
-      // name edit made before hydration remains dirty and is still sent.
       if (cursor) cursor.metaJSON = metaFingerprint(databaseProject);
       return;
     }
@@ -357,8 +309,6 @@ const applyHydratedResource = (resource, payload) => {
         mergedMemory[category][key] = value;
       });
       useProjectMemoryStore.setState({ memory: mergedMemory });
-      // Rebase each key to its DB value. Any locally overlaid key remains dirty
-      // and the next sync sends only that key rather than the full memory map.
       if (cursor) {
         cursor.memoryByKey = memoryFingerprints(databaseMemory);
       }
@@ -425,10 +375,6 @@ const ensureOneResource = (projectId, resource, epoch) => {
   pendingResources.set(key, request);
   return request;
 };
-
-// Lazily hydrate independent project resources. Fulfilled ones are kept when a
-// sibling fails; callers get one aggregate failure so AI workflows can stop
-// before using incomplete context.
 export const ensureProjectResources = async (resourceNames) => {
   const projectId = useAuthStore.getState().activeCloudId;
   if (!projectId) throw new Error('Open a project before loading its data.');

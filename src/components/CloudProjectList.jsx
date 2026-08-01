@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import { FolderOpen, Trash2 } from "lucide-react";
-
-// The user's cloud projects, shown in the Dashboard's Project panel.
 export default function CloudProjectList({ activeId = null, onOpen }) {
   const cloudProjects = useAuthStore((state) => state.cloudProjects);
   const projectsHasMore = useAuthStore((state) => state.projectsHasMore);

@@ -1,28 +1,16 @@
 import { GoogleGenAI } from '@google/genai';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useProjectStore } from '../../store/useProjectStore';
-
-// Gemini Free Tier: 15 requests per minute = 1 every 4s.
-// 4s spacing keeps us safely under quota.
 const MIN_CALL_INTERVAL_MS = 4200; // 14.2 requests per minute (avoids 15 RPM 60s sleep penalty)
 const DEFAULT_RATE_LIMIT_DELAY_MS = 65_000;
 const MAX_RATE_LIMIT_RETRIES = 3;
 const API_CALL_TIMEOUT_MS = 90_000; // 90s — allows enough room for slow responses
-
-// Persist lastCallTimestamp in sessionStorage so pacing survives page reloads.
-// This prevents the first call of a new run from firing into an already-exhausted quota window.
 const STORAGE_KEY = 'gemini_last_call_ts';
 const getLastCallTimestamp = () => parseInt(sessionStorage.getItem(STORAGE_KEY) || '0', 10);
 const setLastCallTimestamp = (ts) => sessionStorage.setItem(STORAGE_KEY, String(ts));
-
-// Parse the recommended retry delay from a Gemini 429. It arrives in two
-// places: the message ("Please retry in 37.6s.") and a RetryInfo detail.
 const parseRetryDelayMs = (err) => {
-  // 1. From the error message string (most reliable for the @google/genai SDK)
   const msgMatch = String(err?.message || err).match(/retry in ([\d.]+)s/i);
   if (msgMatch) return Math.ceil(parseFloat(msgMatch[1]) * 1000) + 3000; // +3s buffer
-
-  // 2. From the structured details array
   const details = err?.error?.details || err?.details || [];
   const retryInfo = Array.isArray(details)
     ? details.find(d => d?.['@type']?.endsWith('RetryInfo'))
@@ -51,9 +39,6 @@ const withApiTimeout = (promiseFn) => {
   });
   return Promise.race([promiseFn(), timeoutPromise]).finally(() => clearTimeout(timeoutId));
 };
-
-// Proactive rate-limit pacing: wait out the gap since the last call, posting a
-// workflow event so users see a countdown rather than a frozen screen.
 const waitForCallSlot = async () => {
   const now = Date.now();
   const lastTs = getLastCallTimestamp();
@@ -62,7 +47,6 @@ const waitForCallSlot = async () => {
     const wait = MIN_CALL_INTERVAL_MS - elapsed;
     const waitSec = Math.ceil(wait / 1000);
     console.log(`[GeminiProvider] Rate-limit pacing: waiting ${waitSec}s before next call.`);
-    // Show visible status in UI so users know generation is progressing, not frozen
     try {
       useProjectStore.getState().addWorkflowEvent({
         type: 'system',
@@ -88,14 +72,10 @@ export class GeminiProvider {
   }
 
   isReady() {
-    // The user's own key is the only way in — there is no server-side proxy.
     const { apiKey } = useSettingsStore.getState();
     return !!apiKey?.trim();
   }
-
-  // A single raw API call: paces first, throws enriched errors on 429.
   async _callOnce({ systemPrompt, userPrompt, jsonSchema }) {
-    // Proactively pace to avoid hitting the free-tier quota
     await waitForCallSlot();
 
     try {
@@ -117,7 +97,6 @@ export class GeminiProvider {
       });
     } catch (err) {
       if (isRateLimitError(err)) {
-        // Reset lastCallTimestamp so the next attempt gets a fresh pacing slot
         setLastCallTimestamp(0);
         const delayMs = parseRetryDelayMs(err);
         const rich = new Error(`Rate limit exceeded. Waiting ${Math.ceil(delayMs / 1000)}s before retrying.`);
@@ -128,11 +107,6 @@ export class GeminiProvider {
       throw err;
     }
   }
-
-  // Called by the factory. Rate-limit retries are handled here so the factory's
-  // loop only sees validation failures, never quota errors. maxTokens is
-  // accepted for interface parity and ignored — Gemini is left uncapped so
-  // length is bounded by the prompt, not a ceiling that truncates mid-JSON.
   async generate({ systemPrompt, userPrompt, jsonSchema }) {
     await this.initialize();
 
@@ -158,9 +132,6 @@ export class GeminiProvider {
           await sleep(err.retryDelayMs);
           continue; // retry after sleep
         }
-
-        // Permanent failure — tag it so the factory does NOT retry. We already
-        // tried MAX_RATE_LIMIT_RETRIES times; another loop just sleeps 60s+.
         console.error('[GeminiProvider] Generation failed permanently:', err);
         if (err.isRateLimit) {
           err.isPermanentRateLimit = true;

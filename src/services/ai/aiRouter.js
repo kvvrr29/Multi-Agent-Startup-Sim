@@ -4,10 +4,6 @@ import { getProviderProfile } from './providerProfiles';
 import { withJsonHardening } from './agentPrompts';
 import { extractJson } from './validationLayer';
 import { SECTION_OWNERSHIP } from '../../config/sectionOwnership';
-
-// Derives the flat affectedSections/assignedAgents lists from a task list and
-// drops tasks referencing unknown agents/sections so bad AI output can't
-// corrupt the workflow.
 export const normalizeRouting = (tasks, confidence = 'Low') => {
   const validAgents = new Set(Object.values(SECTION_OWNERSHIP));
   const normalized = (Array.isArray(tasks) ? tasks : [])
@@ -40,8 +36,6 @@ export const normalizeRouting = (tasks, confidence = 'Low') => {
   const assignedAgents = [...new Set(validTasks.map(t => t.agent))];
   return { tasks: validTasks, affectedSections, assignedAgents, confidence };
 };
-
-// Static keyword fallback used when AI routing is unavailable or fails.
 export const heuristicRouting = (revisionInstruction, categoryHint = '') => {
   const lower = revisionInstruction.toLowerCase();
   const tasks = [];
@@ -98,10 +92,6 @@ Rules:
 6. Return a confidence score ("High", "Medium", "Low") based on how clear the instruction is.`;
 
   const userPrompt = `Project Context: ${projectContext}\nCategory Hint: ${categoryHint || 'Auto Detect'}\n\nUser Request: "${revisionInstruction}"`;
-
-  // Gemini's responseSchema uses its own uppercase Type enum; OpenAI and the
-  // local model expect standard lowercase JSON Schema. Sending the wrong
-  // casing is silently ignored and the model returns unstructured text.
   const profile = getProviderProfile(getActiveProviderName());
   const gemini = profile.schemaDialect === 'gemini';
   const T = {
@@ -141,8 +131,6 @@ Rules:
       userPrompt,
       schema
     );
-    // Small models wrap JSON in code fences or add preamble — a formatting
-    // quirk, not a wrong answer.
     const parsed = extractJson(rawResponse);
     const normalized = normalizeRouting(parsed.tasks, parsed.confidence || 'Medium');
     if (normalized.tasks.length === 0) {

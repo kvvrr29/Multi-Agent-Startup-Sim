@@ -1,17 +1,9 @@
-// ── 3-stage AI response validation with scoring (doc §1) ────────────────────
-// Stage 1: Structural  — parseable, complete, non-empty, safe
-// Stage 2: Agent-specific — content matches the agent's responsibility
-// Stage 3: Domain relevance — content matches the project, per-agent rules
-//
-// Pure functions: no store access, fully unit-testable.
 
 import { getProviderProfile, CLOUD_THRESHOLDS } from './providerProfiles';
 
 const MIN_SECTION_LENGTH = 50;
 const BANNED_PHRASES = ['lorem ipsum', 'as an ai'];
 const SAAS_BUZZWORDS = ['freemium', 'white-label', 'invite only beta'];
-// Kept as the default gates so every existing caller behaves exactly as before.
-// Provider-specific gates arrive through the profile (see providerProfiles.js).
 const VALIDATION_THRESHOLDS = CLOUD_THRESHOLDS;
 
 const DECISION_CATEGORIES = ['Business', 'Product', 'Technical', 'Marketing', 'Scope'];
@@ -22,9 +14,6 @@ const AGENT_DECISION_CATEGORIES = {
   marketing: ['Marketing', 'Scope'],
   mediator: DECISION_CATEGORIES
 };
-
-// Concept groups per agent (doc §1 Stage 2). Each group is a synonym list;
-// the group counts as matched when any synonym appears in the combined text.
 const AGENT_CONCEPT_GROUPS = {
   ceo: [
     ['business model', 'revenue model', 'monetization', 'monetisation'],
@@ -68,13 +57,6 @@ const AGENT_CONCEPT_GROUPS = {
     ['validate', 'test', 'measure', 'verify', 'milestone']
   ]
 };
-
-// Used when a response covers exactly one section; scoring it against the
-// agent's whole remit would fail it for concepts it was never asked to cover.
-// Four groups each, not one: a single group scores only 0 or 100, which makes
-// every agentRelevance threshold behave identically. The first synonym of each
-// is what the local prompt lists back, so these are written as the definition
-// of a complete section, not as keyword bait.
 export const SECTION_CONCEPT_GROUPS = {
   executiveSummary: [
     ['problem', 'need', 'gap', 'challenge', 'pain'],
@@ -182,10 +164,6 @@ export const SECTION_CONCEPT_GROUPS = {
     ['risk', 'avoid', 'ensure', 'caution', 'watch', 'before']
   ]
 };
-
-// How Stage 3 weighs domain entities vs. general domain/industry terms per
-// agent (doc §1 Stage 3: technical entities are NOT mandatory in marketing
-// output; marketing terms are NOT mandatory in architecture output, etc.)
 const DOMAIN_WEIGHTS = {
   ceo: { entities: 40, domainTerms: 60 },
   pm: { entities: 60, domainTerms: 40 },
@@ -199,8 +177,6 @@ const tokenize = (str) =>
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(t => t.length > 3);
-
-// ── Stage 1: Structural ──────────────────────────────────────────────────────
 
 export const validateStructure = (data, expectedSections, { minSectionLength = MIN_SECTION_LENGTH } = {}) => {
   const issues = [];
@@ -240,11 +216,7 @@ export const validateStructure = (data, expectedSections, { minSectionLength = M
   return { score, ok: issues.length === 0, issues };
 };
 
-// ── Stage 2: Agent-specific relevance ────────────────────────────────────────
-
 export const validateAgentRelevance = (combinedText, agentRole, { expectedSections = [], threshold = VALIDATION_THRESHOLDS.agentRelevance } = {}) => {
-  // When the response covers a known subset of sections, score against those
-  // sections' concepts instead of the agent's full remit.
   let groups = expectedSections.flatMap(section => SECTION_CONCEPT_GROUPS[section] || []);
   if (groups.length === 0) groups = AGENT_CONCEPT_GROUPS[agentRole] || [];
 
@@ -272,20 +244,14 @@ export const validateAgentRelevance = (combinedText, agentRole, { expectedSectio
   return { score, issues, missingConcepts };
 };
 
-// ── Stage 3: Domain relevance (per-agent expectations) ───────────────────────
-
 export const validateDomainRelevance = (combinedText, agentRole, domain = '', industry = '', mandatoryKeywords = [], { enforceCriticals = true } = {}) => {
   const issues = [];
   const lower = combinedText.toLowerCase();
   const weights = DOMAIN_WEIGHTS[agentRole] || DOMAIN_WEIGHTS.mediator;
-
-  // Nothing to evaluate against (e.g. classifier failed) — do not punish.
   const domainTokens = [...tokenize(domain), ...tokenize(industry)];
   if (mandatoryKeywords.length === 0 && domainTokens.length === 0) {
     return { score: 100, issues: [] };
   }
-
-  // Entity coverage
   let entityScore = 100;
   let matchedEntities = [];
   if (mandatoryKeywords.length > 0) {
@@ -295,8 +261,6 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
       issues.push(`Technical output must model the project's core domain entities (${mandatoryKeywords.join(', ')}) but none appear.`);
     }
   }
-
-  // Domain / industry terminology presence
   let domainTermScore = 100;
   if (domainTokens.length > 0) {
     domainTermScore = domainTokens.some(t => lower.includes(t)) ? 100 : 0;
@@ -305,8 +269,6 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
   let score = Math.round(
     (entityScore * weights.entities + domainTermScore * weights.domainTerms) / 100
   );
-
-  // Generic-SaaS penalty: only business/marketing content, only non-SaaS domains.
   const isGenericSaaS = domain.toLowerCase().includes('saas') || domain.toLowerCase().includes('general');
   if (!isGenericSaaS && (agentRole === 'ceo' || agentRole === 'marketing')) {
     const buzzword = SAAS_BUZZWORDS.find(b => lower.includes(b));
@@ -323,8 +285,6 @@ export const validateDomainRelevance = (combinedText, agentRole, domain = '', in
   return {
     score,
     issues,
-    // A small local model states entities semantically rather than verbatim, so
-    // this hard fail is disabled for it (see providerProfiles.js).
     criticalIssues: enforceCriticals && agentRole === 'developer' && mandatoryKeywords.length > 0 && matchedEntities.length === 0
       ? [`Developer output is missing every mandatory technical entity: ${mandatoryKeywords.join(', ')}.`]
       : []
@@ -360,14 +320,6 @@ const validateDecisions = (decisions, agentRole) => {
   });
   return { decisions: valid, issues };
 };
-
-// ── Combined validator ───────────────────────────────────────────────────────
-
-/**
- * Validates a raw AI response through all three stages.
- * Returns { passed, scores: {structural, agentRelevance, domainRelevance, overall}, issues, content, decisions }.
- * Never throws on content problems — only `passed: false` with issues.
- */
 export const validateAIResponse = (responseText, expectedSections = [], { agentRole = '', domain = '', industry = '', mandatoryKeywords = [], providerName = 'gemini' } = {}) => {
   const profile = getProviderProfile(providerName);
   const thresholds = profile.thresholds;
@@ -395,9 +347,6 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
   const combinedText = expectedSections
     .map(s => (typeof data?.[s] === 'string' ? data[s] : ''))
     .join(' ');
-
-  // Section-scoped scoring only applies when the response is one section at a
-  // time; a batch response is still judged against the agent's whole remit.
   const agent = validateAgentRelevance(combinedText, agentRole, {
     expectedSections: profile.strategy === 'perSection' ? expectedSections : [],
     threshold: thresholds.agentRelevance
@@ -449,13 +398,6 @@ export const validateAIResponse = (responseText, expectedSections = [], { agentR
     decisionIssues: decisionsResult.issues
   };
 };
-
-/**
- * Parses a model response into an object. Small models wrap their JSON in
- * ```json fences or add a sentence of preamble — a formatting quirk, not a
- * content failure — so we retry on a fenced block, then on the outermost brace
- * pair, before giving up. Throws when nothing parses.
- */
 export const extractJson = (responseText) => {
   const raw = (responseText || '').trim();
   try {
@@ -473,15 +415,11 @@ export const extractJson = (responseText) => {
       try {
         return JSON.parse(candidate);
       } catch {
-        // try the next candidate
       }
     }
     throw initialErr;
   }
 };
-
-// Targeted retry feedback (doc §2): name the exact issue, ask for the missing
-// areas only.
 export const buildRetryFeedback = (validation) => {
   const { scores, issues } = validation;
   const structuralOk = scores.structural === 100;
@@ -490,13 +428,6 @@ export const buildRetryFeedback = (validation) => {
     : 'Your previous response had structural problems.';
   return `${intro}\nExact issues found:\n${issues.map(i => `- ${i}`).join('\n')}\nImprove only the missing areas while preserving the useful content. Do not change what was already correct.`;
 };
-
-/**
- * Builds the response schema in the dialect the provider expects: Gemini's
- * uppercase Type enum, or standard lowercase JSON Schema for OpenAI and WebLLM.
- * Wrong casing is silently ignored and yields unstructured output, so the
- * dialect comes from the provider profile rather than a guess.
- */
 export const createResponseSchema = (sectionKeys, { dialect = 'gemini' } = {}) => {
   const gemini = dialect === 'gemini';
   const T = {
@@ -531,8 +462,6 @@ export const createResponseSchema = (sectionKeys, { dialect = 'gemini' } = {}) =
   return {
     type: T.object,
     properties,
-    // Small models drop optional keys under token pressure; forcing `decisions`
-    // there turns a usable section into a hard failure.
     required: gemini ? [...sectionKeys, "decisions"] : [...sectionKeys]
   };
 };

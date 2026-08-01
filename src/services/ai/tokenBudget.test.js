@@ -4,8 +4,6 @@ import { OpenAIProvider } from './OpenAIProvider';
 import { SECTION_MAX_TOKENS, getProviderProfile, getSectionMaxTokens } from './providerProfiles';
 import { modelManager } from './ModelManager';
 import { useSettingsStore } from '../../store/useSettingsStore';
-
-/** Minimal stand-in for the streamed chat completion API. */
 const fakeEngine = (chunks) => ({
   chat: { completions: { create: vi.fn().mockResolvedValue({
     async *[Symbol.asyncIterator]() { for (const c of chunks) yield c; }
@@ -43,16 +41,12 @@ describe('WebLLM honours the caller token budget', () => {
     vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
 
     await provider.generate({ systemPrompt: 's', userPrompt: 'u' });
-
-    // Read from the profile rather than repeated here, so the provider default
-    // and the profile cannot drift apart without a test noticing.
     expect(engine.chat.completions.create).toHaveBeenCalledWith(
       expect.objectContaining({ max_tokens: getProviderProfile('webllm').maxTokens })
     );
   });
 
   it('reports truncation distinctly instead of returning unparseable JSON', async () => {
-    // finish_reason 'length' == the budget cut generation off mid-object.
     const engine = fakeEngine([contentChunk('{"executiveSummary":"an unterminated str', 'length')]);
     vi.spyOn(modelManager, 'initialize').mockResolvedValue(engine);
 
@@ -98,7 +92,6 @@ describe('cloud providers are uncapped', () => {
 
 describe('section budgets leave headroom', () => {
   it('never budgets a section so tightly that truncation is likely', () => {
-    // Truncated JSON is unrecoverable, so every section needs real headroom.
     for (const [section, budget] of Object.entries(SECTION_MAX_TOKENS)) {
       expect(budget, `${section} budget is too tight`).toBeGreaterThanOrEqual(700);
     }
@@ -121,7 +114,6 @@ describe('generation is actually stopped, not just abandoned', () => {
   it('interrupts the engine when the timeout fires', async () => {
     vi.useFakeTimers();
     const interruptGenerate = vi.fn().mockResolvedValue(undefined);
-    // A stream that never yields — the decode loop would otherwise run forever.
     const engine = {
       interruptGenerate,
       chat: { completions: { create: vi.fn().mockResolvedValue({
@@ -133,8 +125,6 @@ describe('generation is actually stopped, not just abandoned', () => {
     const provider = new WebLLMProvider();
     const pending = provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 700 });
     const assertion = expect(pending).rejects.toThrow(/timed out/);
-
-    // 30s of load and prefill allowance plus 100ms per requested token.
     await vi.advanceTimersByTimeAsync(100_000);
     await assertion;
 
@@ -155,10 +145,6 @@ describe('generation is actually stopped, not just abandoned', () => {
     const provider = new WebLLMProvider();
     const pending = provider.generate({ systemPrompt: 's', userPrompt: 'u', maxTokens: 1400 });
     const assertion = expect(pending).rejects.toThrow(/timed out/);
-
-    // The old flat 60s ceiling sat below the time a 1400-token answer needs on
-    // modest hardware, so raising the section budgets would have turned normal
-    // long output into a timeout.
     await vi.advanceTimersByTimeAsync(100_000);
     expect(interruptGenerate).not.toHaveBeenCalled();
 

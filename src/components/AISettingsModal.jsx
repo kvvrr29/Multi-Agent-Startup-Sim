@@ -13,14 +13,9 @@ import {
   Download,
   Trash2,
 } from "lucide-react";
-
-/** Shared view of the local engine: download progress, cache and VRAM state. */
 function useLocalModelState(enabled) {
   const [state, setState] = useState(() => modelManager.getState());
   const [cached, setCached] = useState(null);
-
-  // Guarded on `enabled`: isInstalled() dynamically imports web-llm, so running
-  // this for a Gemini user would pull megabytes they never asked for.
   useEffect(() => {
     if (!enabled) return undefined;
     return modelManager.subscribe(setState);
@@ -36,8 +31,6 @@ function useLocalModelState(enabled) {
     return () => {
       active = false;
     };
-    // cacheEpoch covers deletes that leave `status` unchanged — removing a
-    // model that was cached on disk but never loaded this session.
   }, [enabled, state.status, state.cacheEpoch]);
 
   const webgpuSupported = typeof navigator !== "undefined" && !!navigator.gpu;
@@ -47,15 +40,10 @@ function useLocalModelState(enabled) {
     webgpuSupported,
     downloading: state.status === "downloading",
     ready: state.status === "ready",
-    // null while the cache lookup is still in flight.
     checking: cached === null,
-    // Safe to generate: already in VRAM, or on disk so loading is quick.
     usable: state.status === "ready" || cached === true,
   };
 }
-
-// Local-model panel. The engine is a module singleton, so state comes from the
-// shared hook above rather than being mirrored into a store.
 function LocalModelPanel({ model }) {
   const { cached, webgpuSupported, downloading, ready } = model;
   const state = model;
@@ -228,18 +216,11 @@ export default function AISettingsModal({ onClose }) {
 
   const usingLocal = localEnabled && localProvider === "webllm";
   const localModel = useLocalModelState(usingLocal);
-
-  // Cloud providers have exactly one mode: the user's own key, sent from this
-  // browser. Without it there is nothing to fall back to.
   const missingCloudKey =
     localEnabled &&
     (localProvider === "openai"
       ? !localOpenaiKey.trim()
       : localProvider === "gemini" && !localKey.trim());
-
-  // Saving a local-model selection that cannot actually run would start a
-  // several-hundred-MB download on the first generation, where the progress
-  // bar is not visible — the app would simply look frozen.
   const blockedReason = missingCloudKey
     ? `Enter your ${localProvider === "openai" ? "OpenAI" : "Gemini"} API key to use this provider.`
     : !usingLocal
@@ -426,7 +407,6 @@ export default function AISettingsModal({ onClose }) {
               {localProvider === "webllm" ? (
                 <LocalModelPanel model={localModel} />
               ) : (
-                /* API Key */
                 <div>
                   <label
                     style={{

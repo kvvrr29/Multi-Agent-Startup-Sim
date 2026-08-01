@@ -16,15 +16,9 @@ import {
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ymxxxfvxjheaiacddcfa.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w';
 const PORT = process.env.PORT || 8787;
-
-// This server is persistence only. AI calls are made by the browser with the
-// user's own key, so no provider credential lives here.
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
-
-// Validates the browser's Supabase access token and builds a user-scoped
-// client, so RLS still applies to every query made on the user's behalf.
 const withUser = async (req, res, next) => {
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ error: 'unauthenticated', message: 'Missing bearer token.' });
@@ -43,12 +37,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Projects (Supabase Postgres behind RLS) ----------
-
 const PROJECT_LIST_COLUMNS = 'id, name, updated_at, last_opened_at';
 const BLUEPRINT_SECTION_KEY_SET = new Set(BLUEPRINT_SECTION_KEYS);
-
-// camelCase client field → projects column, for create/patch whitelisting.
 const PROJECT_FIELD_MAP = {
   name: 'name',
   idea: 'idea',
@@ -80,8 +70,6 @@ const boundedInteger = (value, fallback, maximum, minimum = 0) => {
 const readPage = (query, req, defaultLimit, maxLimit) => {
   const limit = boundedInteger(req.query.limit, defaultLimit, maxLimit, 1);
   const offset = boundedInteger(req.query.offset, 0, MAX_PAGE_OFFSET);
-  // Supabase ranges are inclusive, so this requests one extra row to compute
-  // hasMore without an additional count query.
   return { query: query.range(offset, offset + limit), limit, offset };
 };
 
@@ -116,9 +104,6 @@ app.post('/api/projects', withUser, async (req, res) => {
   if (error) return dbError(res, error);
   res.status(201).json(data);
 });
-
-// Blueprint selection is intentionally a single, narrow read. The project name
-// already came from the registry; all other domains are loaded by their panels.
 app.get('/api/projects/:id/blueprint', withUser, async (req, res) => {
   const { data, error } = await req.supabase
     .from('blueprint_sections')
@@ -240,7 +225,6 @@ app.put('/api/projects/:id/sections', withUser, async (req, res) => {
     .upsert(rows, { onConflict: 'project_id,section_key' })
     .select('id');
   if (error) return dbError(res, error);
-  // RLS makes writes against someone else's project affect zero rows.
   if (!data || data.length === 0) return res.status(404).json({ error: 'not_found' });
   res.json({ updated: data.length });
 });

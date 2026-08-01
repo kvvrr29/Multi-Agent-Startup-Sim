@@ -7,7 +7,6 @@ const TAB = { METRICS: 'metrics', SOURCES: 'sources', LOGS: 'logs' };
 
 const SOURCE_BADGE = ({ source }) => {
   if (!source) return <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Pending</span>;
-  // Any real provider counts as live output; only Fallback/Simulator are not.
   const isLive = !NON_LIVE_SOURCES.includes(source);
   return (
     <span style={{

@@ -19,15 +19,11 @@ const writeLocalSetting = (key, value) => {
     if (value) localStorage.setItem(key, value);
     else localStorage.removeItem(key);
   } catch {
-    // The in-memory setting still works when browser storage is unavailable.
   }
 };
 
 export const useSettingsStore = create((set) => ({
-  // 'gemini' | 'openai' | 'webllm'. Gemini stays the default so existing
-  // installs keep their behaviour; WebLLM runs entirely in the browser.
   aiProvider: readLocalSetting(AI_PROVIDER_STORAGE_KEY, 'gemini'),
-  // Personal keys are browser-local (never synced to Supabase) and survive reloads.
   apiKey: readLocalSetting(API_KEY_STORAGE_KEY),
   openaiApiKey: readLocalSetting(OPENAI_KEY_STORAGE_KEY),
   aiModeEnabled: typeof localStorage === 'undefined' ? true : localStorage.getItem('mass_ai_mode') !== 'false',

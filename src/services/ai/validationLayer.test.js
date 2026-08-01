@@ -65,7 +65,6 @@ describe('Stage 2: agent-specific validation', () => {
   it('does not require identical concepts across agents', () => {
     const marketingText = 'Target audience of young professionals; positioning as the premium brand; acquisition through social media channels and influencer campaigns; launch promotion with referral growth loops.';
     expect(validateAgentRelevance(marketingText, 'marketing').score).toBeGreaterThanOrEqual(80);
-    // The same text is NOT a valid developer response
     expect(validateAgentRelevance(marketingText, 'developer').score).toBeLessThan(50);
   });
 

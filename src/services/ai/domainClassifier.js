@@ -13,9 +13,6 @@ export const classifyDomain = async (projectName, projectDescription) => {
   const providerName = getActiveProviderName();
   const profile = getProviderProfile(providerName);
   const sourceLabel = getProviderSourceLabel(providerName);
-
-  // Gemini's responseSchema uses its own uppercase Type enum; the other
-  // providers expect standard lowercase JSON Schema.
   const gemini = profile.schemaDialect === 'gemini';
   const T = {
     string: gemini ? 'STRING' : 'string',
@@ -81,7 +78,6 @@ export const classifyDomain = async (projectName, projectDescription) => {
         const fallbackReason = err.message || 'Unknown error';
         pushLog({ agent: 'domain', prompt: userPrompt, rawResponse, parsedJson: parsed, validationResult: 'FALLBACK', fallbackReason });
         setSource('domain', 'Fallback');
-        // Surface a visible error — do NOT silently return generic data
         throw new Error(`[Domain Classifier] All attempts failed. Last reason: ${fallbackReason}`);
       }
     }

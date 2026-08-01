@@ -27,8 +27,6 @@ import { useProjectResourceStore } from '../store/useProjectResourceStore';
 const resolveAll = () => {
   Object.values(api).forEach(fn => fn.mockResolvedValue({}));
 };
-
-// Sections only persist once approved; set status directly to emulate approval.
 const setSection = (key, content, status = 'pending') =>
   useProjectStore.getState().updateBlueprintSection(key, content, status);
 
@@ -47,7 +45,6 @@ beforeEach(async () => {
     projectsNextOffset: 0,
     projectsLoadingMore: false
   });
-  // Establishes the sync target and the baseline cursor.
   api.createProject.mockResolvedValue({ id: 'proj-1', name: 'Registry Name' });
   await createCloudProject({ name: 'Test' });
 });
@@ -214,7 +211,6 @@ describe('blueprint-only project opening', () => {
     useProjectStore.getState().updateAgentStatus('ceo', 'Working', 'old task');
     useProjectMemoryStore.getState().updateMemory('business', 'oldKey', 'old value');
     useProjectMemoryStore.getState().applyDecision({ category: 'Business', key: 'choice', value: 'old' });
-    // This test is about incoming hydration, not flushing the synthetic state.
     stopSync();
     api.getProjectBlueprint.mockResolvedValue({ sections: [] });
 

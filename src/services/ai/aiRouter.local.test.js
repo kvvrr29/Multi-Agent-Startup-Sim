@@ -62,8 +62,6 @@ describe('revision routing across providers', () => {
     generateAIContent.mockResolvedValue('```json\n' + JSON.stringify(validRouting) + '\n```');
 
     const result = await routeAIRevision('make pricing cheaper');
-
-    // The AI answer survived; the heuristic fallback reports 'Low (Fallback)'.
     expect(result.confidence).toBe('High');
     expect(result.assignedAgents).toEqual(['ceo']);
     expect(result.affectedSections).toEqual(['businessModel']);
@@ -104,7 +102,6 @@ describe('JSON hardening is local-only', () => {
     expect(withJsonHardening(prompt, getProviderProfile('gemini'))).toBe(prompt);
     expect(withJsonHardening(prompt, getProviderProfile('openai'))).toBe(prompt);
     expect(withJsonHardening(prompt, getProviderProfile('webllm'))).toContain(JSON_ONLY_DIRECTIVE);
-    // Never throws on a missing profile.
     expect(withJsonHardening(prompt, undefined)).toBe(prompt);
   });
 });

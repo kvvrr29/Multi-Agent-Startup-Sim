@@ -10,16 +10,8 @@ import { AGENT_SECTIONS } from '../../config/sectionOwnership';
 import { SECTION_TITLES } from '../../../shared/blueprintSections.js';
 
 const MAX_ATTEMPTS = 2;
-
-/**
- * Both strategies share this and get the identical brief, differing only in how
- * many sections are asked for and how explicitly. `profile.minWords` is what
- * fixes short output — nothing else in the chain states a length.
- */
 const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMaxTokens = null, { brevity = false } = {}) => {
   const perSection = profile.strategy === 'perSection';
-  // The local model differs only in carrying a budget, which trims the
-  // blueprint state if — and only if — the context would not fit its window.
   const context = buildContextString(instruction, agentRole, {
     focusSections: sectionKeys,
     maxContextTokens: getMaxContextTokens(profile, sectionMaxTokens)
@@ -27,19 +19,11 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
 
   let task = `\n\nTask: Based on the context above, generate the following blueprint sections in detailed Markdown format: ${sectionKeys.join(', ')}.`;
   if (instruction) {
-    // A revision has to say so in the task. Left to the context alone the
-    // instruction sits thousands of tokens up and the task still reads as a
-    // fresh write — so the model produces one, discarding the existing text.
     task += ` Rewrite each one so it applies this instruction to its current text shown above: ${instruction}. Keep whatever the instruction does not ask you to change.`;
   }
   task += ` ${SPECIFICITY_DIRECTIVE} ${NO_MERMAID_DIRECTIVE} Respond with JSON matching the requested schema.`;
 
   if (perSection) {
-    // A small model needs the shape spelled out; the schema alone is advisory
-    // for it in a way it is not for a cloud API that enforces one. The concept
-    // list comes from the groups the relevance validator scores against, so a
-    // local relevance score reads as "covered what it was told to cover"
-    // rather than as an independent judgement. Cloud gets no such hint.
     const concepts = sectionKeys
       .flatMap(key => (SECTION_CONCEPT_GROUPS[key] || []).map(group => group[0]))
       .slice(0, 6).join(', ');
@@ -50,9 +34,6 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
       task += `\nApply this instruction to the current text shown above: ${instruction}`;
     }
     task += `\n\nRequirements:`;
-    // The length target is stated once, here. A truncated attempt needs the
-    // opposite target, so it replaces this line rather than contradicting it
-    // later in the prompt — a small model given both writes neither.
     task += brevity
       ? `\n- The previous attempt ran past the length limit and was cut off. Write 2 to 3 compact paragraphs and make sure the JSON object is closed.`
       : `\n- Write at least ${profile.minWords} words, as ${profile.minParagraphs} or more full paragraphs.`;
@@ -64,10 +45,6 @@ const buildUserPrompt = (sectionKeys, instruction, agentRole, profile, sectionMa
 
   return `${context}${task}`;
 };
-
-// Hand-written mermaid skeletons. A small local model reliably emits mermaid
-// that fails to render, breaking the whole blueprint view — a correct generic
-// diagram beats a malformed bespoke one.
 const TEMPLATE_DIAGRAMS = {
   architecture: '```mermaid\ngraph TD\n  Client[Client App] --> Gateway[API Gateway]\n  Gateway --> Service[Application Service]\n  Service --> DB[(Database)]\n  Service --> Cache[(Cache)]\n```',
   umlDiagram: '```mermaid\ngraph TD\n  User((User)) --> Login[Sign In]\n  User --> Browse[Browse Catalogue]\n  User --> Manage[Manage Account]\n  Admin((Admin)) --> Reports[View Reports]\n```',
@@ -79,22 +56,12 @@ const buildTemplateDiagram = (sectionKey, sectionTitle) => {
   if (!diagram) return null;
   return `### ${sectionTitle}\n\nA baseline structure for this project, generated locally as a starting point to refine.\n\n${diagram}`;
 };
-
-/**
- * Which sections this call writes: everything the agent owns, or just the set a
- * revision routed — regenerating the rest costs a whole extra call each.
- * Intersected with ownership rather than trusted, since the router's output
- * reaches here and an agent must never write a section it does not own.
- */
 const resolveSections = (agentRole, targetSections) => {
   const owned = AGENT_SECTIONS[agentRole] || [];
   if (!targetSections?.length) return owned;
 
   const requested = owned.filter(key => targetSections.includes(key));
   if (requested.length === 0) {
-    // normalizeRouting already drops tasks failing this same ownership check,
-    // so an empty result means a hand-built task got it wrong. Falling back to
-    // `owned` would silently reinstate the over-generation this prevents.
     throw new Error(
       `No section owned by ${agentRole} in the requested set: ${targetSections.join(', ')}.`
     );
@@ -121,9 +88,6 @@ const buildResult = (content, decisions, scores, stages, source, agentRole) => (
   generatedBy: agentRole,
   generatedAt: new Date().toISOString()
 });
-
-// Single call covering every section the agent owns, with one feedback-driven
-// retry. The path for cloud models.
 const generateBatch = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const schema = createResponseSchema(sectionsToGenerate, { dialect: profile.schemaDialect });
   const userPrompt = buildUserPrompt(sectionsToGenerate, instruction, agentRole, profile);
@@ -155,7 +119,6 @@ const generateBatch = async (agentRole, instruction, systemPrompt, profile, prov
       retryFeedback = buildRetryFeedback(validation);
       previousRawResponse = rawResponse;
     } catch (err) {
-      // API/network error — retry without feedback (nothing to correct)
       fallbackReason = err.message || 'Unknown error';
       pushLog({ agent: agentRole, prompt: userPrompt.slice(0, 400), rawResponse: rawResponse?.slice(0, 800) || null, parsedJson: null, scores: null, validationResult: 'FAILED', fallbackReason });
     }
@@ -167,13 +130,6 @@ const generateBatch = async (agentRole, instruction, systemPrompt, profile, prov
     }
   }
 };
-
-/**
- * One call per section, each with its own token budget, because a small local
- * model cannot hold five sections plus full context in a single response. A
- * section that never validates keeps its best parseable attempt rather than
- * failing the whole agent; only a total washout throws.
- */
 const generatePerSection = async (agentRole, instruction, systemPrompt, profile, providerName, sourceLabel, sectionsToGenerate) => {
   const { domain, industry, mandatoryKeywords } = readScope();
   const { setSource, pushLog } = useAIDebugStore.getState();
@@ -207,9 +163,6 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
     for (let attempt = 1; attempt <= MAX_ATTEMPTS && !sectionDone; attempt++) {
       let rawResponse = null;
       try {
-        // A truncated attempt ran out of room rather than misunderstanding the
-        // task, so the retry asks for brevity — which must replace the length
-        // requirement inside the prompt, hence a rebuild not an appended hint.
         let prompt = basePrompt;
         if (attempt > 1) {
           prompt = wasTruncated
@@ -242,7 +195,6 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
 
     if (!sectionDone) {
       if (bestEffort) {
-        // Thin but real content beats an empty section on a local model.
         mergedContent[sectionKey] = bestEffort;
         console.warn(`[AI Factory] ${sectionKey} kept as best-effort content: ${lastReason}`);
       } else {
@@ -275,13 +227,6 @@ const generatePerSection = async (agentRole, instruction, systemPrompt, profile,
   setSource(agentRole, sourceLabel);
   return buildResult(mergedContent, mergedDecisions, scores, stages, sourceLabel, agentRole);
 };
-
-/**
- * @param agentRole      which specialist writes this
- * @param instruction    revision instruction, or '' for initial generation
- * @param targetSections sections to write; omit to write everything the agent
- *                       owns. Revisions should always pass the routed set.
- */
 export const generateAgentContent = async (agentRole, instruction = '', targetSections = null) => {
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRole];
   if (!systemPrompt) throw new Error(`Unknown agent role: ${agentRole}`);

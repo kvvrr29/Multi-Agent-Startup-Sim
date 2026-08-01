@@ -56,8 +56,6 @@ mermaid.initialize({
     clusterBorder: "#555555",
     edgeLabelBackground: "#171717",
   },
-  // On invalid diagram text mermaid otherwise draws its error graphic into the
-  // scratch <div> and throws before cleaning it up, leaving phantom page height.
   suppressErrorRendering: true,
 });
 
@@ -77,8 +75,6 @@ const Mermaid = ({ chart, onZoom }) => {
       } catch (e) {
         console.error("Mermaid error:", e);
       } finally {
-        // mermaid.render appends a scratch <div id="d{id}"> to <body> and can
-        // leave it behind (aborted/duplicate renders), stretching the page.
         document.getElementById(`d${id}`)?.remove();
       }
     };
@@ -165,9 +161,6 @@ const MarkdownRenderer = React.memo(({ content, onZoomDiagram }) => {
     </ErrorBoundary>
   );
 });
-
-// Small badge showing whether the owning agent's content came from a live AI
-// provider or the fallback simulator.
 const SourceBadge = ({ sectionData }) => {
   const source = sectionData?.generationSource;
   if (!source) return null;
@@ -193,9 +186,6 @@ const SourceBadge = ({ sectionData }) => {
     </span>
   );
 };
-
-// Colour cue for the model behind a version: amber = no live model produced it,
-// blue = the in-browser model, green = a hosted provider.
 const sourceDotColor = (source) => {
   if (!source) return "var(--text-muted)";
   if (NON_LIVE_SOURCES.includes(source)) return "var(--warning)";
@@ -204,13 +194,7 @@ const sourceDotColor = (source) => {
 };
 
 const sourceLabel = (source) => source || "Unknown model";
-
-// Stable empty array: a fresh [] from the selector would re-render every tick.
 const NO_VERSIONS = [];
-
-// Version switcher: ‹ › step through a section's drafts, and the pill in the
-// middle opens the full list. Versions carry no wall-clock meaning to the user
-// (they are drafts of one editing session), so each row names only the model.
 const VersionSwitcher = ({ sectionKey, versions, activeIndex }) => {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -221,8 +205,6 @@ const VersionSwitcher = ({ sectionKey, versions, activeIndex }) => {
 
   const go = (index) =>
     useSectionHistoryStore.getState().setActiveIndex(sectionKey, index);
-
-  // Dismiss the menu on outside click or Escape.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e) => {
@@ -445,15 +427,8 @@ const VersionSwitcher = ({ sectionKey, versions, activeIndex }) => {
     </div>
   );
 };
-
-// Section block with approval workflow, collapse, and copy. Memoized so
-// navigating one section's versions re-renders that block alone, not all 18 —
-// updateBlueprintSection replaces only the changed key's object, and
-// onZoomDiagram is a stable setState ref.
 const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
   const workflowActive = useProjectStore((state) => state.workflow.active);
-  // Client-side version-history navigation (primitive selectors to avoid
-  // re-render churn from returning a fresh object each render).
   const versions = useSectionHistoryStore(
     (s) => s.byProject[s.activeProjectId]?.[id]?.versions ?? NO_VERSIONS,
   );
@@ -721,8 +696,6 @@ const SectionBlock = React.memo(({ id, label, sectionData, onZoomDiagram }) => {
     </div>
   );
 });
-
-// Sticky table of contents with approval markers (doc §10)
 const TableOfContents = ({ sections, onNavigate }) => {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -925,9 +898,6 @@ function BlueprintViewerInner() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoomedDiagram, setZoomedDiagram] = useState(null);
   const scrollRef = useRef(null);
-
-  // Schema order is preserved by the blueprint object; show only filled sections.
-  // Recomputes only when the blueprint changes, not on zoom/fullscreen toggles.
   const sections = useMemo(
     () =>
       Object.values(blueprint || {}).filter(
@@ -1093,9 +1063,6 @@ function BlueprintViewerInner() {
     </div>
   );
 }
-
-// Memoized: Dashboard re-renders on every panel switch, and re-rendering the
-// full blueprint (ReactMarkdown parse per section) is what made switching lag.
 export default React.memo(function BlueprintViewer() {
   return (
     <ErrorBoundary componentName="BlueprintViewer">

@@ -25,8 +25,6 @@ beforeEach(() => {
   useAuthStore.setState({ activeCloudId: null });
   useProjectStore.getState().reset();
   useProjectMemoryStore.getState().clearMemory();
-  // Revisions record content through the section-history store, which needs an
-  // active project to write into.
   useSectionHistoryStore.setState({ activeProjectId: null, byProject: {} });
   useSectionHistoryStore.getState().loadProject('test-project', []);
   useSettingsStore.getState().setAiModeEnabled(true);

@@ -17,10 +17,6 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pick = (obj, keys) => Object.fromEntries(keys.filter(k => k in obj).map(k => [k, obj[k]]));
 
-// No artificial client cap on AI calls — the frontend waits for the model's
-// actual response. A genuinely failed request still rejects at the network /
-// server layer and is handled by the try/catch around each call.
-
 const sectionMetadata = ({ source, agent, scores = null, failureReason = null }) => ({
   generationSource: source,
   generatedBy: agent,
@@ -28,8 +24,6 @@ const sectionMetadata = ({ source, agent, scores = null, failureReason = null })
   generatedAt: new Date().toISOString(),
   failureReason
 });
-
-// The order and messaging of the initial generation pipeline.
 const AGENT_PIPELINE = [
   {
     id: 'ceo',
@@ -60,8 +54,6 @@ const AGENT_PIPELINE = [
     contribution: ['Developed launch strategy', 'Identified acquisition channels']
   }
 ];
-
-// Composed locally by the Mediator — never AI-generated (doc §4).
 const composeAgentContributions = () => {
   const { agents } = useProjectStore.getState();
   const lines = AGENT_PIPELINE.map(({ id, contribution }) => {
@@ -79,8 +71,6 @@ export const runInitialSimulation = async (projectData) => {
   if (!runId) return { status: 'rejected', reason: 'Another workflow is already active.' };
   const memoryStore = useProjectMemoryStore.getState();
   const sectionHistory = useSectionHistoryStore.getState();
-
-  // Initialize memory
   memoryStore.clearMemory();
   memoryStore.updateMemory('scope', 'budget', projectData?.budget || 'N/A');
   memoryStore.updateMemory('scope', 'timeline', projectData?.timeline || 'N/A');
@@ -88,8 +78,6 @@ export const runInitialSimulation = async (projectData) => {
   memoryStore.updateMemory('scope', 'teamSize', projectData?.teamSize || 'N/A');
   memoryStore.updateMemory('scope', 'priorities', projectData?.priorities || 'N/A');
   memoryStore.updateMemory('business', 'targetAudience', projectData?.targetAudience || 'General');
-
-  // 1. Mediator analyzes request
   store.updateAgentStatus('mediator', AGENT_STATUS.THINKING, 'Analyzing project requirements');
   store.addWorkflowEvent({ message: 'Project creation received. Mediator analyzing requirements.', agent: 'mediator' });
   
@@ -112,7 +100,6 @@ export const runInitialSimulation = async (projectData) => {
       
       store.addWorkflowEvent({ message: `Mediator classified domain as: ${classification.domain} (${classification.industry})`, agent: 'mediator' });
     } catch (err) {
-      // ⚠️ Surface the domain classification failure as a visible warning — do NOT silently continue
       store.addWorkflowEvent({ type: 'error', message: `⚠️ Domain Classifier FAILED: ${err.message}. Agents will receive incomplete context.`, agent: 'mediator' });
       console.error('[Simulation] Domain classification error:', err);
       useAI = false; // Disable AI for downstream agents since context is unavailable
@@ -135,7 +122,6 @@ export const runInitialSimulation = async (projectData) => {
       return result;
     } catch (err) {
       const reason = err.message || 'Unknown error';
-      // ⚠️ Surface the failure visibly — do NOT silently swap with fallback without warning
       store.updateAgentStatus(agentId, AGENT_STATUS.FAILED, reason);
       store.addWorkflowEvent({ type: 'error', message: `⚠️ Gemini FAILED for ${agentId.toUpperCase()}: ${reason}. Using Fallback Factory.`, agent: 'mediator' });
       console.error(`[Simulation] AI generation failed for ${agentId}:`, err);
@@ -146,8 +132,6 @@ export const runInitialSimulation = async (projectData) => {
 
   try {
     const blueprintContent = generateDynamicBlueprint(projectData);
-
-    // 2. Specialist agents generate their sections in pipeline order
     store.updateAgentStatus('mediator', AGENT_STATUS.IDLE);
     for (const step of AGENT_PIPELINE) {
       const { id, thinking, working, doneMsg, contribution } = step;
@@ -173,8 +157,6 @@ export const runInitialSimulation = async (projectData) => {
       store.addWorkflowEvent({ message: doneMsg, agent: id, contribution });
       await sleep(500);
     }
-
-    // 3. Mediator wraps up: contributions (always local) + final recommendations
     await sleep(500);
     store.updateAgentStatus('mediator', AGENT_STATUS.REVIEWING, 'Reviewing agent outputs');
 
@@ -202,7 +184,6 @@ export const runInitialSimulation = async (projectData) => {
     store.updateAgentStatus('mediator', AGENT_STATUS.COMPLETED, 'Generation Finished');
     return { status: 'changed' };
   } catch (err) {
-    // Guaranteed failure state: never leave the workflow hanging (doc §5)
     console.error('[Simulation] Initial generation failed:', err);
     store.updateAgentStatus('mediator', AGENT_STATUS.FAILED, err.message || 'Generation failed');
     store.addWorkflowEvent({ type: 'error', message: `⚠️ Blueprint generation failed: ${err.message || 'Unknown error'}`, agent: 'mediator' });
@@ -238,7 +219,6 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
 
   try {
     if (targetSectionId) {
-      // Local Section Modification — explicit, no routing needed
       routing = normalizeRouting([{
         agent: SECTION_OWNERSHIP[targetSectionId],
         sections: [targetSectionId],
@@ -246,13 +226,11 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
         reason: 'Explicit modification of this section requested by the user.'
       }], 'Explicit (Local)');
     } else if (aiModeEnabled) {
-      // Global Project Evolution (AI Routed, splits multi-part requests)
       store.addWorkflowEvent({ type: 'system', message: `Mediator analyzing routing for global change...`, agent: 'mediator' });
       const memoryStore = useProjectMemoryStore.getState();
       const domain = memoryStore.memory?.scope?.domain || 'Unknown';
       routing = await routeAIRevision(revisionInstruction, domain, categoryHint);
     } else {
-      // Global Project Evolution (Static Fallback)
       routing = heuristicRouting(revisionInstruction, categoryHint);
     }
   } catch (err) {
@@ -260,7 +238,6 @@ export const previewRevision = async (revisionInstruction, targetSectionId = nul
     store.addWorkflowEvent({ type: 'error', message: `⚠️ Routing failed: ${err.message}. Using heuristic routing.`, agent: 'mediator' });
     routing = heuristicRouting(revisionInstruction, categoryHint);
   } finally {
-    // Mediator must never stay stuck in Analyzing (doc §5)
     store.updateAgentStatus('mediator', AGENT_STATUS.IDLE, null);
     store.endWorkflow(runId);
   }
@@ -298,7 +275,6 @@ export const applyRevisionSimulation = async (previewData) => {
   const sectionHistory = useSectionHistoryStore.getState();
 
   const { instruction, confidence } = previewData;
-  // Legacy previews (no task list) become a single task per agent.
   const tasks = previewData.tasks?.length
     ? previewData.tasks
     : normalizeRouting((previewData.assignedAgents || []).map(agent => ({
@@ -313,8 +289,6 @@ export const applyRevisionSimulation = async (previewData) => {
 
   try {
     if (tasks.length === 0) throw new Error('No valid revision tasks remain after ownership validation.');
-
-    // 1. ROUTING
     store.updateAgentStatus('mediator', AGENT_STATUS.ROUTING, `Routing to ${assignedAgents.join(', ').toUpperCase()}`);
     store.setActiveRevision({ request: instruction, category: previewData.categoryHint || 'AI Routed', targetAgent: assignedAgents.join(', '), expectedStep: `Updating ${tasks.flatMap(t => t.sections).length} sections.` });
     await sleep(1500);
@@ -325,11 +299,7 @@ export const applyRevisionSimulation = async (previewData) => {
         agent: 'mediator'
       });
     });
-
-    // 2. WAITING & AGENT WORK
     store.updateAgentStatus('mediator', AGENT_STATUS.WAITING, 'Waiting for team');
-
-    // Run tasks in parallel (one task per agent)
     const agentPromises = tasks.map(async (task) => {
       const { agent: targetAgent, sections: taskSections, taskDescription, reason } = task;
       store.updateAgentStatus(targetAgent, AGENT_STATUS.ASSIGNED, taskDescription || 'Revision assigned', reason);
@@ -338,18 +308,14 @@ export const applyRevisionSimulation = async (previewData) => {
 
       if (aiModeEnabled) {
          try {
-           // taskSections, not the agent's whole responsibility list: a
-           // revision routed to one section should cost one section's work.
            const result = await generateAgentContent(targetAgent, taskDescription || instruction, taskSections);
            if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', agent: targetAgent, reason: 'Stale workflow completion ignored', changedSections: [] };
            store.updateAgentStatus(targetAgent, AGENT_STATUS.REVIEWING, 'Reviewing generated changes');
            const changedSections = [];
            Object.entries(result.content).forEach(([sectionKey, content]) => {
-             // Only update sections this task was routed to
              if (taskSections.includes(sectionKey)) {
                const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
                if (content.trim() !== existing.trim()) {
-                 // addVersion is a no-op (returns false) for approved/locked sections.
                  const added = sectionHistory.addVersion(sectionKey, content, sectionMetadata({
                    source: result.generationSource || 'Gemini', agent: targetAgent, scores: result.scores
                  }));
@@ -373,7 +339,6 @@ export const applyRevisionSimulation = async (previewData) => {
            return { status: 'failed', agent: targetAgent, reason: failReason, changedSections: [] };
          }
       } else {
-        // Fallback mock logic
         const changedSections = [];
         taskSections.forEach(sectionKey => {
            const existing = useProjectStore.getState().blueprint[sectionKey]?.content || '';
@@ -390,8 +355,6 @@ export const applyRevisionSimulation = async (previewData) => {
 
     const taskResults = await Promise.all(agentPromises);
     if (!useProjectStore.getState().isCurrentWorkflow(runId)) return { status: 'failed', reason: 'Stale workflow completion ignored' };
-
-    // 4. UPDATING
     store.updateAgentStatus('mediator', AGENT_STATUS.UPDATING, 'Finalizing Blueprint');
     await sleep(1500);
 
@@ -446,15 +409,10 @@ export const applyRevisionSimulation = async (previewData) => {
     await sleep(700);
     return { message: msg, isError: true, status: 'failed' };
   } finally {
-    // 5. IDLE
     store.resetAllAgents();
     store.endWorkflow(runId);
   }
 };
-
-// Preview + apply in one call. This is the path the blueprint UI uses for
-// "Regenerate section" and inline section feedback, where there is no preview
-// step to show the user.
 export const runRevisionSimulation = async (revisionInstruction, category = '', targetSectionId = null) => {
   const preview = await previewRevision(revisionInstruction, targetSectionId, category);
   if (preview?.error) {
@@ -471,9 +429,6 @@ export const approveSectionWorkflow = (sectionKey) => {
     const section = store.blueprint[sectionKey];
     if (!section || section.status === 'approved') return { status: 'unchanged' };
     if (!store.approveBlueprintSection(sectionKey, runId)) return { status: 'failed' };
-    // Collapse the section's client-side history to the viewed version and lock
-    // it; the status flip above is what the cloud sync's approved-only gate
-    // picks up to write this section (and only now) to the database.
     useSectionHistoryStore.getState().approveSection(sectionKey);
     store.addWorkflowEvent({ type: 'revision', message: `${SECTION_TITLES[sectionKey] || sectionKey} approved`, agent: 'mediator' });
     return { status: 'changed' };

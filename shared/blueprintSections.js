@@ -1,6 +1,3 @@
-// The blueprint's sections, in render order. Shared by the client (which
-// renders exactly these) and the server (which seeds a blueprint_sections row
-// per id on project creation), so the two cannot drift apart.
 export const BLUEPRINT_SECTIONS = [
   { id: 'executiveSummary', title: 'Executive Summary', type: 'text' },
   { id: 'problemStatement', title: 'Problem Statement', type: 'text' },

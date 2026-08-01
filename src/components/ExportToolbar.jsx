@@ -46,12 +46,9 @@ export default function ExportToolbar() {
   };
 
   const handleExportPDF = async () => {
-    // Dynamically import to keep bundle small
     const html2pdf = (await import("html2pdf.js")).default;
     const element = document.getElementById("blueprint-export-container");
     if (!element) return;
-
-    // We clone the element to remove action buttons before printing
     const clone = element.cloneNode(true);
     const actions = clone.querySelectorAll(".section-actions");
     actions.forEach((el) => el.remove());

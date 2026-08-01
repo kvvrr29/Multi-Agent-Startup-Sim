@@ -13,9 +13,6 @@ const createEmptyMemory = () => ({
   marketing: {},
   scope: {}
 });
-
-// No local persistence. Project selection clears this store; a panel-specific
-// loader can hydrate it independently of the blueprint.
 export const useProjectMemoryStore = create((set) => ({
   memory: createEmptyMemory(),
   decisionHistory: [],
@@ -35,7 +32,6 @@ export const useProjectMemoryStore = create((set) => ({
     if (!category || !decision?.key) return false;
     const entry = {
       ...cloneSerializable(decision),
-      // Stable id so cloud appends are idempotent (decision_entries.client_id).
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       agent: metadata.agent || null,
       instruction: metadata.instruction || null,

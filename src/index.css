@@ -1,7 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
 :root {
-    /* Colors */
     --bg-primary: #171717;
     --bg-secondary: #1f1f1f;
     --bg-tertiary: #2b2b2b;
@@ -25,15 +24,9 @@
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
-
-    /* Typography */
     --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-
-    /* Shadows */
     --glow-primary: 0 0 0 1px rgba(255, 255, 255, 0.22);
     --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.45);
-
-    /* Borders & Radii */
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 16px;
@@ -55,8 +48,6 @@ body {
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
 }
-
-/* Glassmorphism Utilities */
 .glass-panel {
     background: var(--bg-panel);
     backdrop-filter: blur(12px);
@@ -69,8 +60,6 @@ body {
     border-color: var(--border-hover);
     transition: border-color 0.2s ease;
 }
-
-/* Typography Utilities */
 h1,
 h2,
 h3,
@@ -98,8 +87,6 @@ a {
 a:hover {
     color: var(--text-primary);
 }
-
-/* Button Utilities */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -187,8 +174,6 @@ a:hover {
     background: var(--accent-surface-hover);
     border-color: var(--accent-primary);
 }
-
-/* Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -203,8 +188,6 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
-
-/* Layout Utilities */
 .container {
     width: 100%;
     max-width: 1200px;
@@ -234,8 +217,6 @@ a:hover {
 .gap-6 {
     gap: 1.5rem;
 }
-
-/* Notion/Linear Style Content Formatting (For Blueprint Viewer) */
 .markdown-content {
     color: var(--text-secondary);
     font-size: 0.95rem;
@@ -354,9 +335,6 @@ textarea:focus-visible {
     outline: 2px solid var(--focus-ring) !important;
     outline-offset: 2px;
 }
-
-/* Mermaid appends scratch render containers to <body>; if one survives it
-   adds phantom height below the app. Keep any stray out of the layout. */
 body > div[id^="dmermaid-"],
 body > div[id^="ddocx-mermaid-"] {
     position: absolute !important;
@@ -427,8 +405,6 @@ body > div[id^="ddocx-mermaid-"] {
         min-width: 180px;
     }
 }
-
-/* Project creation */
 .project-create-page {
     min-height: 100vh;
     padding: 20px;
@@ -873,8 +849,6 @@ body > div[id^="ddocx-mermaid-"] {
         gap: 3px;
     }
 }
-
-/* Shared split-panel additions and authentication */
 .auth-layout .project-create-shell {
     min-height: min(800px, calc(100vh - 40px));
 }

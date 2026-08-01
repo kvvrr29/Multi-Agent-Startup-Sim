@@ -1,7 +1,4 @@
 import { create } from 'zustand';
-
-// Simple heuristic: 1 token ~ 4 chars for English text
-// Gemini 2.5 Flash costs around $0.075 per 1M input tokens, and $0.30 per 1M output tokens (approximate)
 const INPUT_COST_PER_TOKEN = 0.075 / 1000000;
 const OUTPUT_COST_PER_TOKEN = 0.30 / 1000000;
 

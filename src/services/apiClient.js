@@ -4,10 +4,6 @@ import {
   EVENT_HISTORY_LIMIT,
   PROJECT_PAGE_LIMIT
 } from '../../shared/readLimits.js';
-
-// All backend traffic goes through the Express server under /api. supabase-js
-// is used in the browser ONLY for the auth handshake, and its access token
-// authenticates every request here.
 const request = async (path, { method = 'GET', body } = {}) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {

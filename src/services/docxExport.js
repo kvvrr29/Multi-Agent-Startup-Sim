@@ -46,8 +46,6 @@ const renderDiagram = async (chart, index) => {
   } catch (error) {
     return new Paragraph({ children: [new TextRun({ text: `Diagram source (render failed: ${error.message})`, italics: true })] });
   } finally {
-    // mermaid.render appends a scratch <div id="d{id}"> to <body> and leaves it
-    // behind when the diagram fails to parse, stretching the page.
     document.getElementById(`d${id}`)?.remove();
   }
 };

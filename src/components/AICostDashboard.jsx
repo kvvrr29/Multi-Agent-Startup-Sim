@@ -5,8 +5,6 @@ import { DollarSign, Cpu, Activity, ChevronDown, ChevronUp } from 'lucide-react'
 export default function AICostDashboard() {
   const { totalRequests, totalInputTokens, totalOutputTokens, totalCost } = useAICostStore();
   const [isExpanded, setIsExpanded] = useState(false);
-
-  // Auto-hide if no requests made
   if (totalRequests === 0 && !isExpanded) return null;
 
   return (

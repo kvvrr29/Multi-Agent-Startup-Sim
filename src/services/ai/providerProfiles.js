@@ -1,15 +1,3 @@
-// ── Per-provider generation profiles ─────────────────────────────────────────
-//
-// A frontier cloud model and a small model in the browser cannot be held to the
-// same contract. Rather than scattering `if (isWebLLM)` checks through the
-// factory and the validator, every provider-dependent knob lives here:
-//
-//   strategy          how the factory asks for content (one call vs per section)
-//   schemaDialect     Gemini's Type enum vs standard JSON Schema
-//   thresholds        the validation gates a response must clear
-//   templateDiagrams  substitute hand-written mermaid instead of asking
-
-/** Gates tuned for frontier models. These are the original project defaults. */
 export const CLOUD_THRESHOLDS = {
   structural: 100,
   agentRelevance: 60,
@@ -17,13 +5,6 @@ export const CLOUD_THRESHOLDS = {
   developerDomainRelevance: 70,
   overall: 70
 };
-
-/**
- * Matched to cloud wherever the scoring maths allows: a failed gate here costs
- * only a retry, since the per-section loop keeps the best-effort text anyway.
- * developerDomainRelevance is the exception — entities weigh 80%, so a tech
- * stack section naming no project entity caps at 20; 30 demands one.
- */
 export const LOCAL_THRESHOLDS = {
   structural: 100,
   agentRelevance: 60,
@@ -37,15 +18,10 @@ const CLOUD_PROFILE = {
   schemaDialect: 'gemini',
   thresholds: CLOUD_THRESHOLDS,
   minSectionLength: 50,
-  // Frontier models are verbose by default and the batch prompt already asks
-  // for "detailed" output, so no explicit target is needed.
   minWords: null,
   minParagraphs: null,
-  // Small models rarely name every mandatory entity verbatim; large ones should.
   enforceDomainCriticals: true,
   templateDiagrams: false,
-  // Gemini and OpenAI enforce structure through their APIs; the reminder would
-  // just be noise in their prompts.
   jsonHardening: false,
   maxTokens: null
 };
@@ -54,21 +30,14 @@ const LOCAL_PROFILE = {
   strategy: 'perSection',
   schemaDialect: 'jsonSchema',
   thresholds: LOCAL_THRESHOLDS,
-  // ~100 words: well under the 350 asked for, so a brisk answer survives, but
-  // anything failing it is thin enough to be worth a retry.
   minSectionLength: 600,
-  // A small instruct model writes one line unless told otherwise.
   minWords: 350,
   minParagraphs: 4,
   enforceDomainCriticals: false,
   templateDiagrams: true,
-  // Nothing enforces JSON here, so the prompt has to ask for it explicitly.
   jsonHardening: true,
   maxTokens: 1800
 };
-
-// OpenAI uses standard JSON Schema but is otherwise a frontier model, so it
-// keeps the strict gates and the single-call strategy.
 const PROFILES = {
   gemini: CLOUD_PROFILE,
   openai: { ...CLOUD_PROFILE, schemaDialect: 'jsonSchema' },
@@ -77,31 +46,12 @@ const PROFILES = {
 
 export const getProviderProfile = (providerName) =>
   PROFILES[providerName] || CLOUD_PROFILE;
-
-// The window the local engine is loaded with, and the one contextBuilder
-// budgets against — sharing it means the two cannot disagree. Qwen2.5 is
-// trained for 32768; web-llm's prebuilt entry pins 4096 for every model size,
-// a phone-sized default. Raising it costs KV cache VRAM only — ~28 KiB/token
-// on the f16 build, so 8192 holds at ~225MB.
 export const LOCAL_CONTEXT_WINDOW = 8192;
-
-// Room for the system prompt and task block that follow the context, plus slack
-// for the 4-chars-per-token estimate being wrong. Overflowing the window is a
-// hard engine error, so this errs high.
 const PROMPT_OVERHEAD_TOKENS = 900;
-
-// How many tokens of context the model can be given, once its answer is
-// accounted for. Cloud providers get null — they are not budgeted.
 export const getMaxContextTokens = (profile, sectionMaxTokens) =>
   profile.maxTokens === null
     ? null
     : LOCAL_CONTEXT_WINDOW - (sectionMaxTokens || profile.maxTokens) - PROMPT_OVERHEAD_TOKENS;
-
-/**
- * Per-section output budget. Generous on purpose: hitting the ceiling truncates
- * the JSON mid-string, which no parser can repair, so an unused token beats a
- * retry. A 350-word section is ~470 tokens before markdown and escaping.
- */
 export const SECTION_MAX_TOKENS = {
   executiveSummary: 1300,
   targetUsers: 1200,

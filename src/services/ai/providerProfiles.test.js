@@ -12,15 +12,10 @@ describe('provider profiles', () => {
   it('holds the local model to the cloud gates wherever the scoring allows it', () => {
     const local = getProviderProfile('webllm');
     expect(local.thresholds).toEqual(LOCAL_THRESHOLDS);
-    // A failed gate here retries and then keeps the best-effort text, so strict
-    // numbers cost a call rather than a section.
     expect(local.thresholds.structural).toBe(CLOUD_THRESHOLDS.structural);
     expect(local.thresholds.agentRelevance).toBe(CLOUD_THRESHOLDS.agentRelevance);
     expect(local.thresholds.domainRelevance).toBe(CLOUD_THRESHOLDS.domainRelevance);
     expect(local.thresholds.overall).toBe(CLOUD_THRESHOLDS.overall);
-    // The one exception: domain scoring weights entities at 80% for the
-    // developer, which a Technology Stack section cannot reach on terminology
-    // alone. Anything above 30 would reject every attempt on principle.
     expect(local.thresholds.developerDomainRelevance)
       .toBeLessThan(CLOUD_THRESHOLDS.developerDomainRelevance);
   });
@@ -30,7 +25,6 @@ describe('provider profiles', () => {
     expect(getProviderProfile('webllm').minSectionLength).toBeGreaterThan(
       getProviderProfile('gemini').minSectionLength
     );
-    // Frontier models are verbose without being told, so no target is stated.
     expect(getProviderProfile('gemini').minWords).toBeNull();
   });
 
@@ -48,7 +42,6 @@ describe('provider profiles', () => {
   it('gives cloud providers no token ceiling and the local model a per-section budget', () => {
     expect(getSectionMaxTokens('architecture', getProviderProfile('gemini'))).toBeNull();
     expect(getSectionMaxTokens('architecture', getProviderProfile('webllm'))).toBe(1400);
-    // Unknown sections still get the profile default rather than undefined.
     expect(getSectionMaxTokens('madeUpSection', getProviderProfile('webllm'))).toBe(1800);
   });
 });
@@ -99,10 +92,6 @@ describe('extractJson', () => {
 });
 
 const SECTION = 'executiveSummary';
-// A complete Executive Summary and nothing more: all four of that section's
-// concept groups, nothing on pricing, budget, cost or risk. Local is scored
-// against the one section it was asked for and passes; cloud is scored against
-// the CEO's whole remit and fails. Same gates, different targets.
 const oneGoodSection =
   'Urban customers in dense cities face a persistent problem: ordering food from nearby restaurants is slow, '
   + 'and the gap between placing an order and receiving it is where the frustration lives. '
@@ -111,8 +100,6 @@ const oneGoodSection =
   + 'The value for the customer is a shorter wait and a clear picture of where the order actually is. '
   + 'The value for the restaurant is a wider audience without the overhead of running its own fleet. '
   + 'That combination is the advantage this venture is built around, and the rest of the blueprint expands on it.';
-// Long enough to clear the length floor, and on topic, but covering only two
-// of the four things an Executive Summary is: the problem and who has it.
 const halfASection =
   'Urban customers in dense cities face a persistent problem when they want food from nearby restaurants. '
   + 'The wait is long, the tracking is vague, and the frustration compounds every time an order runs late. '
@@ -120,8 +107,6 @@ const halfASection =
   + 'Restaurant owners hear the same complaints from the other side of the counter, and they have no good way '
   + 'to respond because they cannot see where the courier is either. This is the gap that keeps coming up in '
   + 'every conversation with the people involved in delivery today, and it is what this document sets out to describe.';
-// What the local gates must still reject: a single sentence that answers the
-// prompt in name only.
 const oneLiner = 'A delivery platform.';
 
 describe('provider-aware validation', () => {
@@ -146,9 +131,6 @@ describe('provider-aware validation', () => {
     const res = validateAIResponse(build(halfASection), [SECTION], {
       agentRole: 'ceo', domain: 'FoodTech', industry: 'Delivery', providerName: 'webllm'
     });
-    // Two of four concept groups. A single lumped group could only ever score
-    // 0 or 100, which left every threshold between 1 and 100 doing the same
-    // thing — the gate could not be tuned at all.
     expect(res.scores.agentRelevance).toBe(50);
     expect(res.stages.agentRelevance.status).toBe('failed');
     expect(res.passed).toBe(false);
@@ -192,8 +174,6 @@ describe('provider-aware validation', () => {
   });
 
   it('applies the longer minimum length only to the local model', () => {
-    // A real paragraph, but a fraction of the 350 words the local prompt asks
-    // for — the cloud gate lets it through, the local gate spends a retry.
     const short = { [SECTION]: 'Revenue comes from commissions on urban delivery orders placed through the platform.' };
     expect(validateStructure(short, [SECTION], { minSectionLength: 50 }).ok).toBe(true);
     expect(validateStructure(short, [SECTION], { minSectionLength: 600 }).ok).toBe(false);
