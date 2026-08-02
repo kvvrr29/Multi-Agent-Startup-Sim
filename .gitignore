@@ -9,8 +9,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+coverage
 test-results
 playwright-report
+blob-report
+playwright/.cache
 *.local
 .vscode/*
 !.vscode/extensions.json
@@ -25,3 +28,12 @@ playwright-report
 .agents
 .codex
 .claude
+
+.env
+.env.*
+!.env.example
+
+.vercel
+
+supabase/.temp
+supabase/.branches
