@@ -37,3 +37,4 @@ playwright/.cache
 
 supabase/.temp
 supabase/.branches
+.env*
