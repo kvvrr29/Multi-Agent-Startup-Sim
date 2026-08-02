@@ -13,11 +13,9 @@ import {
   PROJECT_PAGE_LIMIT,
 } from "../shared/readLimits.js";
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL || "https://ymxxxfvxjheaiacddcfa.supabase.co";
-const SUPABASE_KEY =
-  process.env.SUPABASE_KEY || "sb_publishable_LRNsxU4hCSXDNnxSRlii4A_QuqIlY9w";
-const PORT = process.env.PORT || 8787;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const PORT = process.env.PORT;
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
@@ -34,12 +32,10 @@ const withUser = async (req, res, next) => {
 
   const { data, error } = await client.auth.getClaims(token);
   if (error || !data?.claims?.sub)
-    return res
-      .status(401)
-      .json({
-        error: "invalid_token",
-        message: "Session is invalid or expired.",
-      });
+    return res.status(401).json({
+      error: "invalid_token",
+      message: "Session is invalid or expired.",
+    });
   req.supabase = client;
   req.user = { id: data.claims.sub, email: data.claims.email };
   next();
@@ -271,12 +267,10 @@ app.put("/api/projects/:id/sections", withUser, async (req, res) => {
       failure_reason: s.failureReason ?? null,
     }));
   if (rows.length === 0) {
-    return res
-      .status(400)
-      .json({
-        error: "bad_request",
-        message: "No valid blueprint sections were provided.",
-      });
+    return res.status(400).json({
+      error: "bad_request",
+      message: "No valid blueprint sections were provided.",
+    });
   }
   const { data, error } = await req.supabase
     .from("blueprint_sections")
@@ -304,12 +298,10 @@ app.post("/api/projects/:id/events", withUser, async (req, res) => {
       occurred_at: e.timestamp || new Date().toISOString(),
       payload: e,
     }));
-  const { error } = await req.supabase
-    .from("workflow_events")
-    .upsert(rows, {
-      onConflict: "project_id,client_id",
-      ignoreDuplicates: true,
-    });
+  const { error } = await req.supabase.from("workflow_events").upsert(rows, {
+    onConflict: "project_id,client_id",
+    ignoreDuplicates: true,
+  });
   if (error) return dbError(res, error);
   res.status(201).json({ appended: rows.length });
 });
@@ -331,12 +323,10 @@ app.put("/api/projects/:id/memory", withUser, async (req, res) => {
       value: e.value ?? null,
     }));
   if (rows.length === 0)
-    return res
-      .status(400)
-      .json({
-        error: "bad_request",
-        message: "No valid memory entries were provided.",
-      });
+    return res.status(400).json({
+      error: "bad_request",
+      message: "No valid memory entries were provided.",
+    });
   const { error } = await req.supabase
     .from("memory_entries")
     .upsert(rows, { onConflict: "project_id,category,key" });
@@ -365,12 +355,10 @@ app.post("/api/projects/:id/decisions", withUser, async (req, res) => {
       decided_at: d.timestamp || new Date().toISOString(),
       payload: d,
     }));
-  const { error } = await req.supabase
-    .from("decision_entries")
-    .upsert(rows, {
-      onConflict: "project_id,client_id",
-      ignoreDuplicates: true,
-    });
+  const { error } = await req.supabase.from("decision_entries").upsert(rows, {
+    onConflict: "project_id,client_id",
+    ignoreDuplicates: true,
+  });
   if (error) return dbError(res, error);
   res.status(201).json({ appended: rows.length });
 });
@@ -384,6 +372,11 @@ app.delete("/api/projects/:id", withUser, async (req, res) => {
   res.status(204).end();
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] API listening on http://localhost:${PORT}`);
-});
+export default app;
+
+// Vercel invokes the exported handler; only self-host when running standalone.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[server] API listening on http://localhost:${PORT}`);
+  });
+}
